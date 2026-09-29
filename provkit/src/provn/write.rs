@@ -56,7 +56,7 @@ pub fn to_string(document: &Document) -> Result<String> {
 /// One record as a single PROV-N expression, with no indentation.
 ///
 /// Names are written against `namespaces`. For a record inside a bundle, pass
-/// the table that resolves names inside the bundle (`bundle_namespaces`).
+/// `bundle.namespaces.with_fallback(document_namespaces)`.
 ///
 /// # Errors
 ///
@@ -67,15 +67,6 @@ pub fn statement(record: &Record, namespaces: &Namespaces) -> Result<String> {
     let mut s = String::new();
     expression(record, &mut names, &mut s);
     Ok(s)
-}
-
-/// The table that resolves names inside `bundle`: the bundle's own entries
-/// first, the document's `outer` entries for everything the bundle leaves
-/// unbound. This includes the bundle identifier.
-pub(crate) fn bundle_namespaces(outer: &Namespaces, bundle: &Bundle) -> Namespaces {
-    let mut table = bundle.namespaces.clone();
-    table.absorb(outer);
-    table
 }
 
 /// Print `default` and `prefix` lines for the entries of `names` that `inherited`
@@ -104,7 +95,7 @@ fn declarations(
 }
 
 fn write_bundle(bundle: &Bundle, outer: &Namespaces, s: &mut String) {
-    let mut names = bundle_namespaces(outer, bundle);
+    let mut names = bundle.namespaces.with_fallback(outer);
     let mut body = String::new();
     for record in &bundle.records {
         body.push_str("    ");
@@ -179,10 +170,11 @@ fn formal(
 /// `prefix:local`, or a bare `local` in the default namespace, with the local
 /// part escaped.
 fn name(q: &QName, names: &mut Namespaces) -> String {
-    let text = names.render(q);
-    // `render` ends with the unescaped local part; swap in the escaped one.
-    let head = &text[..text.len() - q.local().len()];
-    format!("{head}{}", escape_local(q.local()))
+    let local = escape_local(q.local());
+    match names.render_parts(q) {
+        Some(prefix) => format!("{prefix}:{local}"),
+        None => local,
+    }
 }
 
 fn escape_local(local: &str) -> String {
@@ -561,7 +553,7 @@ endDocument
     }
 
     #[test]
-    fn bundle_namespaces_prefers_the_bundle() {
+    fn bundle_scope_prefers_the_bundle() {
         let mut outer = Namespaces::new();
         outer.declare("ex", "http://example.org/").unwrap();
         outer.declare("o", "http://o.org/").unwrap();
@@ -572,7 +564,7 @@ endDocument
             namespaces: inner,
             records: vec![],
         };
-        let table = provn::bundle_namespaces(&outer, &bundle);
+        let table = bundle.namespaces.with_fallback(&outer);
         assert_eq!(&*table.lookup("ex").unwrap(), "http://bundle.org/");
         assert_eq!(&*table.lookup("o").unwrap(), "http://o.org/");
     }

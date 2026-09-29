@@ -122,14 +122,54 @@ impl Namespaces {
 }
 
 impl Namespaces {
+    /// This table with `parent`'s bindings behind it.
+    ///
+    /// The result holds this table's prefixes and default namespace, then
+    /// every binding of `parent` that this table has not already bound. A
+    /// bundle's table over its document's is the typical case.
+    ///
+    /// ```
+    /// use provkit::Namespaces;
+    ///
+    /// let mut document = Namespaces::new();
+    /// document.declare("ex", "http://document.org/").unwrap();
+    /// document.declare("o", "http://other.org/").unwrap();
+    /// let mut bundle = Namespaces::new();
+    /// bundle.declare("ex", "http://bundle.org/").unwrap();
+    ///
+    /// let scope = bundle.with_fallback(&document);
+    /// assert_eq!(&*scope.lookup("ex").unwrap(), "http://bundle.org/");
+    /// assert_eq!(&*scope.lookup("o").unwrap(), "http://other.org/");
+    /// ```
+    #[must_use]
+    pub fn with_fallback(&self, parent: &Namespaces) -> Namespaces {
+        let mut table = self.clone();
+        table.absorb(parent);
+        table
+    }
+
     /// The text that writes `name` against this table.
     ///
     /// A declared prefix wins, then the default namespace for a bare name,
     /// then a freshly minted `nsN` prefix, which is added to this table.
     /// Callers that must not change a document pass a clone.
+    // Only the writers call this, and both are feature-gated.
+    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
     pub(crate) fn render(&mut self, name: &QName) -> String {
+        match self.render_parts(name) {
+            Some(prefix) => format!("{prefix}:{}", name.local()),
+            None => name.local().to_owned(),
+        }
+    }
+
+    /// As [`render`](Self::render), split into the prefix and the local part.
+    /// `None` means the name is written bare. The local part is always
+    /// `name.local()`, so a writer can escape it on its own.
+    // Only the writers call this, and both are feature-gated.
+    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
+    pub(crate) fn render_parts(&mut self, name: &QName) -> Option<String> {
         if let Some(prefix) = self.prefix_for(name.namespace()) {
-            return format!("{prefix}:{}", name.local());
+            return Some(prefix.to_owned());
         }
         // A colon in the local part would read back as a prefix separator.
         let bare = !name.local().contains(':')
@@ -138,10 +178,9 @@ impl Namespaces {
                 .as_deref()
                 .is_some_and(|d| d == &**name.namespace());
         if bare {
-            return name.local().to_owned();
+            return None;
         }
-        let prefix = self.ensure_prefix(name.namespace());
-        format!("{prefix}:{}", name.local())
+        Some(self.ensure_prefix(name.namespace()))
     }
 }
 
@@ -303,6 +342,30 @@ mod tests {
             plain.render(&QName::new("http://default.org/", "x:y")),
             "ns1:x:y"
         );
+    }
+
+    #[test]
+    fn render_parts_split_the_prefix_from_the_local_part() {
+        let mut ns = Namespaces::new();
+        ns.declare("ex", "http://example.org/").unwrap();
+        ns.set_default("http://default.org/");
+        let names = [
+            QName::new("http://example.org/", "a"),
+            QName::new("http://default.org/", "b"),
+            QName::new("http://default.org/", "x:y"),
+            QName::new("http://new/", "c"),
+        ];
+        for name in &names {
+            let rendered = ns.render(name);
+            let text = match ns.render_parts(name) {
+                Some(prefix) => format!("{prefix}:{}", name.local()),
+                None => name.local().to_owned(),
+            };
+            assert_eq!(rendered, text);
+        }
+        let mut fresh = Namespaces::new();
+        fresh.set_default("http://default.org/");
+        assert_eq!(fresh.render_parts(&names[1]), None);
     }
 
     #[test]
