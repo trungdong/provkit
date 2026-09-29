@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 
 use super::wire::{JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany};
 use crate::qname::well_known::{PROV_INTERNATIONALIZED_STRING, XSD_DATETIME, XSD_QNAME};
-use crate::{Bundle, Document, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
+use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
 
 /// Write `document` as PROV-JSON, pretty-printed with two-space indentation.
 ///
@@ -15,10 +15,17 @@ use crate::{Bundle, Document, FormalRef, Kind, Namespaces, QName, Record, Result
 ///
 /// # Errors
 ///
-/// Returns [`Error::Io`] if `out` fails.
+/// Returns [`Error::Io`](crate::Error::Io) if `out` fails.
 pub fn write(document: &Document, out: &mut impl Write) -> Result<()> {
     let wire = to_wire(document)?;
-    serde_json::to_writer_pretty(&mut *out, &wire)?;
+    serde_json::to_writer_pretty(&mut *out, &wire).map_err(|e| {
+        // serde_json wraps a failing writer's error; report it as IO.
+        if e.io_error_kind().is_some() {
+            Error::Io(e.into())
+        } else {
+            Error::Json(e)
+        }
+    })?;
     out.write_all(b"\n")?;
     Ok(())
 }
@@ -27,7 +34,7 @@ pub fn write(document: &Document, out: &mut impl Write) -> Result<()> {
 ///
 /// # Errors
 ///
-/// As [`write`], except that [`Error::Io`] cannot occur.
+/// As [`write()`], except that [`Error::Io`](crate::Error::Io) cannot occur.
 pub fn to_string(document: &Document) -> Result<String> {
     let mut buf = Vec::new();
     write(document, &mut buf)?;
@@ -116,21 +123,34 @@ fn prefix_table(
     out
 }
 
-/// Records grouped by kind in `Kind::ALL` order, then by identifier.
+/// Records grouped by kind in `Kind::ALL` order, then by identifier. Blank
+/// labels follow record order, whatever the grouping.
 fn sections(
     records: &[Record],
     table: &mut Namespaces,
     next_blank: &mut usize,
 ) -> IndexMap<String, JsonSection> {
+    let blanks: Vec<Option<String>> = records
+        .iter()
+        .map(|r| {
+            r.id().is_none().then(|| {
+                *next_blank += 1;
+                format!("_:id{next_blank}")
+            })
+        })
+        .collect();
     let mut out = IndexMap::new();
     for kind in Kind::ALL {
         let mut section: IndexMap<String, Vec<JsonRecord>> = IndexMap::new();
-        for record in records.iter().filter(|r| r.kind() == kind) {
-            let key = if let Some(id) = record.id() {
-                table.render(id)
-            } else {
-                *next_blank += 1;
-                format!("_:id{next_blank}")
+        for (record, blank) in records
+            .iter()
+            .zip(&blanks)
+            .filter(|(r, _)| r.kind() == kind)
+        {
+            let key = match (record.id(), blank) {
+                (Some(id), _) => table.render(id),
+                (None, Some(label)) => label.clone(),
+                (None, None) => unreachable!("a record without an id has a label"),
             };
             section
                 .entry(key)
@@ -277,6 +297,58 @@ mod tests {
         assert!(v["wasGeneratedBy"]["_:id1"].is_object());
         let inner = &v["bundle"]["ex:b"]["wasGeneratedBy"];
         assert!(inner["_:id2"].is_object() && inner["_:id3"].is_object());
+    }
+
+    #[test]
+    fn blank_ids_follow_record_order() {
+        let mut d = Document::new();
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        d.records
+            .push(Record::from_parts(Kind::Usage, None, vec![], Attributes::new()).unwrap());
+        d.records
+            .push(Record::from_parts(Kind::Generation, None, vec![], Attributes::new()).unwrap());
+        let v: serde_json::Value = serde_json::from_str(&json::to_string(&d).unwrap()).unwrap();
+        assert!(v["used"]["_:id1"].is_object());
+        assert!(v["wasGeneratedBy"]["_:id2"].is_object());
+    }
+
+    #[test]
+    fn failing_writer_reports_io() {
+        struct Broken;
+        impl std::io::Write for Broken {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("broken"))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut d = Document::new();
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        d.records.push(entity_in(ex("e")));
+        assert!(matches!(
+            json::write(&d, &mut Broken),
+            Err(crate::Error::Io(_))
+        ));
+    }
+
+    #[test]
+    fn merged_bundles_with_clashing_prefixes_round_trip() {
+        let bundle = |iri: &str, local: &str| {
+            let mut ns = Namespaces::new();
+            ns.declare("o", iri).unwrap();
+            Bundle {
+                id: ex("b"),
+                namespaces: ns,
+                records: vec![entity_in(QName::new(iri, local))],
+            }
+        };
+        let mut d = Document::new();
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        d.bundles.push(bundle("http://one.org/", "x"));
+        d.bundles.push(bundle("http://two.org/", "y"));
+        let text = json::to_string(&d).unwrap();
+        assert_eq!(json::read(&text).unwrap(), d);
     }
 
     #[test]
