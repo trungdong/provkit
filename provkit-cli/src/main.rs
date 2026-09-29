@@ -2,6 +2,7 @@
 
 mod format;
 
+use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -9,7 +10,7 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result, anyhow};
 use clap::{Args, Parser, Subcommand};
-use provkit::{Document, json, provn};
+use provkit::{Document, Record, json, provn};
 
 use format::Format;
 
@@ -33,6 +34,12 @@ enum Command {
     /// (.json, .provn), else by looking at the content. Standard output
     /// defaults to PROV-N. Use `-` for standard input or output.
     Convert(ConvertArgs),
+    /// Compare two documents and print the records found on one side only.
+    ///
+    /// Exit codes: 0 when the documents are equal (nothing is printed), 1
+    /// when they differ, 2 on a read error or, with --unified, a unification
+    /// failure.
+    Compare(CompareArgs),
 }
 
 #[derive(Args)]
@@ -51,13 +58,25 @@ struct ConvertArgs {
     to: Option<Format>,
 }
 
+#[derive(Args)]
+struct CompareArgs {
+    /// First document.
+    a: PathBuf,
+    /// Second document.
+    b: PathBuf,
+    /// Merge records that share an identifier on each side before comparing.
+    #[arg(long)]
+    unified: bool,
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
-        Command::Convert(args) => convert(&args),
+        Command::Convert(args) => convert(&args).map(|()| ExitCode::SUCCESS),
+        Command::Compare(args) => compare(&args),
     };
     match result {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(e) => {
             eprintln!("provkit: {e:#}");
             ExitCode::from(2)
@@ -121,6 +140,98 @@ fn convert(args: &ConvertArgs) -> Result<()> {
                 .with_context(|| name)?;
         }
         Some(path) => fs::write(path, &buf).with_context(|| name)?,
+    }
+    Ok(())
+}
+
+/// Exits 0 when the documents are equal, 1 when they differ.
+fn compare(args: &CompareArgs) -> Result<ExitCode> {
+    let mut a = read_document(&args.a, None)?;
+    let mut b = read_document(&args.b, None)?;
+    if args.unified {
+        a = a.unified().with_context(|| args.a.display().to_string())?;
+        b = b.unified().with_context(|| args.b.display().to_string())?;
+    }
+    if a == b {
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    // Build the report first, so a failure never leaves half of it printed.
+    let mut report = String::new();
+    report_side(&mut report, &args.a, &a, &b)?;
+    report_side(&mut report, &args.b, &b, &a)?;
+    let mut stdout = io::stdout().lock();
+    stdout
+        .write_all(report.as_bytes())
+        .and_then(|()| stdout.flush())
+        .context("-")?;
+    Ok(ExitCode::from(1))
+}
+
+/// The records of `mine` that are not in `theirs`, in order, each once.
+fn only_in<'a>(mine: &[&'a Record], theirs: &[&Record]) -> Vec<&'a Record> {
+    let theirs: HashSet<&Record> = theirs.iter().copied().collect();
+    let mut seen = HashSet::new();
+    mine.iter()
+        .copied()
+        .filter(|r| !theirs.contains(r) && seen.insert(*r))
+        .collect()
+}
+
+/// The records of every bundle in `document` named `id`.
+fn bundle_records<'a>(document: &'a Document, id: &provkit::QName) -> Vec<&'a Record> {
+    document
+        .bundles
+        .iter()
+        .filter(|b| b.id == *id)
+        .flat_map(|b| &b.records)
+        .collect()
+}
+
+/// Appends the records of `this` that `other` lacks: top-level records first,
+/// then each bundle under its heading. Names use the table of `this`.
+fn report_side(out: &mut String, name: &Path, this: &Document, other: &Document) -> Result<()> {
+    use std::fmt::Write as _;
+
+    let top = only_in(
+        &this.records.iter().collect::<Vec<_>>(),
+        &other.records.iter().collect::<Vec<_>>(),
+    );
+
+    // Bundles sharing an identifier are one bundle, as in `Document` equality.
+    let mut seen_ids = HashSet::new();
+    let mut bundles = Vec::new();
+    for bundle in &this.bundles {
+        if !seen_ids.insert(&bundle.id) {
+            continue;
+        }
+        let records = only_in(
+            &bundle_records(this, &bundle.id),
+            &bundle_records(other, &bundle.id),
+        );
+        if !records.is_empty() || other.bundle(&bundle.id).is_none() {
+            bundles.push((bundle, records));
+        }
+    }
+    if top.is_empty() && bundles.is_empty() {
+        return Ok(());
+    }
+
+    writeln!(out, "only in {}:", name.display())?;
+    for record in top {
+        writeln!(out, "  {}", provn::statement(record, &this.namespaces)?)?;
+    }
+    for (bundle, records) in bundles {
+        // A bundle sees its own prefixes first, then the document's.
+        let scope = bundle.namespaces.with_fallback(&this.namespaces);
+        writeln!(
+            out,
+            "  bundle {}:",
+            provn::statement_name(&bundle.id, &scope)
+        )?;
+        for record in records {
+            writeln!(out, "    {}", provn::statement(record, &scope)?)?;
+        }
     }
     Ok(())
 }

@@ -264,3 +264,119 @@ fn failed_write_names_the_output() {
             out.display()
         )));
 }
+
+#[test]
+fn compare_equal_across_formats() {
+    provkit()
+        .args(["compare"])
+        .arg(corpus("json/entity1.json"))
+        .arg(corpus("provn/provtoolbox-corpus/entity1.provn"))
+        .assert()
+        .success()
+        .stdout("")
+        .stderr("");
+}
+
+#[test]
+fn compare_reports_one_sided_records() {
+    provkit()
+        .args(["compare"])
+        .arg(corpus("json/scruffy-generation1-S.json"))
+        .arg(corpus("json/scruffy-generation1-M.json"))
+        .assert()
+        .code(1)
+        .stdout(
+            predicate::str::contains("only in")
+                .and(predicate::str::contains("entity(ex:e1)"))
+                .and(predicate::str::contains("activity(ex:a1")),
+        );
+}
+
+#[test]
+fn compare_unified_reports_conflicts_as_errors() {
+    provkit()
+        .args(["compare", "--unified"])
+        .arg(corpus("json/scruffy-generation1-S.json"))
+        .arg(corpus("json/scruffy-generation1-M.json"))
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("cannot unify"));
+}
+
+#[test]
+fn compare_unified_merges_split_records() {
+    let dir = scratch("compare_unified_merges_split_records");
+    let a = dir.join("a.provn");
+    let b = dir.join("b.provn");
+    std::fs::write(
+        &a,
+        "document\n prefix ex <http://example.org/>\n wasGeneratedBy(ex:g; ex:e, -, -)\n wasGeneratedBy(ex:g; -, ex:a, -)\nendDocument\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &b,
+        "document\n prefix ex <http://example.org/>\n wasGeneratedBy(ex:g; ex:e, ex:a, -)\nendDocument\n",
+    )
+    .unwrap();
+    provkit().args(["compare"]).arg(&a).arg(&b).assert().code(1);
+    provkit()
+        .args(["compare", "--unified"])
+        .arg(&a)
+        .arg(&b)
+        .assert()
+        .success();
+}
+
+#[test]
+fn compare_bundle_difference_uses_document_prefixes() {
+    let dir = scratch("compare_bundle_difference_uses_document_prefixes");
+    let a = dir.join("a.provn");
+    let b = dir.join("b.provn");
+    std::fs::write(
+        &a,
+        "document\n prefix ex <http://example.org/>\n bundle ex:b1\n  entity(ex:e1)\n  entity(ex:e2)\n endBundle\nendDocument\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &b,
+        "document\n prefix ex <http://example.org/>\n bundle ex:b1\n  entity(ex:e1)\n endBundle\nendDocument\n",
+    )
+    .unwrap();
+    provkit()
+        .args(["compare"])
+        .arg(&a)
+        .arg(&b)
+        .assert()
+        .code(1)
+        .stdout(
+            predicate::str::contains("  bundle ex:b1:\n    entity(ex:e2)\n")
+                .and(predicate::str::contains("ns1").not()),
+        )
+        .stderr("");
+}
+
+#[test]
+fn compare_read_error_exits_two() {
+    let dir = scratch("compare_read_error_exits_two");
+    provkit()
+        .args(["compare"])
+        .arg(dir.join("missing.provn"))
+        .arg(corpus("json/entity1.json"))
+        .assert()
+        .code(2)
+        .stdout("")
+        .stderr(predicate::str::contains("missing.provn"));
+}
+
+#[test]
+fn compare_help_names_the_exit_codes() {
+    provkit()
+        .args(["compare", "--help"])
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("0 when the documents are equal")
+                .and(predicate::str::contains("1"))
+                .and(predicate::str::contains("2 on a read error")),
+        );
+}

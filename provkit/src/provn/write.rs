@@ -69,6 +69,26 @@ pub fn statement(record: &Record, namespaces: &Namespaces) -> Result<String> {
     Ok(s)
 }
 
+/// A name as PROV-N writes it, escaped as the writer escapes it.
+///
+/// Use it for a bundle identifier, which lives in the bundle's own scope, so
+/// pass `bundle.namespaces.with_fallback(document_namespaces)`. A namespace
+/// missing from `namespaces` gets a minted `ns1`, `ns2`, ... prefix.
+///
+/// ```
+/// use provkit::{Namespaces, QName, provn};
+///
+/// let mut names = Namespaces::new();
+/// names.declare("ex", "http://example.org/").unwrap();
+/// let id = QName::new("http://example.org/", "b1");
+/// assert_eq!(provn::statement_name(&id, &names), "ex:b1");
+/// ```
+#[must_use]
+pub fn statement_name(name: &QName, namespaces: &Namespaces) -> String {
+    let mut names = namespaces.clone();
+    self::name(name, &mut names)
+}
+
 /// Print `default` and `prefix` lines for the entries of `names` that `inherited`
 /// does not already provide. Returns whether any line was printed.
 fn declarations(

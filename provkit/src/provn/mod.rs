@@ -6,7 +6,7 @@ mod write;
 
 use crate::{Document, DocumentBuilder, Result, Sink};
 
-pub use write::{statement, to_string, write};
+pub use write::{statement, statement_name, to_string, write};
 
 /// How closely the reader follows the Recommendation's grammar.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
