@@ -6,7 +6,7 @@
 mod common;
 
 use common::{Report, corpus_dir, files};
-use provkit::{Document, Error, Profile};
+use provkit::{Document, Profile};
 
 /// Recommendation examples that the formal grammar rejects or that are not
 /// complete PROV-N. Names and reasons follow `corpus/provn/README.md`.
@@ -120,20 +120,6 @@ const EXCLUDED_SPEC_EXAMPLES: &[(&str, &str)] = &[
         "used gives only the activity and entity without the paired time",
     ),
 ];
-
-/// Recommendation examples whose corpus wrapper leaves a prefix undeclared.
-/// Strict resolution rejects them.
-const EXTRACTION_DEFECT_SPEC_EXAMPLES: &[(&str, &str)] = &[
-    ("prov-n-example-34.provn", UNDECLARED_LITERAL_PREFIX),
-    ("prov-n-example-35.provn", UNDECLARED_LITERAL_PREFIX),
-    ("prov-dm-example-27.provn", UNDECLARED_LITERAL_PREFIX),
-    ("prov-dm-example-31.provn", UNDECLARED_LITERAL_PREFIX),
-    ("prov-dm-example-61.provn", UNDECLARED_LITERAL_PREFIX),
-    ("prov-dm-example-62.provn", UNDECLARED_LITERAL_PREFIX),
-];
-
-const UNDECLARED_LITERAL_PREFIX: &str = "corpus extraction defect: a prefix used only in a \
-     qualified-name literal is not declared by the wrapper; tracked in prov-corpus#1";
 
 /// `ProvToolbox`'s own documents outside what the default profile reads.
 /// Names and reasons follow `corpus/provn/README.md`.
@@ -572,18 +558,6 @@ fn spec_examples_parse_under_strict() {
                 }
                 continue;
             }
-            if let Some(why) = reason(EXTRACTION_DEFECT_SPEC_EXAMPLES, &name) {
-                excluded += 1;
-                match result {
-                    Err(Error::UndeclaredPrefix(_)) => {}
-                    Err(e) => report.fail(
-                        &name,
-                        format!("expected an undeclared prefix ({why}), found: {e}"),
-                    ),
-                    Ok(_) => report.fail(&name, format!("listed as excluded ({why}) but accepted")),
-                }
-                continue;
-            }
             report.checked += 1;
             if let Err(e) = result {
                 report.fail(&name, e);
@@ -591,12 +565,9 @@ fn spec_examples_parse_under_strict() {
         }
     }
     if std::env::var("PROVKIT_ONLY").is_err() {
-        assert_eq!(
-            excluded,
-            EXCLUDED_SPEC_EXAMPLES.len() + EXTRACTION_DEFECT_SPEC_EXAMPLES.len()
-        );
+        assert_eq!(excluded, EXCLUDED_SPEC_EXAMPLES.len());
     }
-    report.finish(127 - EXCLUDED_SPEC_EXAMPLES.len() - EXTRACTION_DEFECT_SPEC_EXAMPLES.len());
+    report.finish(127 - EXCLUDED_SPEC_EXAMPLES.len());
 }
 
 #[test]

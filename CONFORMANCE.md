@@ -57,9 +57,11 @@ covers it, as `test_name` (file). Files are under `provkit/` unless noted.
 
 ## Corpus
 
-The tests read [prov-corpus](https://github.com/trungdong/prov-corpus) v1.0.0
+The tests read [prov-corpus](https://github.com/trungdong/prov-corpus) v2.0.0
 (submodule at `corpus/`), which holds ProvPy 3.2.1's fixtures. ProvPy (`prov`,
-Python) shares it. Failing files are collected and reported together.
+Python) shares it. Version 2.0.0 declares the prefixes that
+[issue #1](https://github.com/trungdong/prov-corpus/issues/1) found missing.
+Failing files are collected and reported together.
 
 ### PROV-JSON
 
@@ -71,17 +73,9 @@ Tests: `reads_all_398`, `round_trips_all_398` (tests/corpus_json.rs),
 
 ### PROV-N specification examples
 
-127 examples. 94 parse under `Strict`. The other 33 are excluded and asserted
-rejected.
-
-- 27 are listed in the corpus `provn/README.md` for grammar reasons. ProvPy
-  3.2.1 excludes the same 27.
-- 6 are corpus extraction defects: `prov-n-example-34`, `prov-n-example-35`,
-  `prov-dm-example-27`, `prov-dm-example-31`, `prov-dm-example-61` and
-  `prov-dm-example-62`. The extraction wrapper `tools/extract_spec_examples.py`
-  does not declare a prefix used only inside a qualified-name literal.
-  Tracked in [prov-corpus issue #1](https://github.com/trungdong/prov-corpus/issues/1);
-  the fix ships as corpus v2.0.0.
+127 examples. 100 parse under `Strict`. The other 27 are excluded and asserted
+rejected. They are listed in the corpus `provn/README.md` for grammar reasons,
+and ProvPy 3.2.1 excludes the same 27.
 
 Test: `spec_examples_parse_under_strict` (tests/corpus_provn.rs).
 

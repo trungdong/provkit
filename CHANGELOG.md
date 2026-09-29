@@ -29,7 +29,7 @@ follows [Semantic Versioning](https://semver.org/).
     records printed as PROV-N.
 - `CONFORMANCE.md`, listing every departure from the Recommendations, ProvPy
   and ProvToolbox.
-- Corpus tests over prov-corpus v1.0.0, and a CI build for
+- Corpus tests over prov-corpus v2.0.0, and a CI build for
   `wasm32-unknown-unknown`.
 
 ### Not included
