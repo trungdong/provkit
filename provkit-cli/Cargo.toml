@@ -12,6 +12,7 @@ authors.workspace = true
 [[bin]]
 name = "provkit"
 path = "src/main.rs"
+doc = false
 
 [dependencies]
 provkit.workspace = true

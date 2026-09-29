@@ -327,6 +327,36 @@ mod tests {
     }
 
     #[test]
+    fn any_uri_stays_a_typed_literal() {
+        let d = doc(&format!(
+            r#"{{{PFX}, "entity": {{"ex:e": {{"ex:u": {{"$": "http://x.example/", "type": "xsd:anyURI"}}}}}}}}"#
+        ));
+        let Record::Entity(e) = &d.records[0] else {
+            panic!()
+        };
+        let name = ex("u");
+        let v = e.attributes.get(&name).next().unwrap();
+        assert!(matches!(
+            v,
+            Value::Typed { lexical, datatype }
+                if &**lexical == "http://x.example/"
+                    && datatype.iri() == "http://www.w3.org/2001/XMLSchema#anyURI"
+        ));
+    }
+
+    #[test]
+    fn duplicated_keys_keep_the_last() {
+        let d = doc(&format!(
+            r#"{{{PFX}, "entity": {{"ex:e": {{}}, "ex:e": {{"ex:a": "second"}}}}}}"#
+        ));
+        assert_eq!(d.records.len(), 1);
+        let Record::Entity(e) = &d.records[0] else {
+            panic!()
+        };
+        assert_eq!(e.attributes.len(), 1);
+    }
+
+    #[test]
     fn formals_blank_ids_and_fan_out() {
         let d = doc(&format!(
             r#"{{{PFX},

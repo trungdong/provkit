@@ -643,6 +643,26 @@ mod tests {
     }
 
     #[test]
+    fn strict_enforces_three_rules_only() {
+        // Extensibility expressions are rejected under both profiles.
+        assert!(matches!(
+            err("ex:custom(ex:a)", Profile::Strict),
+            Error::Syntax { .. }
+        ));
+        // Attributes on alternateOf, specializationOf, hadMember and
+        // mentionOf are accepted.
+        for text in [
+            "alternateOf(ex:a, ex:b)",
+            "specializationOf(ex:a, ex:b)",
+            "hadMember(ex:c, ex:e)",
+            "prov:mentionOf(ex:a, ex:b, ex:c)",
+        ] {
+            let with_attrs = text.replace(')', ", [ex:k=\"v\"])");
+            assert!(read(&with_attrs, Profile::Strict).is_ok(), "{with_attrs}");
+        }
+    }
+
+    #[test]
     fn arity_and_structure_errors() {
         let message = syntax_message(err("wasGeneratedBy(ex:e, ex:a)", Profile::Default));
         assert!(message.contains("1 or 3"), "{message}");
