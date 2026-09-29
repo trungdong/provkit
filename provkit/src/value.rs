@@ -139,7 +139,28 @@ macro_rules! from_native {
     };
 }
 
-from_native! { i32 => XSD_INT, i64 => XSD_LONG, f32 => XSD_FLOAT, f64 => XSD_DOUBLE, bool => XSD_BOOLEAN }
+// Floats use the XSD spellings of the non-finite values.
+macro_rules! from_float {
+    ($($t:ty => $dt:ident),* $(,)?) => {
+        $(
+            impl From<$t> for Value {
+                fn from(v: $t) -> Self {
+                    let lexical = if v.is_nan() {
+                        "NaN".to_owned()
+                    } else if v.is_infinite() {
+                        if v > 0.0 { "INF" } else { "-INF" }.to_owned()
+                    } else {
+                        v.to_string()
+                    };
+                    Value::Typed { lexical, datatype: $dt.clone() }
+                }
+            }
+        )*
+    };
+}
+
+from_native! { i32 => XSD_INT, i64 => XSD_LONG, bool => XSD_BOOLEAN }
+from_float! { f32 => XSD_FLOAT, f64 => XSD_DOUBLE }
 
 impl From<&str> for Value {
     fn from(s: &str) -> Self {
@@ -265,6 +286,25 @@ mod tests {
             }
         );
         assert_eq!(Value::from("s"), Value::Str("s".into()));
+    }
+
+    #[test]
+    fn non_finite_floats_use_xsd_spellings() {
+        let lexical = |v: Value| match v {
+            Value::Typed { lexical, .. } => lexical,
+            other => panic!("expected Typed, got {other:?}"),
+        };
+        assert_eq!(lexical(Value::from(f64::NAN)), "NaN");
+        assert_eq!(lexical(Value::from(f64::INFINITY)), "INF");
+        assert_eq!(lexical(Value::from(f64::NEG_INFINITY)), "-INF");
+        assert_eq!(lexical(Value::from(f32::NAN)), "NaN");
+        assert_eq!(lexical(Value::from(f32::INFINITY)), "INF");
+        assert_eq!(lexical(Value::from(f32::NEG_INFINITY)), "-INF");
+    }
+
+    #[test]
+    fn same_lexical_different_datatype_differs() {
+        assert_ne!(Value::from(1i32), Value::from(1i64));
     }
 
     #[test]
