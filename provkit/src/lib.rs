@@ -13,6 +13,7 @@ pub mod namespaces;
 pub mod qname;
 pub mod record;
 pub mod sink;
+mod unify;
 pub mod value;
 
 #[cfg(test)]
