@@ -40,6 +40,9 @@ pub(super) fn emit(wire: &JsonDocument, sink: &mut impl Sink) -> Result<()> {
     for (key, bundle) in &wire.bundle {
         let bundle_ns = namespaces(&bundle.prefix)?;
         let scope = Scope::new(&doc_ns, Some(&bundle_ns));
+        if key.starts_with("_:") {
+            return Err(structure(format!("bundle `{key}` needs a real identifier")));
+        }
         let id = scope.resolve(key)?;
         sink.start_bundle(id, bundle_ns.clone())?;
         emit_sections(&bundle.sections, &scope, sink)?;
@@ -176,6 +179,10 @@ fn decode_value(v: &JsonValue, scope: &Scope<'_>) -> Result<Value> {
             lang,
         } => {
             if let Some(lang) = lang {
+                // A `type` beside `lang` is still resolved strictly.
+                if let Some(dt) = datatype {
+                    scope.resolve(dt)?;
+                }
                 return Ok(Value::LangStr(LangStr::new(value.as_str(), lang.as_str())?));
             }
             match datatype {
@@ -381,5 +388,71 @@ mod tests {
         );
         assert_eq!(d.bundles[0].records[1].id(), Some(&ex("f")));
         assert_eq!(d.bundles[0].namespaces.iter().count(), 1);
+    }
+
+    #[test]
+    fn strict_rules_and_shapes() {
+        let read = |s: &str| crate::json::read(s);
+        let ent = |body: &str| format!(r#"{{{PFX}, "entity": {{"ex:e": {{{body}}}}}}}"#);
+        assert!(matches!(
+            read(&ent(r#""ex:a": {"$": "1", "type": "zz:t"}"#)),
+            Err(Error::UndeclaredPrefix(p)) if p == "zz"
+        ));
+        assert!(matches!(
+            read(&ent(r#""ex:a": {"$": "1", "type": "zz:t", "lang": "en"}"#)),
+            Err(Error::UndeclaredPrefix(p)) if p == "zz"
+        ));
+        assert!(matches!(
+            read(&ent(r#""ex:a": [["x"]]"#)),
+            Err(Error::Structure { .. })
+        ));
+        assert!(matches!(
+            read(&format!(
+                r#"{{{PFX}, "used": {{"_:u": {{"prov:entity": 5}}}}}}"#
+            )),
+            Err(Error::Structure { .. })
+        ));
+        assert!(matches!(
+            read(r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"_:b": {}}}"#),
+            Err(Error::Structure { .. })
+        ));
+    }
+
+    #[test]
+    fn many_records_under_one_id() {
+        let d = doc(&format!(
+            r#"{{{PFX}, "entity": {{"ex:e": [{{"ex:a": "1"}}, {{"ex:a": "2"}}]}}}}"#
+        ));
+        assert_eq!(d.records.len(), 2);
+    }
+
+    #[test]
+    fn end_time_and_false() {
+        let d = doc(&format!(
+            r#"{{{PFX}, "activity": {{"ex:a": {{"prov:endTime": "2011-11-16T16:05:33Z", "ex:f": false}}}}}}"#
+        ));
+        let Record::Activity(a) = &d.records[0] else {
+            panic!()
+        };
+        assert!(a.end_time.is_some() && a.start_time.is_none());
+        assert_eq!(
+            a.attributes.get(&ex("f")).cloned().collect::<Vec<_>>(),
+            [Value::Typed {
+                lexical: "false".into(),
+                datatype: XSD_BOOLEAN.clone()
+            }]
+        );
+    }
+
+    #[test]
+    fn bundle_prefix_shadows_document_prefix() {
+        let d = doc(
+            r#"{"prefix": {"ex": "http://example.org/", "o": "http://o.org/"},
+            "bundle": {"o:b": {"prefix": {"ex": "http://shadow.org/"}, "entity": {"ex:e": {}}}}}"#,
+        );
+        assert_eq!(
+            d.bundles[0].records[0].id(),
+            Some(&QName::new("http://shadow.org/", "e"))
+        );
     }
 }

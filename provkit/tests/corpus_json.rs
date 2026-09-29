@@ -1,5 +1,7 @@
 //! Reads every PROV-JSON corpus document.
 
+#![cfg(feature = "json")]
+
 mod common;
 
 use common::{Report, corpus_dir, files};
