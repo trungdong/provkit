@@ -43,7 +43,8 @@ pub(super) fn emit(wire: &JsonDocument, sink: &mut impl Sink) -> Result<()> {
         if key.starts_with("_:") {
             return Err(structure(format!("bundle `{key}` needs a real identifier")));
         }
-        let id = scope.resolve(key)?;
+        // The bundle's name lives in the document's namespace, not its own.
+        let id = Scope::new(&doc_ns, None).resolve(key)?;
         sink.start_bundle(id, bundle_ns.clone())?;
         emit_sections(&bundle.sections, &scope, sink)?;
         sink.end_bundle()?;
@@ -450,6 +451,17 @@ mod tests {
             r#"{"prefix": {"ex": "http://example.org/", "o": "http://o.org/"},
             "bundle": {"o:b": {"prefix": {"ex": "http://shadow.org/"}, "entity": {"ex:e": {}}}}}"#,
         );
+        assert_eq!(
+            d.bundles[0].records[0].id(),
+            Some(&QName::new("http://shadow.org/", "e"))
+        );
+    }
+
+    #[test]
+    fn bundle_id_resolves_in_document_scope() {
+        let d = doc(r#"{"prefix": {"ex": "http://example.org/"},
+            "bundle": {"ex:b": {"prefix": {"ex": "http://shadow.org/"}, "entity": {"ex:e": {}}}}}"#);
+        assert_eq!(d.bundles[0].id, ex("b"));
         assert_eq!(
             d.bundles[0].records[0].id(),
             Some(&QName::new("http://shadow.org/", "e"))
