@@ -137,7 +137,8 @@ fn from_flag_overrides_extension() {
         .args(["convert", "-f", "provn", "-t", "json"])
         .arg(&lying)
         .assert()
-        .success();
+        .success()
+        .stdout(predicate::str::starts_with("{"));
     provkit()
         .args(["convert"])
         .arg(&lying)
@@ -211,4 +212,55 @@ fn help_states_the_precedence_rule() {
         .assert()
         .success()
         .stdout(predicate::str::contains(PRECEDENCE));
+}
+
+#[test]
+fn unknown_extension_falls_through_to_sniffing() {
+    let dir = scratch("unknown_extension_falls_through_to_sniffing");
+    let txt = dir.join("x.txt");
+    std::fs::write(&txt, PROVN).unwrap();
+    provkit()
+        .args(["convert", "-t", "json"])
+        .arg(&txt)
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("{"))
+        .stderr("");
+    let dat = dir.join("x.dat");
+    std::fs::copy(corpus("json/entity1.json"), &dat).unwrap();
+    provkit()
+        .args(["convert"])
+        .arg(&dat)
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("document"))
+        .stderr("");
+}
+
+#[test]
+fn unknown_format_values_are_rejected() {
+    for flag in ["-f", "-t"] {
+        provkit()
+            .args(["convert", flag, "xml", "-"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid value 'xml'"));
+    }
+}
+
+#[test]
+fn failed_write_names_the_output() {
+    let dir = scratch("failed_write_names_the_output");
+    let out = dir.join("no-such-dir").join("out.provn");
+    provkit()
+        .args(["convert"])
+        .arg(corpus("json/entity1.json"))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::starts_with(format!(
+            "provkit: {}: ",
+            out.display()
+        )));
 }

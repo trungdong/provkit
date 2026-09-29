@@ -103,16 +103,24 @@ fn convert(args: &ConvertArgs) -> Result<()> {
         .to
         .or_else(|| file.and_then(Format::from_path))
         .unwrap_or(Format::Provn);
-    let mut out: Box<dyn Write> = match file {
-        None => Box::new(io::stdout().lock()),
-        Some(path) => Box::new(io::BufWriter::new(
-            fs::File::create(path).with_context(|| path.display().to_string())?,
-        )),
-    };
+    let name = file.map_or_else(|| "-".to_owned(), |p| p.display().to_string());
+
+    // Serialise first, so a library error never leaves a partial file.
+    let mut buf = Vec::new();
     match format {
-        Format::Json => json::write(&doc, &mut out)?,
-        Format::Provn => provn::write(&doc, &mut out)?,
+        Format::Json => json::write(&doc, &mut buf),
+        Format::Provn => provn::write(&doc, &mut buf),
     }
-    out.flush()?;
+    .with_context(|| name.clone())?;
+    match file {
+        None => {
+            let mut stdout = io::stdout().lock();
+            stdout
+                .write_all(&buf)
+                .and_then(|()| stdout.flush())
+                .with_context(|| name)?;
+        }
+        Some(path) => fs::write(path, &buf).with_context(|| name)?,
+    }
     Ok(())
 }
