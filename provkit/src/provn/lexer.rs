@@ -257,7 +257,9 @@ impl<'a> Lexer<'a> {
                     self.advance(i + 1);
                     return Ok(TokenKind::Iri(rest[1..i].to_owned()));
                 }
-                '<' | '"' | '{' | '}' | '|' | '^' | '`' | '\\' | '\0'..=' ' => {
+                // Whitespace and control characters end the scan: the IRI never closed.
+                '\0'..=' ' => return Err(self.error("unterminated IRI")),
+                '<' | '"' | '{' | '}' | '|' | '^' | '`' | '\\' => {
                     return Err(
                         self.error_at(self.pos + i, format!("invalid character {c:?} in IRI"))
                     );
@@ -636,6 +638,58 @@ line""" "#,
         assert!(matches!(tokenize("/* open"), Err(Error::Syntax { .. })));
         assert!(matches!(tokenize("<open"), Err(Error::Syntax { .. })));
         assert!(matches!(tokenize("'ex:open"), Err(Error::Syntax { .. })));
+    }
+
+    #[test]
+    fn unterminated_iri_is_reported_at_its_start() {
+        for src in [
+            "x <http://x",
+            "x <http://x ",
+            "x <http://x\n",
+            "x <http://x\t>",
+        ] {
+            match tokenize(src) {
+                Err(Error::Syntax {
+                    line,
+                    column,
+                    message,
+                    ..
+                }) => {
+                    assert_eq!((line, column), (1, 3), "{src:?}");
+                    assert!(message.contains("unterminated IRI"), "{src:?}");
+                }
+                other => panic!("expected an error for {src:?}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn forbidden_iri_character_is_reported_at_the_character() {
+        for (src, column) in [("<a{b>", 3), ("<ab|>", 4), ("<a\\b>", 3)] {
+            match tokenize(src) {
+                Err(Error::Syntax {
+                    line,
+                    column: c,
+                    message,
+                    ..
+                }) => {
+                    assert_eq!((line, c), (1, column), "{src:?}");
+                    assert!(message.contains("in IRI"), "{src:?}");
+                }
+                other => panic!("expected an error for {src:?}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn columns_count_characters_not_bytes() {
+        let t = tokenize("\"é\" ex:é ex:x").unwrap();
+        assert_eq!(t[1].kind, name("ex", "é"));
+        assert_eq!((t[2].line, t[2].column), (1, 10));
+        match tokenize("\"é\" \"\\q\"") {
+            Err(Error::Syntax { line, column, .. }) => assert_eq!((line, column), (1, 6)),
+            other => panic!("unexpected {other:?}"),
+        }
     }
 
     #[test]
