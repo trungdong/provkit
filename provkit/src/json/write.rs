@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 
 use super::wire::{JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany};
 use crate::qname::well_known::{PROV_INTERNATIONALIZED_STRING, XSD_DATETIME, XSD_QNAME};
-use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
+use crate::{Bundle, Document, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
 
 /// Write `document` as PROV-JSON, pretty-printed with two-space indentation.
 ///
@@ -15,9 +15,7 @@ use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record,
 ///
 /// # Errors
 ///
-/// Returns [`Error::Io`] if `out` fails, [`Error::DuplicateBundle`] if two
-/// bundles share an identifier, and [`Error::ReservedPrefix`] or
-/// [`Error::InvalidQName`] for a namespace table that cannot be written.
+/// Returns [`Error::Io`] if `out` fails.
 pub fn write(document: &Document, out: &mut impl Write) -> Result<()> {
     let wire = to_wire(document)?;
     serde_json::to_writer_pretty(&mut *out, &wire)?;
@@ -43,17 +41,8 @@ fn to_wire(document: &Document) -> Result<JsonDocument> {
     let mut next_blank = 0;
     let sections = sections(&document.records, &mut table, &mut next_blank);
     let mut bundles = IndexMap::new();
-    for bundle in &document.bundles {
-        if document
-            .bundles
-            .iter()
-            .filter(|b| b.id == bundle.id)
-            .count()
-            > 1
-        {
-            return Err(Error::DuplicateBundle(bundle.id.clone()));
-        }
-        let (key, wire) = bundle_wire(bundle, &table, &mut next_blank)?;
+    for bundle in merge_bundles(&document.bundles)? {
+        let (key, wire) = bundle_wire(&bundle, &table, &mut next_blank)?;
         bundles.insert(key, wire);
     }
     Ok(JsonDocument {
@@ -61,6 +50,26 @@ fn to_wire(document: &Document) -> Result<JsonDocument> {
         sections,
         bundle: bundles,
     })
+}
+
+/// Bundles sharing an identifier become one, as document equality treats
+/// them: records in document order, declarations from every copy.
+fn merge_bundles(bundles: &[Bundle]) -> Result<Vec<Bundle>> {
+    let mut merged: Vec<Bundle> = Vec::new();
+    for bundle in bundles {
+        let Some(into) = merged.iter_mut().find(|m| m.id == bundle.id) else {
+            merged.push(bundle.clone());
+            continue;
+        };
+        for (prefix, iri) in bundle.namespaces.iter() {
+            into.namespaces.declare(prefix, iri)?;
+        }
+        if let Some(default) = bundle.namespaces.default_namespace() {
+            into.namespaces.set_default(default.clone());
+        }
+        into.records.extend(bundle.records.iter().cloned());
+    }
+    Ok(merged)
 }
 
 /// A bundle and its key, both written against the bundle's table over the
@@ -346,18 +355,24 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_bundles_are_rejected() {
+    fn bundles_sharing_an_identifier_merge_and_round_trip() {
         let mut d = Document::new();
-        for _ in 0..2 {
-            d.bundles.push(Bundle {
-                id: ex("b"),
-                namespaces: Namespaces::new(),
-                records: vec![],
-            });
-        }
-        assert!(matches!(
-            json::to_string(&d),
-            Err(crate::Error::DuplicateBundle(_))
-        ));
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        let mut other = Namespaces::new();
+        other.declare("o", "http://o.org/").unwrap();
+        d.bundles.push(Bundle {
+            id: ex("b"),
+            namespaces: Namespaces::new(),
+            records: vec![entity_in(ex("one"))],
+        });
+        d.bundles.push(Bundle {
+            id: ex("b"),
+            namespaces: other,
+            records: vec![entity_in(QName::new("http://o.org/", "two"))],
+        });
+        let text = json::to_string(&d).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["bundle"].as_object().unwrap().len(), 1);
+        assert_eq!(json::read(&text).unwrap(), d);
     }
 }
