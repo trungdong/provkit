@@ -22,7 +22,10 @@ pub enum Error {
     /// an element without an identifier, ...).
     #[error("{format}: {message}")]
     Structure {
-        /// `"PROV-N"` or `"PROV-JSON"`.
+        /// `"PROV-N"`, `"PROV-JSON"` or `"record"`. `"record"` is raised by
+        /// [`Record::from_parts`](crate::Record::from_parts) regardless of the
+        /// input format. `"document"` is raised by
+        /// [`DocumentBuilder`](crate::DocumentBuilder) for events out of order.
         format: &'static str,
         /// What was wrong.
         message: String,
