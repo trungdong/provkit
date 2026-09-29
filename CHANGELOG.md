@@ -34,7 +34,7 @@ follows [Semantic Versioning](https://semver.org/).
 
 ### Not included
 
-- `lenient` PROV-N profile, builder API, index, query and store.
+- `lenient` PROV-N profile, fluent builder API, index, query and store.
 - PROV-JSONLD, PROV-XML, PROV-O and validation.
 
 [0.1.0]: https://github.com/trungdong/provkit/releases/tag/v0.1.0

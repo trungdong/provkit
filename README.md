@@ -48,15 +48,17 @@ on standard output. `-` means standard input or output.
 ```rust
 use provkit::{json, provn, Attributes, Entity, QName, Record};
 
-let text = r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e1": {}}}"#;
-let mut doc = json::read(text)?;
-doc.records.push(Record::Entity(Entity {
-    id: QName::new("http://example.org/", "e2"),
-    attributes: Attributes::new(),
-}));
-let out = provn::to_string(&doc)?;
-assert!(out.contains("entity(ex:e2)"));
-# Ok::<(), provkit::Error>(())
+fn main() -> Result<(), provkit::Error> {
+    let text = r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e1": {}}}"#;
+    let mut doc = json::read(text)?;
+    doc.records.push(Record::Entity(Entity {
+        id: QName::new("http://example.org/", "e2"),
+        attributes: Attributes::new(),
+    }));
+    let out = provn::to_string(&doc)?;
+    assert!(out.contains("entity(ex:e2)"));
+    Ok(())
+}
 ```
 
 Document equality is set-based. `Document::unified()` merges records that

@@ -660,6 +660,11 @@ mod tests {
             let with_attrs = text.replace(')', ", [ex:k=\"v\"])");
             assert!(read(&with_attrs, Profile::Strict).is_ok(), "{with_attrs}");
         }
+        // Identifiers on those relations are accepted.
+        assert!(read("alternateOf(ex:i; ex:a, ex:b)", Profile::Strict).is_ok());
+        // A bundle may come before a top-level record.
+        let text = "document\nprefix ex <http://e/>\nbundle ex:b\nentity(ex:x)\nendBundle\nentity(ex:e)\nendDocument";
+        assert!(provn::read_with(text, Profile::Strict).is_ok());
     }
 
     #[test]

@@ -321,6 +321,10 @@ mod tests {
         assert_eq!(dt("low"), *XSD_LONG);
         assert_eq!(dt("i64"), *XSD_LONG);
         assert_eq!(dt("u64"), *XSD_INTEGER);
+        assert!(matches!(
+            e.attributes.get(&ex("u64")).next(),
+            Some(Value::Typed { lexical, .. }) if &**lexical == "9223372036854775808"
+        ));
         assert_eq!(dt("neg"), *XSD_LONG);
         assert_eq!(dt("huge"), *XSD_DOUBLE);
         assert_eq!(dt("exp"), *XSD_DOUBLE);
