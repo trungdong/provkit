@@ -127,8 +127,6 @@ impl Namespaces {
     /// A declared prefix wins, then the default namespace for a bare name,
     /// then a freshly minted `nsN` prefix, which is added to this table.
     /// Callers that must not change a document pass a clone.
-    // Only the writers call this, and both are feature-gated.
-    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
     pub(crate) fn render(&mut self, name: &QName) -> String {
         if let Some(prefix) = self.prefix_for(name.namespace()) {
             return format!("{prefix}:{}", name.local());

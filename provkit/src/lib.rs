@@ -10,6 +10,8 @@ pub mod error;
 #[cfg(feature = "json")]
 pub mod json;
 pub mod namespaces;
+#[cfg(feature = "provn")]
+pub mod provn;
 pub mod qname;
 pub mod record;
 pub mod sink;
