@@ -90,14 +90,7 @@ pub mod well_known {
 mod tests {
     use super::*;
     use crate::Namespaces;
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    fn hash_of(name: &QName) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        name.hash(&mut hasher);
-        hasher.finish()
-    }
+    use crate::test_util::hash;
 
     #[test]
     fn equality_ignores_spelling() {
@@ -107,7 +100,7 @@ mod tests {
         let a = ns.resolve("a:x").unwrap();
         let b = ns.resolve("b:x").unwrap();
         assert_eq!(a, b);
-        assert_eq!(hash_of(&a), hash_of(&b));
+        assert_eq!(hash(&a), hash(&b));
         assert_eq!(a, QName::new(Arc::from("http://example.org/"), "x"));
     }
 
