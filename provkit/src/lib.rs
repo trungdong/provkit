@@ -26,6 +26,8 @@ pub use datetime::DateTime;
 pub use document::{Bundle, Document};
 pub use error::{Error, Result};
 pub use namespaces::{Namespaces, Scope};
+#[cfg(feature = "provn")]
+pub use provn::Profile;
 pub use qname::QName;
 pub use record::{
     Activity, Agent, Alternate, Association, Attribution, Communication, Delegation, Derivation,

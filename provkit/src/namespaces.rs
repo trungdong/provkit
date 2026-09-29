@@ -229,16 +229,42 @@ impl<'a> Scope<'a> {
 
     /// Resolve as [`Namespaces::resolve`], with the fallback.
     pub fn resolve(&self, text: &str) -> Result<QName> {
-        let lookup = |prefix: &str| {
-            self.bundle
-                .and_then(|b| b.lookup(prefix))
-                .or_else(|| self.document.lookup(prefix))
-        };
-        let default = self
-            .bundle
+        resolve_with(text, |prefix| self.lookup(prefix), self.default_namespace())
+    }
+
+    /// Resolve a name already split into `prefix` and `local`; an empty
+    /// prefix means a bare name. A colon in `local` stays in the local part.
+    // Only the PROV-N reader calls this, and it is feature-gated.
+    #[cfg_attr(not(feature = "provn"), allow(dead_code))]
+    pub(crate) fn resolve_parts(&self, prefix: &str, local: &str) -> Result<QName> {
+        if prefix.is_empty() {
+            if local.is_empty() {
+                return Err(Error::InvalidQName(String::new()));
+            }
+            let ns = self
+                .default_namespace()
+                .ok_or_else(|| Error::UndeclaredPrefix(String::new()))?;
+            return Ok(QName::new(ns, local));
+        }
+        if prefix == "_" {
+            return Err(Error::InvalidQName(format!("{prefix}:{local}")));
+        }
+        let ns = self
+            .lookup(prefix)
+            .ok_or_else(|| Error::UndeclaredPrefix(prefix.into()))?;
+        Ok(QName::new(ns, local))
+    }
+
+    fn lookup(&self, prefix: &str) -> Option<Arc<str>> {
+        self.bundle
+            .and_then(|b| b.lookup(prefix))
+            .or_else(|| self.document.lookup(prefix))
+    }
+
+    fn default_namespace(&self) -> Option<Arc<str>> {
+        self.bundle
             .and_then(|b| b.default_namespace().cloned())
-            .or_else(|| self.document.default_namespace().cloned());
-        resolve_with(text, lookup, default)
+            .or_else(|| self.document.default_namespace().cloned())
     }
 }
 
@@ -383,6 +409,36 @@ mod tests {
             scope.resolve("b:e").unwrap(),
             QName::new("http://bundle.org/", "e")
         );
+    }
+
+    #[test]
+    fn resolve_parts_keeps_a_colon_in_the_local_part() {
+        let mut doc = Namespaces::new();
+        doc.set_default("http://default.org/");
+        doc.declare("a", "http://a.org/").unwrap();
+        let mut bundle = Namespaces::new();
+        bundle.declare("a", "http://bundle.org/").unwrap();
+        let scope = Scope::new(&doc, Some(&bundle));
+        assert_eq!(
+            scope.resolve_parts("", "a:b").unwrap(),
+            QName::new("http://default.org/", "a:b")
+        );
+        assert_eq!(
+            scope.resolve_parts("a", "b").unwrap(),
+            QName::new("http://bundle.org/", "b")
+        );
+        assert!(
+            matches!(scope.resolve_parts("zz", "b"), Err(Error::UndeclaredPrefix(p)) if p == "zz")
+        );
+        assert!(matches!(
+            scope.resolve_parts("_", "b"),
+            Err(Error::InvalidQName(_))
+        ));
+        let bare = Namespaces::new();
+        assert!(matches!(
+            Scope::new(&bare, None).resolve_parts("", "b"),
+            Err(Error::UndeclaredPrefix(p)) if p.is_empty()
+        ));
     }
 
     #[test]
