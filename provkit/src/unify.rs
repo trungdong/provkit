@@ -5,6 +5,7 @@ use std::collections::HashMap;
 
 use indexmap::IndexMap;
 
+use crate::document::merged_bundles;
 use crate::{
     Attributes, Bundle, Document, Error, Formal, FormalAttr, FormalRef, Kind, QName, Record, Result,
 };
@@ -29,11 +30,10 @@ impl Document {
     ///
     /// # Errors
     ///
-    /// [`Error::Unification`] when two records conflict, and any error from
-    /// combining the namespace tables of bundles that share an identifier.
+    /// [`Error::Unification`] when two records conflict.
     pub fn unified(&self) -> Result<Document> {
         let mut bundles = Vec::new();
-        for bundle in combine_bundles(&self.bundles)? {
+        for bundle in merged_bundles(&self.bundles) {
             bundles.push(Bundle {
                 records: unify_records(&bundle.records)?,
                 ..bundle
@@ -45,26 +45,6 @@ impl Document {
             bundles,
         })
     }
-}
-
-/// Bundles sharing an identifier become one: records in document order,
-/// declarations from every copy, position of the first copy.
-fn combine_bundles(bundles: &[Bundle]) -> Result<Vec<Bundle>> {
-    let mut combined: IndexMap<&QName, Bundle> = IndexMap::new();
-    for bundle in bundles {
-        let Some(into) = combined.get_mut(&bundle.id) else {
-            combined.insert(&bundle.id, bundle.clone());
-            continue;
-        };
-        for (prefix, iri) in bundle.namespaces.iter() {
-            into.namespaces.declare(prefix, iri)?;
-        }
-        if let Some(default) = bundle.namespaces.default_namespace() {
-            into.namespaces.set_default(default.clone());
-        }
-        into.records.extend(bundle.records.iter().cloned());
-    }
-    Ok(combined.into_values().collect())
 }
 
 fn unify_records(records: &[Record]) -> Result<Vec<Record>> {
@@ -430,6 +410,29 @@ mod tests {
         d.bundles
             .push(bundle("b", vec![rec(Kind::Activity, "x", vec![], None)]));
         assert!(d.unified().is_ok());
+    }
+
+    #[test]
+    fn same_identifier_bundles_with_clashing_prefixes_unify() {
+        let bundle = |iri: &str, label: &str| {
+            let mut ns = Namespaces::new();
+            ns.declare("o", iri).unwrap();
+            Bundle {
+                id: q("b"),
+                namespaces: ns,
+                records: vec![rec(Kind::Entity, "e", vec![], Some(label))],
+            }
+        };
+        let mut d = Document::new();
+        d.bundles.push(bundle("http://one.org/", "one"));
+        d.bundles.push(bundle("http://two.org/", "two"));
+        let u = d.unified().unwrap();
+        assert_eq!(u.bundles.len(), 1);
+        assert_eq!(u.bundles[0].records.len(), 1);
+        assert_eq!(
+            u.bundles[0].namespaces.lookup("o").as_deref(),
+            Some("http://one.org/")
+        );
     }
 
     #[test]

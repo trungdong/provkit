@@ -64,6 +64,23 @@ impl Document {
     }
 }
 
+/// Bundles sharing an identifier become one, as document equality treats
+/// them. The first copy keeps its position, records follow in document
+/// order and the first binding of a prefix wins. Names are resolved IRIs, so
+/// a dropped binding only changes how a writer spells a name.
+pub(crate) fn merged_bundles(bundles: &[Bundle]) -> Vec<Bundle> {
+    let mut merged: Vec<Bundle> = Vec::new();
+    for bundle in bundles {
+        let Some(into) = merged.iter_mut().find(|m| m.id == bundle.id) else {
+            merged.push(bundle.clone());
+            continue;
+        };
+        into.namespaces.absorb(&bundle.namespaces);
+        into.records.extend(bundle.records.iter().cloned());
+    }
+    merged
+}
+
 /// Compares as sets, so order and duplicates do not matter.
 fn same_records(a: &[Record], b: &[Record]) -> bool {
     let a: HashSet<&Record> = a.iter().collect();

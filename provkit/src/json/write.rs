@@ -5,6 +5,7 @@ use std::io::Write;
 use indexmap::IndexMap;
 
 use super::wire::{JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany};
+use crate::document::merged_bundles;
 use crate::qname::well_known::{PROV_INTERNATIONALIZED_STRING, XSD_DATETIME, XSD_QNAME};
 use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
 
@@ -48,7 +49,7 @@ fn to_wire(document: &Document) -> Result<JsonDocument> {
     let mut next_blank = 0;
     let sections = sections(&document.records, &mut table, &mut next_blank);
     let mut bundles = IndexMap::new();
-    for bundle in merge_bundles(&document.bundles)? {
+    for bundle in merged_bundles(&document.bundles) {
         let (key, wire) = bundle_wire(&bundle, &table, &mut next_blank)?;
         bundles.insert(key, wire);
     }
@@ -57,26 +58,6 @@ fn to_wire(document: &Document) -> Result<JsonDocument> {
         sections,
         bundle: bundles,
     })
-}
-
-/// Bundles sharing an identifier become one, as document equality treats
-/// them: records in document order, declarations from every copy.
-fn merge_bundles(bundles: &[Bundle]) -> Result<Vec<Bundle>> {
-    let mut merged: Vec<Bundle> = Vec::new();
-    for bundle in bundles {
-        let Some(into) = merged.iter_mut().find(|m| m.id == bundle.id) else {
-            merged.push(bundle.clone());
-            continue;
-        };
-        for (prefix, iri) in bundle.namespaces.iter() {
-            into.namespaces.declare(prefix, iri)?;
-        }
-        if let Some(default) = bundle.namespaces.default_namespace() {
-            into.namespaces.set_default(default.clone());
-        }
-        into.records.extend(bundle.records.iter().cloned());
-    }
-    Ok(merged)
 }
 
 /// A bundle and its key, both written against the bundle's table over the

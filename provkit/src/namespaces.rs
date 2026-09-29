@@ -58,6 +58,19 @@ impl Namespaces {
         Ok(())
     }
 
+    /// Add the bindings of `other` that this table lacks. A prefix or default
+    /// namespace already bound here keeps its binding, so merging cannot fail.
+    pub(crate) fn absorb(&mut self, other: &Namespaces) {
+        if self.default.is_none() {
+            self.default.clone_from(&other.default);
+        }
+        for (prefix, iri) in &other.prefixes {
+            self.prefixes
+                .entry(prefix.clone())
+                .or_insert_with(|| iri.clone());
+        }
+    }
+
     /// Declared prefixes in declaration order, without `prov` and `xsd`.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &Arc<str>)> {
         self.prefixes.iter().map(|(p, iri)| (&**p, iri))
