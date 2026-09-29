@@ -108,6 +108,32 @@ impl Namespaces {
     }
 }
 
+impl Namespaces {
+    /// The text that writes `name` against this table.
+    ///
+    /// A declared prefix wins, then the default namespace for a bare name,
+    /// then a freshly minted `nsN` prefix, which is added to this table.
+    /// Callers that must not change a document pass a clone.
+    // Only the writers call this, and both are feature-gated.
+    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
+    pub(crate) fn render(&mut self, name: &QName) -> String {
+        if let Some(prefix) = self.prefix_for(name.namespace()) {
+            return format!("{prefix}:{}", name.local());
+        }
+        // A colon in the local part would read back as a prefix separator.
+        let bare = !name.local().contains(':')
+            && self
+                .default
+                .as_deref()
+                .is_some_and(|d| d == &**name.namespace());
+        if bare {
+            return name.local().to_owned();
+        }
+        let prefix = self.ensure_prefix(name.namespace());
+        format!("{prefix}:{}", name.local())
+    }
+}
+
 fn reserved(prefix: &str) -> Option<&'static str> {
     match prefix {
         "prov" => Some(PROV),
@@ -244,6 +270,28 @@ mod tests {
         assert_eq!(ns.ensure_prefix("http://new/"), "ns2");
         assert_eq!(ns.ensure_prefix("http://new/"), "ns2");
         assert_eq!(ns.prefix_for(PROV), Some("prov"));
+    }
+
+    #[test]
+    fn render_prefers_prefix_then_default_then_mints() {
+        let mut ns = Namespaces::new();
+        ns.declare("ex", "http://example.org/").unwrap();
+        ns.set_default("http://default.org/");
+        assert_eq!(ns.render(&QName::new("http://example.org/", "a")), "ex:a");
+        assert_eq!(ns.render(&QName::new("http://default.org/", "b")), "b");
+        assert_eq!(ns.render(&QName::new(PROV, "type")), "prov:type");
+        assert_eq!(ns.render(&QName::new("http://new/", "c")), "ns1:c");
+        assert_eq!(ns.iter().count(), 2);
+        // A name in the default namespace never mints a prefix.
+        let mut plain = Namespaces::new();
+        plain.set_default("http://default.org/");
+        assert_eq!(plain.render(&QName::new("http://default.org/", "b")), "b");
+        assert_eq!(plain.iter().count(), 0);
+        // A colon in the local part cannot be written bare.
+        assert_eq!(
+            plain.render(&QName::new("http://default.org/", "x:y")),
+            "ns1:x:y"
+        );
     }
 
     #[test]

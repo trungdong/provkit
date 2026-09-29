@@ -2,6 +2,9 @@
 
 mod read;
 mod wire;
+mod write;
+
+pub use write::{to_string, write};
 
 use crate::{Document, DocumentBuilder, Result, Sink};
 

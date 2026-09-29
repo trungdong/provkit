@@ -1,0 +1,363 @@
+//! Document to wire structs to JSON text.
+
+use std::io::Write;
+
+use indexmap::IndexMap;
+
+use super::wire::{JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany};
+use crate::qname::well_known::{PROV_INTERNATIONALIZED_STRING, XSD_DATETIME, XSD_QNAME};
+use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
+
+/// Write `document` as PROV-JSON, pretty-printed with two-space indentation.
+///
+/// Records without an identifier get `_:id1`, `_:id2`, ... in document order.
+/// A namespace with no declared prefix gets a minted `ns1`, `ns2`, ...
+///
+/// # Errors
+///
+/// Returns [`Error::Io`] if `out` fails, [`Error::DuplicateBundle`] if two
+/// bundles share an identifier, and [`Error::ReservedPrefix`] or
+/// [`Error::InvalidQName`] for a namespace table that cannot be written.
+pub fn write(document: &Document, out: &mut impl Write) -> Result<()> {
+    let wire = to_wire(document)?;
+    serde_json::to_writer_pretty(&mut *out, &wire)?;
+    out.write_all(b"\n")?;
+    Ok(())
+}
+
+/// Write `document` as a PROV-JSON string.
+///
+/// # Errors
+///
+/// As [`write`], except that [`Error::Io`] cannot occur.
+pub fn to_string(document: &Document) -> Result<String> {
+    let mut buf = Vec::new();
+    write(document, &mut buf)?;
+    Ok(String::from_utf8(buf).expect("serde_json writes UTF-8"))
+}
+
+fn to_wire(document: &Document) -> Result<JsonDocument> {
+    // A copy of the document's table, so minting a prefix never touches the
+    // caller's document. It is written last, after every name has been seen.
+    let mut table = document.namespaces.clone();
+    let mut next_blank = 0;
+    let sections = sections(&document.records, &mut table, &mut next_blank);
+    let mut bundles = IndexMap::new();
+    for bundle in &document.bundles {
+        if document
+            .bundles
+            .iter()
+            .filter(|b| b.id == bundle.id)
+            .count()
+            > 1
+        {
+            return Err(Error::DuplicateBundle(bundle.id.clone()));
+        }
+        let (key, wire) = bundle_wire(bundle, &table, &mut next_blank)?;
+        bundles.insert(key, wire);
+    }
+    Ok(JsonDocument {
+        prefix: prefix_table(&table, |_| true, document.namespaces.default_namespace()),
+        sections,
+        bundle: bundles,
+    })
+}
+
+/// A bundle and its key, both written against the bundle's table over the
+/// document's: bundle declarations win, undeclared prefixes fall back.
+fn bundle_wire(
+    bundle: &Bundle,
+    outer: &Namespaces,
+    next_blank: &mut usize,
+) -> Result<(String, JsonBundle)> {
+    let mut table = outer.clone();
+    for (prefix, iri) in bundle.namespaces.iter() {
+        table.declare(prefix, iri)?;
+    }
+    if let Some(default) = bundle.namespaces.default_namespace() {
+        table.set_default(default.clone());
+    }
+    let key = table.render(&bundle.id);
+    let sections = sections(&bundle.records, &mut table, next_blank);
+    // Entries the document already declares are inherited, not repeated.
+    let inherited = |prefix: &str, iri: &str| outer.lookup(prefix).is_some_and(|o| *o == *iri);
+    let prefix = prefix_table(
+        &table,
+        |(p, iri)| !inherited(p, iri),
+        bundle.namespaces.default_namespace(),
+    );
+    Ok((key, JsonBundle { prefix, sections }))
+}
+
+/// The `prefix` object: declared prefixes that pass `keep`, then `default`.
+fn prefix_table(
+    table: &Namespaces,
+    keep: impl Fn((&str, &str)) -> bool,
+    default: Option<&std::sync::Arc<str>>,
+) -> IndexMap<String, String> {
+    let mut out = IndexMap::new();
+    for (prefix, iri) in table.iter() {
+        if keep((prefix, iri)) {
+            out.insert(prefix.to_owned(), iri.to_string());
+        }
+    }
+    if let Some(default) = default {
+        out.insert("default".to_owned(), default.to_string());
+    }
+    out
+}
+
+/// Records grouped by kind in `Kind::ALL` order, then by identifier.
+fn sections(
+    records: &[Record],
+    table: &mut Namespaces,
+    next_blank: &mut usize,
+) -> IndexMap<String, JsonSection> {
+    let mut out = IndexMap::new();
+    for kind in Kind::ALL {
+        let mut section: IndexMap<String, Vec<JsonRecord>> = IndexMap::new();
+        for record in records.iter().filter(|r| r.kind() == kind) {
+            let key = if let Some(id) = record.id() {
+                table.render(id)
+            } else {
+                *next_blank += 1;
+                format!("_:id{next_blank}")
+            };
+            section
+                .entry(key)
+                .or_default()
+                .push(record_wire(record, table));
+        }
+        if section.is_empty() {
+            continue;
+        }
+        let section: JsonSection = section
+            .into_iter()
+            .map(|(id, mut bodies)| {
+                let group = if bodies.len() == 1 {
+                    OneOrMany::One(bodies.remove(0))
+                } else {
+                    OneOrMany::Many(bodies)
+                };
+                (id, group)
+            })
+            .collect();
+        out.insert(kind.json_key().to_owned(), section);
+    }
+    out
+}
+
+fn record_wire(record: &Record, table: &mut Namespaces) -> JsonRecord {
+    let mut body = JsonRecord::new();
+    for (attr, value) in record.formals() {
+        let text = match value {
+            FormalRef::Name(q) => table.render(q),
+            FormalRef::Time(t) => t.to_string(),
+        };
+        body.insert(format!("prov:{}", attr.local_name()), JsonValue::Str(text));
+    }
+    // Several values under one name become an array, in insertion order.
+    let mut grouped: IndexMap<String, Vec<JsonValue>> = IndexMap::new();
+    for (name, value) in record.attributes().iter() {
+        let key = table.render(name);
+        grouped
+            .entry(key)
+            .or_default()
+            .push(value_wire(value, table));
+    }
+    for (name, mut values) in grouped {
+        let value = if values.len() == 1 {
+            values.remove(0)
+        } else {
+            JsonValue::Many(values)
+        };
+        body.insert(name, value);
+    }
+    body
+}
+
+/// Only plain strings are written bare. Everything else is a `$` object, so
+/// the reader never sees a raw JSON number or boolean.
+fn value_wire(value: &Value, table: &mut Namespaces) -> JsonValue {
+    let mut typed = |value: String, datatype: &QName| JsonValue::Typed {
+        value,
+        datatype: Some(table.render(datatype)),
+        lang: None,
+    };
+    match value {
+        Value::Str(s) => JsonValue::Str(s.clone()),
+        Value::LangStr(l) => JsonValue::Typed {
+            value: l.value().to_owned(),
+            datatype: Some(table.render(&PROV_INTERNATIONALIZED_STRING)),
+            lang: Some(l.lang().to_owned()),
+        },
+        Value::QName(q) => {
+            let text = table.render(q);
+            JsonValue::Typed {
+                value: text,
+                datatype: Some(table.render(&XSD_QNAME)),
+                lang: None,
+            }
+        }
+        Value::DateTime(d) => typed(d.to_string(), &XSD_DATETIME),
+        Value::Typed { lexical, datatype } => typed(lexical.clone(), datatype),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::test_util::q as ex;
+    use crate::{
+        Attributes, Bundle, Document, Entity, Generation, Kind, LangStr, Namespaces, QName, Record,
+        json,
+    };
+
+    fn entity_in(id: QName) -> Record {
+        Record::Entity(Entity {
+            id,
+            attributes: Attributes::new(),
+        })
+    }
+
+    #[test]
+    fn shape_and_blank_ids() {
+        let mut d = Document::new();
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        d.records.push(Record::Generation(Generation {
+            id: None,
+            entity: Some(ex("e")),
+            activity: None,
+            time: None,
+            attributes: Attributes::new(),
+        }));
+        d.records.push(entity_in(ex("e")));
+        d.records.push(entity_in(QName::new("http://other/", "o")));
+        let text = json::to_string(&d).unwrap();
+        let at = |needle: &str| text.find(needle).unwrap_or_else(|| panic!("no {needle}"));
+        assert!(at("\"prefix\"") < at("\"entity\""));
+        assert!(at("\"entity\"") < at("\"wasGeneratedBy\""));
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v.as_object().unwrap().len(), 3);
+        assert_eq!(v["prefix"]["ns1"], "http://other/");
+        assert_eq!(v["entity"]["ns1:o"], serde_json::json!({}));
+        assert_eq!(v["wasGeneratedBy"]["_:id1"]["prov:entity"], "ex:e");
+        // The caller's document is untouched.
+        assert_eq!(d.namespaces.iter().count(), 1);
+    }
+
+    #[test]
+    fn blank_ids_continue_through_bundles() {
+        let blank = || {
+            Record::Generation(Generation {
+                id: None,
+                entity: Some(ex("e")),
+                activity: None,
+                time: None,
+                attributes: Attributes::new(),
+            })
+        };
+        let mut d = Document::new();
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        d.records.push(blank());
+        d.bundles.push(Bundle {
+            id: ex("b"),
+            namespaces: Namespaces::new(),
+            records: vec![blank(), blank()],
+        });
+        let v: serde_json::Value = serde_json::from_str(&json::to_string(&d).unwrap()).unwrap();
+        assert!(v["wasGeneratedBy"]["_:id1"].is_object());
+        let inner = &v["bundle"]["ex:b"]["wasGeneratedBy"];
+        assert!(inner["_:id2"].is_object() && inner["_:id3"].is_object());
+    }
+
+    #[test]
+    fn default_namespace_never_mints_a_prefix() {
+        let mut d = Document::new();
+        d.namespaces.set_default("http://example.org/");
+        d.records.push(entity_in(ex("e")));
+        let text = json::to_string(&d).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(
+            v["prefix"],
+            serde_json::json!({"default": "http://example.org/"})
+        );
+        assert!(v["entity"]["e"].is_object());
+        assert_eq!(json::read(&text).unwrap(), d);
+    }
+
+    #[test]
+    fn every_value_variant_round_trips() {
+        let mut d = Document::new();
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        let mut a = Attributes::new();
+        a.insert(ex("s"), "plain".into());
+        a.insert(ex("l"), LangStr::new("bonjour", "fr").unwrap().into());
+        a.insert(ex("q"), ex("q").into());
+        a.insert(
+            ex("d"),
+            crate::DateTime::parse("2011-11-16T16:05:33.5+01:00")
+                .unwrap()
+                .into(),
+        );
+        a.insert(ex("i"), 7i32.into());
+        a.insert(ex("f"), 1.5f64.into());
+        a.insert(ex("b"), true.into());
+        a.insert(ex("s"), "second".into());
+        d.records.push(Record::Entity(Entity {
+            id: ex("e"),
+            attributes: a,
+        }));
+        for kind in Kind::ALL {
+            let id = Some(ex(kind.json_key()));
+            d.records
+                .push(Record::from_parts(kind, id, vec![], Attributes::new()).unwrap());
+        }
+        let text = json::to_string(&d).unwrap();
+        assert_eq!(json::read(&text).unwrap(), d);
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let body = &v["entity"]["ex:e"];
+        for key in ["ex:i", "ex:f", "ex:b", "ex:q", "ex:d", "ex:l"] {
+            assert!(body[key]["$"].is_string(), "{key} must be a `$` string");
+        }
+        assert_eq!(body["ex:l"]["lang"], "fr");
+        assert_eq!(body["ex:l"]["type"], "prov:InternationalizedString");
+        assert_eq!(body["ex:q"]["type"], "xsd:QName");
+        assert_eq!(body["ex:s"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn bundle_redeclaring_its_own_prefix_round_trips() {
+        let mut d = Document::new();
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        d.records.push(entity_in(ex("top")));
+        let mut inner = Namespaces::new();
+        inner.declare("ex", "http://shadow.org/").unwrap();
+        d.bundles.push(Bundle {
+            id: QName::new("http://shadow.org/", "b"),
+            namespaces: inner,
+            records: vec![
+                entity_in(QName::new("http://shadow.org/", "e")),
+                entity_in(ex("f")),
+            ],
+        });
+        let text = json::to_string(&d).unwrap();
+        assert!(text.contains("\"ex:b\""), "key uses the bundle's table");
+        assert_eq!(json::read(&text).unwrap(), d);
+    }
+
+    #[test]
+    fn duplicate_bundles_are_rejected() {
+        let mut d = Document::new();
+        for _ in 0..2 {
+            d.bundles.push(Bundle {
+                id: ex("b"),
+                namespaces: Namespaces::new(),
+                records: vec![],
+            });
+        }
+        assert!(matches!(
+            json::to_string(&d),
+            Err(crate::Error::DuplicateBundle(_))
+        ));
+    }
+}
