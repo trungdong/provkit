@@ -7,6 +7,8 @@ pub mod attributes;
 pub mod datetime;
 pub mod document;
 pub mod error;
+#[cfg(feature = "json")]
+pub mod json;
 pub mod namespaces;
 pub mod qname;
 pub mod record;
