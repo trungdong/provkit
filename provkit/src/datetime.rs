@@ -162,6 +162,9 @@ impl DateTime {
         if self.nanos >= 1_000_000_000 {
             return Err(invalid(text, "fraction out of range"));
         }
+        if self.offset.is_some_and(|o| !(-840..=840).contains(&o)) {
+            return Err(invalid(text, "offset outside -14:00..+14:00"));
+        }
         Ok(())
     }
 
@@ -377,7 +380,33 @@ mod tests {
         let a = DateTime::parse("2011-11-16T24:00:00Z").unwrap();
         let b = DateTime::parse("2011-11-17T00:00:00Z").unwrap();
         assert_eq!(a, b);
+        assert_eq!(hash(&a), hash(&b));
         assert_eq!(a.to_string(), "2011-11-16T24:00:00Z");
+
+        let a = DateTime::parse("2011-11-16T24:00:00").unwrap();
+        let b = DateTime::parse("2011-11-17T00:00:00").unwrap();
+        assert_eq!(a, b);
+        assert_eq!(hash(&a), hash(&b));
+
+        let a = DateTime::parse("2011-11-16T24:00:00-05:00").unwrap();
+        let b = DateTime::parse("2011-11-17T05:00:00Z").unwrap();
+        assert_eq!(a, b);
+        assert_eq!(hash(&a), hash(&b));
+    }
+
+    #[test]
+    fn new_rejects_offsets_out_of_range() {
+        for offset in [841, -841, 100_000, i32::MIN, i32::MAX] {
+            assert!(
+                matches!(
+                    DateTime::new(2011, 11, 16, 0, 0, 0, 0, Some(offset)),
+                    Err(Error::InvalidLiteral { .. })
+                ),
+                "{offset}"
+            );
+        }
+        assert!(DateTime::new(2011, 11, 16, 0, 0, 0, 0, Some(840)).is_ok());
+        assert!(DateTime::new(2011, 11, 16, 0, 0, 0, 0, Some(-840)).is_ok());
     }
 
     #[test]
