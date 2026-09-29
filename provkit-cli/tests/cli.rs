@@ -279,17 +279,18 @@ fn compare_equal_across_formats() {
 
 #[test]
 fn compare_reports_one_sided_records() {
+    let m = corpus("json/scruffy-generation1-M.json");
     provkit()
         .args(["compare"])
         .arg(corpus("json/scruffy-generation1-S.json"))
-        .arg(corpus("json/scruffy-generation1-M.json"))
+        .arg(&m)
         .assert()
         .code(1)
-        .stdout(
-            predicate::str::contains("only in")
-                .and(predicate::str::contains("entity(ex:e1)"))
-                .and(predicate::str::contains("activity(ex:a1")),
-        );
+        .stdout(format!(
+            "only in {}:\n  entity(ex:e1)\n  activity(ex:a1)\n",
+            m.display()
+        ))
+        .stderr("");
 }
 
 #[test]
@@ -300,7 +301,9 @@ fn compare_unified_reports_conflicts_as_errors() {
         .arg(corpus("json/scruffy-generation1-M.json"))
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("cannot unify"));
+        .stderr(predicate::str::contains(
+            "scruffy-generation1-S.json: cannot unify",
+        ));
 }
 
 #[test]
@@ -376,7 +379,32 @@ fn compare_help_names_the_exit_codes() {
         .success()
         .stdout(
             predicate::str::contains("0 when the documents are equal")
-                .and(predicate::str::contains("1"))
+                .and(predicate::str::contains("1 when they differ"))
                 .and(predicate::str::contains("2 on a read error")),
         );
+}
+
+#[test]
+fn compare_empty_bundle_against_none_prints_only_the_heading() {
+    let dir = scratch("compare_empty_bundle_against_none_prints_only_the_heading");
+    let a = dir.join("a.provn");
+    let b = dir.join("b.provn");
+    std::fs::write(
+        &a,
+        "document\n prefix ex <http://example.org/>\n bundle ex:b\n endBundle\nendDocument\n",
+    )
+    .unwrap();
+    std::fs::write(
+        &b,
+        "document\n prefix ex <http://example.org/>\nendDocument\n",
+    )
+    .unwrap();
+    provkit()
+        .args(["compare"])
+        .arg(&a)
+        .arg(&b)
+        .assert()
+        .code(1)
+        .stdout(format!("only in {}:\n  bundle ex:b:\n", a.display()))
+        .stderr("");
 }

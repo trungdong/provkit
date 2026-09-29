@@ -235,3 +235,40 @@ fn report_side(out: &mut String, name: &Path, this: &Document, other: &Document)
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use provkit::Bundle;
+
+    use super::*;
+
+    fn read(text: &str) -> Document {
+        provn::read(text).unwrap()
+    }
+
+    /// A hand-built document may repeat a bundle identifier, which the
+    /// readers reject. Equality groups such bundles, so the report must too.
+    #[test]
+    fn same_id_bundles_report_as_one() {
+        let one = read(
+            "document\n prefix ex <http://example.org/>\n bundle ex:b\n  entity(ex:e1)\n  entity(ex:e2)\n endBundle\nendDocument\n",
+        );
+        let source = one.bundles[0].clone();
+        let mut split = Document::new();
+        split.namespaces = one.namespaces.clone();
+        for record in &source.records {
+            split.bundles.push(Bundle {
+                id: source.id.clone(),
+                namespaces: source.namespaces.clone(),
+                records: vec![record.clone()],
+            });
+        }
+        assert_eq!(split.bundles.len(), 2);
+        assert_eq!(split, one);
+
+        let mut out = String::new();
+        report_side(&mut out, Path::new("a"), &split, &one).unwrap();
+        report_side(&mut out, Path::new("b"), &one, &split).unwrap();
+        assert_eq!(out, "");
+    }
+}
