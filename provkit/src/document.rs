@@ -1,6 +1,6 @@
 //! Documents and bundles.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{Namespaces, QName, Record};
 
@@ -25,6 +25,7 @@ pub struct Bundle {
 ///
 /// Two documents are equal when they assert the same set of records at the
 /// top level and in each bundle, with bundles matched by identifier.
+/// Bundles that share an identifier compare as the union of their records.
 /// Namespace tables, record order, bundle order and duplicate records take
 /// no part.
 #[derive(Clone, Debug, Default)]
@@ -70,11 +71,13 @@ fn same_records(a: &[Record], b: &[Record]) -> bool {
     a == b
 }
 
-/// Every bundle in `a` has an equal bundle with its identifier in `b`.
-fn bundles_within(a: &Document, b: &Document) -> bool {
-    a.bundles
-        .iter()
-        .all(|x| b.bundle(&x.id).is_some_and(|y| x == y))
+/// Records per bundle identifier, merged across bundles that share one.
+fn bundle_sets(d: &Document) -> HashMap<&QName, HashSet<&Record>> {
+    let mut sets: HashMap<&QName, HashSet<&Record>> = HashMap::new();
+    for b in &d.bundles {
+        sets.entry(&b.id).or_default().extend(&b.records);
+    }
+    sets
 }
 
 impl PartialEq for Bundle {
@@ -86,13 +89,10 @@ impl PartialEq for Bundle {
 impl Eq for Bundle {}
 
 impl PartialEq for Document {
-    // Checking bundles both ways keeps `==` symmetric when a hand-built
+    // Grouping bundles by identifier keeps `==` reflexive when a hand-built
     // document repeats a bundle identifier.
     fn eq(&self, other: &Self) -> bool {
-        same_records(&self.records, &other.records)
-            && self.bundles.len() == other.bundles.len()
-            && bundles_within(self, other)
-            && bundles_within(other, self)
+        same_records(&self.records, &other.records) && bundle_sets(self) == bundle_sets(other)
     }
 }
 
@@ -155,15 +155,23 @@ mod tests {
     }
 
     #[test]
-    fn repeated_bundle_identifiers_compare_symmetrically() {
+    fn repeated_bundle_identifiers_merge() {
         let mut a = Document::new();
         a.bundles.push(bundle("b", vec![entity("e1")]));
-        a.bundles.push(bundle("b", vec![entity("e1")]));
+        a.bundles.push(bundle("b", vec![entity("e2")]));
+        assert_eq!(a, a);
         let mut b = Document::new();
+        b.bundles.push(bundle("b", vec![entity("e2")]));
         b.bundles.push(bundle("b", vec![entity("e1")]));
-        b.bundles.push(bundle("c", vec![entity("e1")]));
-        assert_ne!(a, b);
-        assert_ne!(b, a);
+        assert_eq!(a, b);
+        assert_eq!(b, a);
+        let mut c = Document::new();
+        c.bundles
+            .push(bundle("b", vec![entity("e1"), entity("e2")]));
+        assert_eq!(a, c);
+        c.bundles.push(bundle("c", vec![entity("e1")]));
+        assert_ne!(a, c);
+        assert_ne!(c, a);
     }
 
     #[test]

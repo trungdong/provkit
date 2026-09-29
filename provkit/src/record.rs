@@ -975,12 +975,8 @@ impl Record {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::hash;
+    use crate::test_util::{hash, q};
     use crate::{Attributes, Value};
-
-    fn q(local: &str) -> QName {
-        QName::new("http://example.org/", local)
-    }
 
     fn t() -> DateTime {
         DateTime::parse("2011-11-16T16:05:33Z").unwrap()
