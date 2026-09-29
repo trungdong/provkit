@@ -133,22 +133,34 @@ impl<'t> Parser<'t> {
         self.scope().resolve_parts(&name.prefix, &name.local)
     }
 
-    /// A name token. An unsigned integer is a bare local name made of
-    /// digits, which the lexer cannot tell apart from `INT_LITERAL`.
+    /// A name token.
     fn name(&mut self, what: &str) -> Result<NameParts> {
-        let parts = match &self.peek().kind {
-            TokenKind::Name { prefix, local } => NameParts {
-                prefix: prefix.clone(),
-                local: local.clone(),
-            },
-            TokenKind::Int(digits) if !digits.starts_with('-') => NameParts {
-                prefix: String::new(),
-                local: digits.clone(),
-            },
-            _ => return Err(self.expected(what)),
+        let TokenKind::Name { prefix, local } = &self.peek().kind else {
+            return Err(self.expected(what));
+        };
+        let parts = NameParts {
+            prefix: prefix.clone(),
+            local: local.clone(),
         };
         self.bump();
         Ok(parts)
+    }
+
+    /// A name token in an identifier or attribute-name position, where an
+    /// unsigned integer is a bare local name made of digits. The lexer
+    /// cannot tell that apart from `INT_LITERAL`.
+    fn identifier(&mut self, what: &str) -> Result<NameParts> {
+        if let TokenKind::Int(digits) = &self.peek().kind
+            && !digits.starts_with('-')
+        {
+            let parts = NameParts {
+                prefix: String::new(),
+                local: digits.clone(),
+            };
+            self.bump();
+            return Ok(parts);
+        }
+        self.name(what)
     }
 
     fn iri(&mut self) -> Result<String> {
@@ -189,8 +201,18 @@ impl<'t> Parser<'t> {
     fn namespace_declarations(&mut self) -> Result<Namespaces> {
         let mut ns = Namespaces::new();
         let mut seen: Vec<String> = Vec::new();
+        let mut has_default = false;
         loop {
             if self.is_keyword("default") {
+                if has_default {
+                    return Err(Self::error_at(
+                        self.peek(),
+                        "expected a namespace declaration or a statement, found a second \
+                         'default' in one scope"
+                            .to_owned(),
+                    ));
+                }
+                has_default = true;
                 self.bump();
                 let iri = self.iri()?;
                 ns.set_default(iri);
@@ -226,7 +248,7 @@ impl<'t> Parser<'t> {
 
     fn bundle(&mut self, sink: &mut impl Sink) -> Result<()> {
         self.bump();
-        let id = self.name("a bundle identifier")?;
+        let id = self.identifier("a bundle identifier")?;
         let ns = self.namespace_declarations()?;
         // The bundle's own name resolves in the bundle scope (PROV-N 3.7.4).
         self.bundle_ns = Some(ns.clone());
@@ -274,7 +296,7 @@ impl<'t> Parser<'t> {
         let mut id = None;
         let mut args: Vec<(&Token, Arg)> = Vec::new();
         if kind.is_element() {
-            let name = self.name("an identifier")?;
+            let name = self.identifier("an identifier")?;
             id = Some(self.resolve(&name)?);
         } else {
             let first = self.argument()?;
@@ -300,16 +322,23 @@ impl<'t> Parser<'t> {
         }
 
         // The argument list ends at ')' or at the ',' before '['.
-        let mut attributes = Attributes::new();
+        let mut attributes = None;
         while self.peek().kind == TokenKind::Comma {
             self.bump();
             if self.peek().kind == TokenKind::LBracket {
-                attributes = self.attribute_value_pairs()?;
+                attributes = Some(self.attribute_value_pairs()?);
                 break;
             }
             args.push(self.argument()?);
         }
-        self.expect(&TokenKind::RParen, "',' or ')'")?;
+        // After the attribute block only ')' may follow.
+        let closing = if attributes.is_some() {
+            "')'"
+        } else {
+            "',' or ')'"
+        };
+        self.expect(&TokenKind::RParen, closing)?;
+        let attributes = attributes.unwrap_or_default();
 
         if !arities.contains(&args.len()) {
             let allowed = arities
@@ -392,7 +421,7 @@ impl<'t> Parser<'t> {
                 Arg::Time(DateTime::parse(text)?)
             }
             TokenKind::Name { .. } | TokenKind::Int(_) => {
-                let name = self.name("an identifier, a dateTime or '-'")?;
+                let name = self.identifier("an identifier, a dateTime or '-'")?;
                 Arg::Name(self.resolve(&name)?)
             }
             _ => return Err(self.expected("an identifier, a dateTime or '-'")),
@@ -411,7 +440,7 @@ impl<'t> Parser<'t> {
             return Ok(attributes);
         }
         loop {
-            let name = self.name("an attribute name")?;
+            let name = self.identifier("an attribute name")?;
             let name = self.resolve(&name)?;
             self.expect(&TokenKind::Equals, "'='")?;
             let value = self.literal()?;
@@ -668,6 +697,50 @@ mod tests {
             provn::read("document\nprefix ex <http://e/>\nentity(ex:e)\n").unwrap_err(),
         );
         assert_eq!(message, "expected 'endDocument', found end of input");
+    }
+
+    #[test]
+    fn only_a_closing_paren_follows_attributes() {
+        let message = syntax_message(err("entity(ex:e, [ex:a=1], ex:b)", Profile::Default));
+        assert!(message.starts_with("expected ')'"), "{message}");
+    }
+
+    #[test]
+    fn nothing_follows_end_document() {
+        match provn::read("document\nendDocument\nentity(ex:e)") {
+            Err(Error::Syntax {
+                line,
+                column,
+                message,
+                ..
+            }) => {
+                assert_eq!((line, column), (3, 1));
+                assert!(message.starts_with("expected end of input"), "{message}");
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn second_default_in_one_scope_is_rejected() {
+        let text = "document\n default <http://a/>\n default <http://b/>\nendDocument";
+        assert!(matches!(
+            provn::read(text),
+            Err(Error::Syntax { line: 3, .. })
+        ));
+    }
+
+    #[test]
+    fn prefixes_and_datatypes_are_not_integers() {
+        let text = "document\n prefix 123 <http://a/>\nendDocument";
+        assert!(matches!(
+            provn::read(text),
+            Err(Error::Syntax { line: 2, .. })
+        ));
+        assert!(matches!(
+            err(r#"entity(ex:e, [ex:a="1" %% 42])"#, Profile::Default),
+            Error::Syntax { .. }
+        ));
     }
 
     #[test]

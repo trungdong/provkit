@@ -6,7 +6,7 @@
 mod common;
 
 use common::{Report, corpus_dir, files};
-use provkit::{Document, Profile};
+use provkit::{Document, Error, Profile};
 
 /// Recommendation examples that the formal grammar rejects or that are not
 /// complete PROV-N. Names and reasons follow `corpus/provn/README.md`.
@@ -565,12 +565,22 @@ fn spec_examples_parse_under_strict() {
     for sub in ["provn/spec/prov-n", "provn/spec/prov-dm"] {
         for (name, text) in files(&corpus_dir(sub), "provn") {
             let result = provkit::provn::read_with(&text, Profile::Strict);
-            let why = reason(EXCLUDED_SPEC_EXAMPLES, &name)
-                .or_else(|| reason(EXTRACTION_DEFECT_SPEC_EXAMPLES, &name));
-            if let Some(why) = why {
+            if let Some(why) = reason(EXCLUDED_SPEC_EXAMPLES, &name) {
                 excluded += 1;
                 if result.is_ok() {
                     report.fail(&name, format!("listed as excluded ({why}) but accepted"));
+                }
+                continue;
+            }
+            if let Some(why) = reason(EXTRACTION_DEFECT_SPEC_EXAMPLES, &name) {
+                excluded += 1;
+                match result {
+                    Err(Error::UndeclaredPrefix(_)) => {}
+                    Err(e) => report.fail(
+                        &name,
+                        format!("expected an undeclared prefix ({why}), found: {e}"),
+                    ),
+                    Ok(_) => report.fail(&name, format!("listed as excluded ({why}) but accepted")),
                 }
                 continue;
             }
@@ -616,49 +626,46 @@ fn provtoolbox_files_parse_under_default() {
 fn provtoolbox_corpus_equals_json_twins() {
     let mut report = Report::default();
     let mut known = Vec::new();
+    let mut seen_known = 0;
     for (name, text) in files(&corpus_dir("provn/provtoolbox-corpus"), "provn") {
         let outcome = json_twin(&name).and_then(|expected| {
             provkit::provn::read_with(&text, Profile::Default)
                 .map(|d| d == expected)
                 .map_err(|e| e.to_string())
         });
-        if let Some((_, category)) = KNOWN_DIFFERENCES.iter().find(|(n, _)| *n == name) {
-            known.push((name, *category, outcome));
-            continue;
-        }
         report.checked += 1;
-        match outcome {
-            Ok(true) => {}
-            Ok(false) => report.fail(&name, "differs from its PROV-JSON twin"),
-            Err(e) => report.fail(&name, e),
+        let known_as = KNOWN_DIFFERENCES.iter().find(|(n, _)| *n == name);
+        seen_known += usize::from(known_as.is_some());
+        match (outcome, known_as) {
+            // Only equality is waived for a known difference, not reading.
+            (Err(e), _) => report.fail(&name, e),
+            (Ok(equal), Some((_, category))) => known.push((name, *category, equal)),
+            (Ok(true), None) => {}
+            (Ok(false), None) => report.fail(&name, "differs from its PROV-JSON twin"),
         }
     }
     // Known differences are reported, not asserted.
     for category in [Difference::DynamicTimestamp, Difference::DatatypePalette] {
-        let of = |want: fn(&Result<bool, String>) -> bool| {
+        let of = |want: bool| {
             known
                 .iter()
-                .filter(|(_, c, o)| *c == category && want(o))
+                .filter(|(_, c, equal)| *c == category && *equal == want)
                 .map(|(n, _, _)| n.as_str())
                 .collect::<Vec<_>>()
         };
-        let equal = of(|o| matches!(o, Ok(true)));
-        let unequal = of(|o| matches!(o, Ok(false)));
-        let failed = of(Result::is_err);
+        let (equal, unequal) = (of(true), of(false));
         eprintln!(
-            "{category:?}: {} equal, {} unequal, {} unread\n  equal: {}\n  unequal: {}\n  unread: {}",
+            "{category:?}: {} equal, {} unequal\n  equal: {}\n  unequal: {}",
             equal.len(),
             unequal.len(),
-            failed.len(),
             equal.join(" "),
             unequal.join(" "),
-            failed.join(" "),
         );
     }
     if std::env::var("PROVKIT_ONLY").is_err() {
-        assert_eq!(known.len(), KNOWN_DIFFERENCES.len());
+        assert_eq!(seen_known, KNOWN_DIFFERENCES.len());
     }
-    report.finish(388 - KNOWN_DIFFERENCES.len());
+    report.finish(388);
 }
 
 #[test]
