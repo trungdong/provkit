@@ -2,3 +2,11 @@
 //!
 //! The crate follows the PROV Recommendations and the member submissions,
 //! and is tested against the shared conformance corpus.
+
+pub mod error;
+pub mod namespaces;
+pub mod qname;
+
+pub use error::{Error, Result};
+pub use namespaces::{Namespaces, Scope};
+pub use qname::QName;
