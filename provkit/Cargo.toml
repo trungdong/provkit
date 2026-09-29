@@ -1,0 +1,26 @@
+[package]
+name = "provkit"
+description = "W3C PROV data model with PROV-JSON and PROV-N read and write"
+keywords = ["provenance", "prov", "w3c", "prov-n", "prov-json"]
+categories = ["data-structures", "parser-implementations", "encoding"]
+readme = "../README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[features]
+default = ["json", "provn"]
+json = ["dep:serde", "dep:serde_json"]
+provn = []
+
+[dependencies]
+indexmap.workspace = true
+thiserror.workspace = true
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+
+[lints]
+workspace = true

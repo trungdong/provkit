@@ -1,0 +1,26 @@
+[package]
+name = "provkit-cli"
+description = "Command-line tool to convert and compare W3C PROV documents"
+readme = "../README.md"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "provkit"
+path = "src/main.rs"
+
+[dependencies]
+provkit.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+
+[dev-dependencies]
+assert_cmd.workspace = true
+predicates.workspace = true
+
+[lints]
+workspace = true

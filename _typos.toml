@@ -1,0 +1,4 @@
+[default.extend-words]
+serialise = "serialise"
+serialisation = "serialisation"
+serialiser = "serialiser"
