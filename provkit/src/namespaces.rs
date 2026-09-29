@@ -40,6 +40,10 @@ impl Namespaces {
 
     /// Bind `prefix` to `iri`, replacing an earlier binding of the same prefix.
     pub fn declare(&mut self, prefix: &str, iri: &str) -> Result<()> {
+        // `_` introduces blank nodes and is never a prefix.
+        if prefix == "_" {
+            return Err(Error::InvalidQName(prefix.into()));
+        }
         if let Some(expected) = reserved(prefix) {
             if expected == iri {
                 return Ok(());
@@ -120,7 +124,8 @@ fn resolve_with(
     default: Option<Arc<str>>,
 ) -> Result<QName> {
     if let Some((prefix, local)) = text.split_once(':') {
-        if prefix.is_empty() {
+        // `_:` marks a blank node; readers handle it before resolving.
+        if prefix.is_empty() || prefix == "_" {
             return Err(Error::InvalidQName(text.into()));
         }
         let ns = lookup(prefix).ok_or_else(|| Error::UndeclaredPrefix(prefix.into()))?;
@@ -195,6 +200,24 @@ mod tests {
         ns.set_default("http://default.org/");
         assert!(matches!(ns.resolve(":e1"), Err(Error::InvalidQName(_))));
         assert!(matches!(ns.resolve(""), Err(Error::InvalidQName(_))));
+    }
+
+    #[test]
+    fn underscore_is_never_a_prefix() {
+        let mut ns = Namespaces::new();
+        assert!(matches!(
+            ns.declare("_", "http://example.org/"),
+            Err(Error::InvalidQName(_))
+        ));
+        assert_eq!(ns.iter().count(), 0);
+        // With no binding, `_:x` is still rejected rather than reported
+        // as an undeclared prefix.
+        assert!(matches!(ns.resolve("_:x"), Err(Error::InvalidQName(_))));
+        let doc = Namespaces::new();
+        let mut bundle = Namespaces::new();
+        bundle.set_default("http://default.org/");
+        let scope = Scope::new(&doc, Some(&bundle));
+        assert!(matches!(scope.resolve("_:x"), Err(Error::InvalidQName(_))));
     }
 
     #[test]
