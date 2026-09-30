@@ -13,7 +13,8 @@ follows [Semantic Versioning](https://semver.org/).
   - Every relation formal attribute is optional.
   - `Kind`, the type of a record. `Kind::name` is both the PROV-N keyword and
     the PROV-JSON key, `Kind::from_name` is its inverse, and `Kind::ALL` lists
-    the eighteen kinds in PROV-DM order.
+    the eighteen kinds in PROV-DM order. `Kind::is_element` tells an element
+    (`entity`, `activity`, `agent`) from a relation.
   - `Record::formal` reads one formal attribute and `Record::formals` lists
     those present. `FormalRef::to_owned` gives an owned `Formal`, and
     `FormalAttr::ALL` lists every formal attribute.
@@ -28,7 +29,6 @@ follows [Semantic Versioning](https://semver.org/).
     with an escape (a space, a control character, one of `{ } < > " | ^ \`
     or a backtick, a `%` not followed by two hex digits, or a first
     character that may only continue a name), with `Error::InvalidQName`.
-    Every name the readers build goes through the same check.
     `Namespaces::resolve` puts the whole text it was given in
     `Error::InvalidQName`, for example `ex:a b`; `QName::new` puts the local
     part there.
@@ -36,8 +36,9 @@ follows [Semantic Versioning](https://semver.org/).
     No typed literal is rejected for its text, except under a qualified-name
     datatype. `Value::typed` and both readers keep an ill-formed one as
     `Value::Typed`, and each value is written with the text it was read
-    with. A `dateTime` in a formal position must still parse, and
-    `Value::typed` still refuses a qualified-name datatype.
+    with. A `dateTime` in a formal position must parse. `Value::typed`
+    refuses a qualified-name datatype, because the value must resolve to a
+    `Value::QName`.
   - `Value::typed` trims the space, tab, CR and LF around an `xsd:dateTime`
     before parsing it, as XSD does for numbers. A padded well-formed
     `dateTime` is a `Value::DateTime` and is written without the padding.
@@ -51,11 +52,11 @@ follows [Semantic Versioning](https://semver.org/).
     `prov:QUALIFIED_NAME`) to a `Value::QName`. Text that spells no
     qualified name, or one whose local part PROV-N cannot write, is
     `Error::InvalidQName`; an undeclared prefix or a bare name with no
-    default namespace is an error as before.
+    default namespace is an error.
   - Both readers reject a name whose local part PROV-N cannot write
     wherever a name appears: a PROV-JSON record, bundle or attribute key, a
     name formal, a member of `hadMember`, a datatype, and the text of a
-    qualified-name literal. The PROV-N lexer already accepts no such name.
+    qualified-name literal.
   - The PROV-JSON reader reads a formal written as a value object only when
     it has no `lang` and its `type` resolves to `xsd:QName` or
     `prov:QUALIFIED_NAME` for a name, or to `xsd:dateTime` for a time. Any
@@ -63,12 +64,11 @@ follows [Semantic Versioning](https://semver.org/).
   - `LangStr::new` accepts a tag of the grammar's `LANGTAG` shape, letters
     then any number of `-` and letters or digits, with no limit on the length
     of a subtag.
-  - `well_known` names every XSD datatype compared by value: `XSD_DECIMAL`,
-    `XSD_SHORT`, `XSD_BYTE`, `XSD_NON_NEGATIVE_INTEGER`,
+  - `well_known` names every XSD datatype compared by value, among them
+    `XSD_DECIMAL`, `XSD_SHORT`, `XSD_BYTE`, `XSD_NON_NEGATIVE_INTEGER`,
     `XSD_POSITIVE_INTEGER`, `XSD_NON_POSITIVE_INTEGER`,
     `XSD_NEGATIVE_INTEGER`, `XSD_UNSIGNED_LONG`, `XSD_UNSIGNED_INT`,
-    `XSD_UNSIGNED_SHORT` and `XSD_UNSIGNED_BYTE` join the names already
-    there.
+    `XSD_UNSIGNED_SHORT` and `XSD_UNSIGNED_BYTE` among them.
   - `DateTime` follows XSD 1.1: year `0000` exists and is a leap year, and
     `-0000` is the same year. `DateTime::new` accepts only values whose
     printed text `DateTime::parse` reads back, and its errors carry the text
@@ -84,13 +84,14 @@ follows [Semantic Versioning](https://semver.org/).
     not closed. `\uXXXX` and `\UXXXXXXXX` (upper-case hex digits) decode to a
     code point in string literals and IRIs, and a surrogate, a value above
     `10FFFF` or a character `IRI_REF` forbids is a syntax error.
-  - `Profile::Strict` accepts exactly the PROV-N grammar. It rejects `default`
-    after `prefix` (production [45]), a statement after a bundle (production
-    [1]), an identifier or attributes on `alternateOf`, `specializationOf`
-    and `hadMember` (productions [24] to [26]), and a redeclaration of the
-    predeclared `prov` and `xsd` prefixes (section 3.7.4), as well as bare
-    `mentionOf` and `-` in a required position. `Profile::Default` reads all
-    of these.
+  - `Profile::Strict` accepts the whole PROV-N grammar and the MUST
+    statements of its prose. It rejects `default` after `prefix` (production
+    [45]), a statement after a bundle (production [1]), an identifier or
+    attributes on `alternateOf`, `specializationOf` and `hadMember`
+    (productions [24] to [26]), a declaration of `prov` or `xsd` at its own
+    IRI (section 3.7.4), bare `mentionOf` and `-` in a required position.
+    `Profile::Default` reads all of these. Both profiles reject a second
+    `default` and a prefix that is not a `PN_PREFIX`.
   - A datatype of digits, as in `"x" %% 123`, reads as a name in the default
     namespace.
   - Both readers type an integer by range: `xsd:int` within `i32`, `xsd:long`
@@ -117,8 +118,7 @@ follows [Semantic Versioning](https://semver.org/).
     returns the first bundle with an identifier.
   - `provn::statement` writes one record and `provn::name` one name. Both
     take `&mut Namespaces`, so a prefix they mint stays with the caller and a
-    second call for the same namespace reuses it. `provn::statement_name` does
-    not exist.
+    second call for the same namespace reuses it.
   - `Document::unified()`, which merges records by identifier and kind and
     reports conflicts as `Error::Unification`. It rejects the identifier
     sharing that PROV-CONSTRAINTS forbids and no other. Constraint 53 makes
@@ -133,13 +133,14 @@ follows [Semantic Versioning](https://semver.org/).
   - `Error`, with one variant and a typed payload per kind of failure. Every
     error from the PROV-N reader carries a line and column: `Error::Syntax`
     for text the grammar rejects, and `Error::At` around the error for a
-    name, literal or record.
+    name, literal or record. `Error::DuplicateBundle` reports two bundles
+    with one identifier in either reader.
   - Public modules `json`, `provn` and `well_known`. Every other public item
     has one path, at the crate root, and `provn::Profile` and `provn::Ignored`
     live under `provn`.
     `well_known` holds the `QName` statics and the `PROV` and `XSD`
     namespace IRIs.
-  - Signatures take and return `&str` for namespaces, never `Arc<str>`.
+  - Namespace arguments and results are `&str`.
   - Cargo features `json` and `provn`, both on by default.
 - `provkit` binary (crate `provkit-cli`):
   - `provkit convert` between PROV-JSON and PROV-N, with pandoc-style format
@@ -167,9 +168,11 @@ follows [Semantic Versioning](https://semver.org/).
   `cargo binstall provkit-cli` reads the same names.
 - `provkit` builds without `serde` when the `json` feature is off, and the
   crate has its own README.
-- `CONFORMANCE.md`, listing every departure from the Recommendations, ProvPy
-  and ProvToolbox.
-- Corpus tests over prov-corpus v2.0.0, and a CI build for
+- `CONFORMANCE.md`, listing the departures from the Recommendations, the
+  differences from ProvPy 3.2.2 with their issue numbers, and the
+  implementation limits, each with its test.
+- Corpus tests over prov-corpus v2.1.0, including the 204 shared PROV-N
+  probes read under both profiles, and a CI build for
   `wasm32-unknown-unknown`.
 
 ### Not included

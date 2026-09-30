@@ -148,7 +148,7 @@ enum Difference {
 }
 
 /// The twins not asserted equal, read from `tests/data/known_differences.tsv`
-/// (file name, tab, category). `ProvPy` 3.2.1 keeps the same list.
+/// (file name, tab, category). `ProvPy` 3.2.2 keeps the same list.
 fn known_differences() -> Vec<(String, Difference)> {
     common::tsv(&common::data_path("known_differences.tsv"))
         .into_iter()

@@ -2,7 +2,8 @@
 //!
 //! A [`Document`] holds [`Record`]s, one enum variant per PROV-DM type, and
 //! named [`Bundle`]s. Readers and writers are free functions in [`json`] and
-//! [`provn`]. They take and return text, so the library never touches files.
+//! [`provn`]. Readers take `&str` and writers take `&mut impl std::io::Write`
+//! (`to_string` returns a `String`), so the library never touches files.
 //!
 //! ```
 //! # #[cfg(all(feature = "json", feature = "provn"))]
@@ -29,11 +30,15 @@
 //!   order, namespace tables, blank-node labels and the spelling of a
 //!   number, boolean or `dateTime`.
 //! - [`Document::unified`] merges records that share an identifier and kind,
-//!   and returns [`Error::Unification`] when their formal attributes conflict.
-//! - [`provn::Profile`] selects how strictly PROV-N input is checked.
+//!   and returns [`Error::Unification`] when their formal attributes conflict
+//!   or when PROV-CONSTRAINTS 53 to 55 forbid the sharing.
+//! - [`provn::Profile`] selects how strictly PROV-N input is checked:
+//!   `Strict` reads the whole grammar and the MUST statements of its prose,
+//!   and `Default` adds the extensions that `ProvToolbox` and `ProvPy` write.
 //!
-//! Departures from the PROV Recommendations, `ProvPy` and `ProvToolbox` are
-//! listed in `CONFORMANCE.md` in the repository.
+//! `CONFORMANCE.md` in the repository lists where provkit departs from the
+//! PROV Recommendations, where it differs from `ProvPy` 3.2.2, and its
+//! implementation limits.
 //!
 //! # Features
 //!

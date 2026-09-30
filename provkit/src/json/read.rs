@@ -170,7 +170,10 @@ fn formal_text<'a>(
     }
 }
 
-/// The reading table for JSON values.
+/// Reads a JSON attribute value as a [`Value`]. A string is a plain string,
+/// an integer takes the narrowest of `xsd:int`, `xsd:long` and `xsd:integer`,
+/// other numbers are `xsd:double`, a boolean is `xsd:boolean`, and a value
+/// object is read by its `lang` or `type`.
 fn decode_value(v: &JsonValue, scope: &Namespaces) -> Result<Value> {
     Ok(match v {
         JsonValue::Str(s) => Value::Str(s.clone()),

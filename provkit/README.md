@@ -5,7 +5,8 @@ model, with readers and writers for PROV-JSON and PROV-N.
 
 A `Document` holds `Record`s, one enum variant per PROV-DM type, and named
 `Bundle`s. Readers and writers are free functions in the `json` and `provn`
-modules. They take and return text, so the library never opens a file.
+modules. Readers take `&str` and writers take `&mut impl std::io::Write`, so
+the library never opens a file.
 
 ## Example
 
@@ -27,7 +28,11 @@ fn main() -> Result<(), provkit::Error> {
 
 `==` on `Document` is set-based. It ignores record order, attribute order,
 namespace tables and the spelling of a number, boolean or `dateTime`.
-`Document::unified()` merges records that share an identifier.
+`Document::unified()` merges records that share an identifier and kind, and
+fails where PROV-CONSTRAINTS 53 to 55 forbid the sharing or where formal
+attributes conflict. `provn::read_with` takes a `provn::Profile`: `Strict`
+accepts the whole PROV-N grammar and the MUST statements of its prose, and
+`Default` also accepts what ProvToolbox and ProvPy write.
 
 ## Features
 

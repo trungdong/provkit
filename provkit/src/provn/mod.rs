@@ -15,7 +15,8 @@ pub use write::{name, statement, to_string, write};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Profile {
-    /// The formal grammar only. `Strict` rejects:
+    /// The whole grammar of the Recommendation and the MUST statements of
+    /// its prose. `Strict` rejects:
     ///
     /// - `mentionOf` without the `prov:` prefix.
     /// - `-` in a required position of a relation.
@@ -25,6 +26,9 @@ pub enum Profile {
     ///   `hadMember` (productions \[24\] to \[26\]).
     /// - A declaration of `prov` or `xsd` at its predeclared IRI (section
     ///   3.7.4).
+    ///
+    /// Both profiles reject a repeated `default`, a prefix that is not a
+    /// `PN_PREFIX`, and every other text the grammar rejects.
     Strict,
     /// The grammar plus these extensions, which `ProvToolbox` and `ProvPy`
     /// write:
