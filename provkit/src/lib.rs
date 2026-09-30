@@ -5,6 +5,8 @@
 //! [`provn`]. They take and return text, so the library never touches files.
 //!
 //! ```
+//! # #[cfg(all(feature = "json", feature = "provn"))]
+//! # fn main() -> Result<(), provkit::Error> {
 //! use provkit::{json, provn, Attributes, Entity, QName, Record};
 //!
 //! let text = r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e1": {}}}"#;
@@ -15,7 +17,10 @@
 //! }));
 //! let out = provn::to_string(&doc)?;
 //! assert!(out.contains("entity(ex:e2)"));
-//! # Ok::<(), provkit::Error>(())
+//! # Ok(())
+//! # }
+//! # #[cfg(not(all(feature = "json", feature = "provn")))]
+//! # fn main() {}
 //! ```
 //!
 //! Comparison and merging:
@@ -34,6 +39,11 @@
 //!
 //! - `json` (default): the [`json`] module, with `serde` and `serde_json`.
 //! - `provn` (default): the [`provn`] module.
+
+/// Compiles the examples in `README.md` as doc tests.
+#[cfg(all(doctest, feature = "json", feature = "provn"))]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
 
 mod attributes;
 mod datetime;

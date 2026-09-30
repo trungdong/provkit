@@ -3,7 +3,7 @@
 W3C PROV data model in Rust, with PROV-JSON and PROV-N read and write, and a
 `provkit` command-line tool to convert and compare documents.
 
-Status: 0.1.0, the first release.
+Status: 0.1.0, the first release. The minimum supported Rust version is 1.98.
 
 ## Install
 

@@ -150,6 +150,17 @@ follows [Semantic Versioning](https://semver.org/).
     command had reached.
   - Content sniffing takes `document` only as a whole word, so `documentary`
     is not PROV-N.
+- Prebuilt `provkit` binaries on each GitHub release, one archive per target:
+  - `provkit-x86_64-apple-darwin.tar.gz`
+  - `provkit-aarch64-apple-darwin.tar.gz`
+  - `provkit-x86_64-unknown-linux-gnu.tar.gz`
+  - `provkit-x86_64-unknown-linux-musl.tar.gz`
+  - `provkit-aarch64-unknown-linux-gnu.tar.gz`
+  - `provkit-x86_64-pc-windows-msvc.zip`
+
+  `cargo binstall provkit-cli` reads the same names.
+- `provkit` builds without `serde` when the `json` feature is off, and the
+  crate has its own README.
 - `CONFORMANCE.md`, listing every departure from the Recommendations, ProvPy
   and ProvToolbox.
 - Corpus tests over prov-corpus v2.0.0, and a CI build for

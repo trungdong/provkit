@@ -3,7 +3,7 @@ name = "provkit"
 description = "W3C PROV data model with PROV-JSON and PROV-N read and write"
 keywords = ["provenance", "prov", "w3c", "prov-n", "prov-json"]
 categories = ["data-structures", "parser-implementations", "encoding"]
-readme = "../README.md"
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,9 +13,21 @@ authors.workspace = true
 # These tests read the corpus submodule, which the published crate lacks.
 exclude = ["tests/corpus_*.rs", "tests/common/"]
 
+[[test]]
+name = "corpus_json"
+required-features = ["json"]
+
+[[test]]
+name = "corpus_provn"
+required-features = ["json", "provn"]
+
+[[test]]
+name = "provn_round_trip"
+required-features = ["json", "provn"]
+
 [features]
 default = ["json", "provn"]
-json = ["dep:serde", "dep:serde_json"]
+json = ["dep:serde", "dep:serde_json", "indexmap/serde"]
 provn = []
 
 [dependencies]

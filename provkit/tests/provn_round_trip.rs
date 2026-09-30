@@ -1,8 +1,6 @@
 //! Round trips over generated names, values and namespace IRIs. Whatever the
 //! PROV-N writer accepts reads back as an equal document.
 
-#![cfg(all(feature = "json", feature = "provn"))]
-
 use provkit::well_known::{self, XSD_INT, XSD_LONG};
 use provkit::{
     Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, LangStr,

@@ -14,7 +14,7 @@ authors = ["Trung Dong Huynh <trungdong@donggiang.com>"]
 provkit = { path = "provkit", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-indexmap = { version = "2", features = ["serde"] }
+indexmap = "2"
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"

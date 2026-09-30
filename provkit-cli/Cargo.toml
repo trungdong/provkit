@@ -1,6 +1,8 @@
 [package]
 name = "provkit-cli"
 description = "Command-line tool to convert and compare W3C PROV documents"
+keywords = ["provenance", "prov", "w3c", "prov-n", "prov-json"]
+categories = ["command-line-utilities"]
 readme = "../README.md"
 version.workspace = true
 edition.workspace = true
@@ -10,6 +12,16 @@ repository.workspace = true
 authors.workspace = true
 # The end-to-end tests read the corpus submodule, which the published crate lacks.
 exclude = ["tests/cli.rs"]
+
+# Archive names match the release workflow: `provkit-<target>.tar.gz`, and
+# `.zip` on Windows, with the binary at the archive root.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/provkit-{ target }{ archive-suffix }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"
 
 [[bin]]
 name = "provkit"

@@ -1,8 +1,6 @@
 //! PROV-N corpus: the Recommendation examples, `ProvToolbox`'s documents and
 //! writer output, and a PROV-N round trip of the PROV-JSON corpus.
 
-#![cfg(all(feature = "json", feature = "provn"))]
-
 mod common;
 
 use common::{Report, corpus_dir, files};
