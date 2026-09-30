@@ -615,7 +615,7 @@ fn provtoolbox_corpus_equals_json_twins() {
             (Ok(false), None) => report.fail(&name, "differs from its PROV-JSON twin"),
         }
     }
-    // Known differences are reported, not asserted.
+    // Known differences are reported, and none may read as equal.
     for category in [Difference::DynamicTimestamp, Difference::DatatypePalette] {
         let of = |want: bool| {
             known
@@ -631,6 +631,11 @@ fn provtoolbox_corpus_equals_json_twins() {
             unequal.len(),
             equal.join(" "),
             unequal.join(" "),
+        );
+        assert!(
+            equal.is_empty(),
+            "{category:?} twins now read as equal: {}",
+            equal.join(" ")
         );
     }
     if std::env::var("PROVKIT_ONLY").is_err() {

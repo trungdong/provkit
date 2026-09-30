@@ -244,25 +244,26 @@ const UNWRITABLE: &str = "// not valid PROV-N";
 
 /// `record` as PROV-N, or, when PROV-N cannot write it, a heading that
 /// names it: the keyword, the identifier, and the first name PROV-N cannot
-/// write as `<full IRI>`, followed by [`UNWRITABLE`].
+/// write as `<full IRI>` (inside `[...]` when it belongs to an attribute),
+/// followed by [`UNWRITABLE`].
 fn statement_line(record: &Record, namespaces: &Namespaces) -> String {
     if let Ok(line) = provn::statement(record, namespaces) {
         return line;
     }
     let writable = |q: &QName| provn::statement_name(q, namespaces).is_ok();
-    let mut names: Vec<&QName> = record.id().into_iter().collect();
+    let mut names: Vec<(&QName, bool)> = record.id().into_iter().map(|q| (q, false)).collect();
     names.extend(record.formals().into_iter().filter_map(|(_, f)| match f {
-        FormalRef::Name(q) => Some(q),
+        FormalRef::Name(q) => Some((q, false)),
         FormalRef::Time(_) => None,
     }));
     for (n, v) in record.attributes().iter() {
-        names.push(n);
+        names.push((n, true));
         match v {
-            Value::QName(q) | Value::Typed { datatype: q, .. } => names.push(q),
+            Value::QName(q) | Value::Typed { datatype: q, .. } => names.push((q, true)),
             _ => {}
         }
     }
-    let offending = names.into_iter().find(|q| !writable(q));
+    let offending = names.into_iter().find(|(q, _)| !writable(q));
 
     let mut parts = Vec::new();
     if let Some(id) = record.id() {
@@ -271,8 +272,13 @@ fn statement_line(record: &Record, namespaces: &Namespaces) -> String {
             Err(_) => format!("<{id}>"),
         });
     }
-    if let Some(q) = offending.filter(|q| Some(*q) != record.id()) {
-        parts.push(format!("<{q}>"));
+    // Attribute-side names sit inside the attribute brackets, as in PROV-N.
+    if let Some((q, in_attributes)) = offending.filter(|(q, _)| Some(*q) != record.id()) {
+        parts.push(if in_attributes {
+            format!("[<{q}>]")
+        } else {
+            format!("<{q}>")
+        });
     }
     let separator = if record.kind().is_element() {
         ", "

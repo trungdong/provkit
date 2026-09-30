@@ -136,8 +136,13 @@ impl Value {
         } else if datatype == *XSD_DATETIME {
             Ok(Value::DateTime(DateTime::parse(&lexical)?))
         } else if is_qname_datatype(&datatype) {
+            let shown = if datatype == *XSD_QNAME {
+                "xsd:QName"
+            } else {
+                "prov:QUALIFIED_NAME"
+            };
             Err(Error::InvalidLiteral {
-                datatype: datatype.to_string(),
+                datatype: shown.into(),
                 lexical,
                 reason: QNAME_REASON.into(),
             })
@@ -283,14 +288,17 @@ mod tests {
 
     #[test]
     fn typed_rejects_qualified_name_datatypes() {
-        for datatype in [XSD_QNAME.clone(), PROV_QUALIFIED_NAME.clone()] {
-            match Value::typed("ex:foo", datatype.clone()) {
+        for (datatype, spelling) in [
+            (XSD_QNAME.clone(), "xsd:QName"),
+            (PROV_QUALIFIED_NAME.clone(), "prov:QUALIFIED_NAME"),
+        ] {
+            match Value::typed("ex:foo", datatype) {
                 Err(Error::InvalidLiteral {
                     datatype: shown,
                     lexical,
                     reason,
                 }) => {
-                    assert_eq!(shown, datatype.to_string());
+                    assert_eq!(shown, spelling);
                     assert_eq!(lexical, "ex:foo");
                     assert_eq!(
                         reason,

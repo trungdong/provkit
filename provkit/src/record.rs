@@ -241,8 +241,8 @@ impl FormalAttr {
     }
 }
 
-/// The formal of `kind` that `name` spells, when `name` is `prov:` plus the
-/// local name of one of the kind's formals.
+/// The formal of `kind` that `name` spells, when `name` is the IRI of one of
+/// the kind's formals (the PROV namespace plus the formal's local name).
 pub(crate) fn formal_named(kind: Kind, name: &QName) -> Option<FormalAttr> {
     kind.formals()
         .iter()

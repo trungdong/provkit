@@ -481,7 +481,7 @@ fn compare_marks_records_prov_n_cannot_write() {
     std::fs::write(
         &a,
         r#"{"prefix": {"ex": "http://example.org/"},
-            "entity": {"ex:my entity": {}, "ex:e": {"ex:my attr": "v"}},
+            "entity": {"ex:my entity": {}, "ex:e": {"ex:my attr": "v"}, "ex:f": {"ex:a": {"$": "x", "type": "ex:my type"}}},
             "used": {"_:u": {"prov:activity": "ex:my activity"}},
             "bundle": {"ex:my bundle": {"entity": {"ex:inner": {}}}}}"#,
     )
@@ -496,7 +496,8 @@ fn compare_marks_records_prov_n_cannot_write() {
         .stdout(format!(
             "only in {}:\n  \
              entity(<http://example.org/my entity>) // not valid PROV-N\n  \
-             entity(ex:e, <http://example.org/my attr>) // not valid PROV-N\n  \
+             entity(ex:e, [<http://example.org/my attr>]) // not valid PROV-N\n  \
+             entity(ex:f, [<http://example.org/my type>]) // not valid PROV-N\n  \
              used(<http://example.org/my activity>) // not valid PROV-N\n  \
              bundle <http://example.org/my bundle>: // not valid PROV-N\n    \
              entity(ex:inner)\n",
