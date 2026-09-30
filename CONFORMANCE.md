@@ -56,6 +56,15 @@ covers it, as `test_name` (file). Files are under `provkit/` unless noted.
 | The PROV-N writer returns `Error::Structure` (format `"PROV-N"`, naming the name and the character) for text PROV-N cannot carry: a local part with whitespace, a control character, one of `{ } < > " \| ^ \` or a backtick, a `%` not followed by two hex digits, or a first character that cannot start a name (a combining mark, `·`, `‿`, `⁀`); a prefix that is not a `PN_PREFIX`; a namespace IRI with a character `IRI_REF` forbids. The local-part escape set is the Recommendation's `PN_CHARS_ESC`, `= ' ( ) , : - [ ] . ;`. The other characters the reader accepts after `\` are written bare, where they lex the same. A name in the default namespace is written bare only when the bare text lexes back as exactly that one name; otherwise (all digits, a leading `@`, `//` or `/*`, or empty) it takes a prefix. Whatever the writer accepts reads back as an equal document. None of the rejected cases occurs in the corpus. | Text written raw would fail to read back or read back as a different document, and the grammar has no escape for these characters. | `whatever_the_writer_accepts_reads_back_equal`, `unrepresentable_local_parts_are_errors`, `unrepresentable_iris_are_errors`, `a_json_key_with_a_trailing_space_cannot_be_written`, `bare_names_that_would_misread_take_a_prefix` (src/provn/write.rs), `json_corpus_round_trips_through_provn` (tests/corpus_provn.rs) |
 | `UndeclaredPrefix` and value-construction errors (bad `dateTime`, bad language tag) carry no line or column. `Error::Syntax` does. | The value and name layers are shared with the JSON reader, which has no positions. | `undeclared_prefix_and_bare_without_default_fail` (src/namespaces.rs), `errors_carry_positions` (src/provn/parser.rs) |
 
+## Command-line tool
+
+Tests are in `provkit-cli/`.
+
+| Behaviour | Reason | Test |
+|---|---|---|
+| A leading UTF-8 byte-order mark (U+FEFF) is dropped from file and standard input before the format is sniffed and the text is read. The library readers do not drop it: `json::read` and `provn::read` take the text as given. | Editors on Windows often write a byte-order mark, and it is an encoding signature rather than content. The library takes `&str`, where the caller has already decoded the bytes. | `a_leading_byte_order_mark_is_ignored` (tests/cli.rs) |
+| File extensions `.json` and `.provn` match in any letter case (`out.JSON`). | Case-insensitive file systems make `OUT.JSON` and `out.json` the same file. | `extensions_match_in_any_case` (tests/cli.rs), `extension_maps_to_format` (src/format.rs) |
+
 ## Not implemented in 0.1.0
 
 - `lenient` PROV-N profile

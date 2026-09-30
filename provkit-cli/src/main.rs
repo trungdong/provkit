@@ -88,11 +88,15 @@ fn main() -> ExitCode {
 /// format.
 fn read_document(path: &Path, from: Option<Format>) -> Result<Document> {
     let is_stdin = path == Path::new("-");
-    let text = if is_stdin {
+    let mut text = if is_stdin {
         io::read_to_string(io::stdin()).context("-")?
     } else {
         fs::read_to_string(path).with_context(|| path.display().to_string())?
     };
+    // A leading byte-order mark is an encoding signature, not content.
+    if text.starts_with('\u{FEFF}') {
+        text.drain(..'\u{FEFF}'.len_utf8());
+    }
     let format = from
         .or_else(|| {
             if is_stdin {

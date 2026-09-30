@@ -14,12 +14,15 @@ pub enum Format {
 }
 
 impl Format {
-    /// From a file extension (`.json`, `.provn`).
+    /// From a file extension (`.json`, `.provn`), in any letter case.
     pub fn from_path(path: &Path) -> Option<Format> {
-        match path.extension()?.to_str()? {
-            "json" => Some(Format::Json),
-            "provn" => Some(Format::Provn),
-            _ => None,
+        let ext = path.extension()?.to_str()?;
+        if ext.eq_ignore_ascii_case("json") {
+            Some(Format::Json)
+        } else if ext.eq_ignore_ascii_case("provn") {
+            Some(Format::Provn)
+        } else {
+            None
         }
     }
 
@@ -69,5 +72,7 @@ mod tests {
         assert_eq!(Format::from_path(Path::new("a.provn")), Some(Format::Provn));
         assert_eq!(Format::from_path(Path::new("a.txt")), None);
         assert_eq!(Format::from_path(Path::new("-")), None);
+        assert_eq!(Format::from_path(Path::new("a.JSON")), Some(Format::Json));
+        assert_eq!(Format::from_path(Path::new("a.ProvN")), Some(Format::Provn));
     }
 }

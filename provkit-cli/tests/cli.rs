@@ -101,6 +101,70 @@ fn dash_output_means_stdout() {
 }
 
 #[test]
+fn extensions_match_in_any_case() {
+    let dir = scratch("extensions_match_in_any_case");
+    let out = dir.join("out.JSON");
+    provkit()
+        .args(["convert"])
+        .arg(corpus("json/entity1.json"))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+    assert!(
+        std::fs::read_to_string(&out)
+            .unwrap()
+            .trim_start()
+            .starts_with('{')
+    );
+    let provn = dir.join("in.PROVN");
+    std::fs::write(&provn, PROVN).unwrap();
+    provkit()
+        .args(["convert", "-t", "json"])
+        .arg(&provn)
+        .assert()
+        .success()
+        .stdout(predicate::str::starts_with("{"));
+}
+
+#[test]
+fn a_leading_byte_order_mark_is_ignored() {
+    let dir = scratch("a_leading_byte_order_mark_is_ignored");
+    let json_text = std::fs::read_to_string(corpus("json/entity1.json")).unwrap();
+    let cases = [
+        ("bom.json", format!("\u{FEFF}{json_text}")),
+        ("bom.provn", format!("\u{FEFF}{PROVN}")),
+        ("bom.txt", format!("\u{FEFF}{PROVN}")),
+    ];
+    for (name, text) in cases {
+        let path = dir.join(name);
+        std::fs::write(&path, text).unwrap();
+        provkit()
+            .args(["convert"])
+            .arg(&path)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("entity(ex:e1"))
+            .stderr("");
+    }
+    for text in [format!("\u{FEFF}{json_text}"), format!("\u{FEFF}{PROVN}")] {
+        provkit()
+            .args(["convert", "-"])
+            .write_stdin(text)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains("entity(ex:e1"))
+            .stderr("");
+    }
+    // Only the first character is a byte-order mark; a second one is content.
+    provkit()
+        .args(["convert", "-"])
+        .write_stdin(format!("\u{FEFF}\u{FEFF}{PROVN}"))
+        .assert()
+        .code(2);
+}
+
+#[test]
 fn to_flag_overrides_output_extension() {
     let dir = scratch("to_flag_overrides_output_extension");
     let out = dir.join("out.json");

@@ -8,6 +8,8 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+# The end-to-end tests read the corpus submodule, which the published crate lacks.
+exclude = ["tests/cli.rs"]
 
 [[bin]]
 name = "provkit"
