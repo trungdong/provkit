@@ -145,11 +145,17 @@ impl<'a> Lexer<'a> {
         kind
     }
 
+    /// Skip whitespace and comments. Whitespace is the grammar's `WS`:
+    /// space, tab, CR and LF. Other Unicode spaces are not separators.
     fn skip_trivia(&mut self) -> Result<()> {
         loop {
             let rest = self.rest();
-            if let Some(c) = rest.chars().next().filter(|c| c.is_whitespace()) {
-                self.advance(c.len_utf8());
+            let ws = rest
+                .bytes()
+                .take_while(|b| matches!(b, b' ' | b'\t' | b'\r' | b'\n'))
+                .count();
+            if ws > 0 {
+                self.advance(ws);
             } else if rest.starts_with("//") {
                 let len = rest.find(['\n', '\r']).unwrap_or(rest.len());
                 self.advance(len);
@@ -742,6 +748,29 @@ line""" "#,
         match tokenize("a\n\"\"\"x\n\\q\"\"\"") {
             Err(Error::Syntax { line, column, .. }) => assert_eq!((line, column), (3, 1)),
             other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn only_grammar_whitespace_separates_tokens() {
+        assert_eq!(
+            kinds(" \t\r\nex:a \t\r\n")[..2],
+            [name("ex", "a"), TokenKind::Eof]
+        );
+        // U+1680 is in PN_CHARS_BASE, so it starts or continues a name.
+        assert_eq!(kinds("\u{1680}a")[0], name("", "\u{1680}a"));
+        assert_eq!(kinds("ex:a\u{1680}")[0], name("ex", "a\u{1680}"));
+        // Other Unicode spaces are unexpected characters, not separators.
+        for space in ['\u{A0}', '\u{2028}', '\u{2003}', '\u{3000}'] {
+            let message = syntax_message(&format!("ex:a{space}ex:b"));
+            assert!(
+                message.contains("unexpected character"),
+                "{space:?}: {message}"
+            );
+            assert!(matches!(
+                tokenize(&format!("{space}ex:a")),
+                Err(Error::Syntax { .. })
+            ));
         }
     }
 }

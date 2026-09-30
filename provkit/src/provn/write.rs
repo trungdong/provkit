@@ -3,6 +3,7 @@
 use std::fmt::Write as _;
 use std::io;
 
+use super::lexer::{Token, TokenKind, tokenize};
 use crate::document::merged_bundles;
 use crate::pn;
 use crate::qname::well_known::{XSD_DATETIME, XSD_INT};
@@ -253,12 +254,8 @@ fn formal(
 fn name(q: &QName, names: &mut Namespaces) -> Result<String> {
     check_iri(q.namespace())?;
     let local = escape_local(q)?;
-    // Written bare, an all-digit local reads back as an integer and a
-    // leading `@` as a misplaced language tag, so both take a prefix.
-    let misreads = (!q.local().is_empty() && q.local().bytes().all(|b| b.is_ascii_digit()))
-        || q.local().starts_with('@');
     let prefix = match names.render_parts(q) {
-        None if misreads => Some(names.ensure_prefix(q.namespace())),
+        None if !lexes_as_bare_name(&local, q.local()) => Some(names.ensure_prefix(q.namespace())),
         other => other,
     };
     Ok(match prefix {
@@ -268,6 +265,20 @@ fn name(q: &QName, names: &mut Namespaces) -> Result<String> {
         }
         None => local,
     })
+}
+
+/// Whether `text`, written bare, lexes back as exactly one name with no
+/// prefix and local part `local`. Anything else (an integer, a comment,
+/// an error, nothing at all) takes a prefix instead.
+///
+/// This runs the lexer once per bare name written, which costs a small
+/// allocation each time; names under a prefix skip it.
+fn lexes_as_bare_name(text: &str, local: &str) -> bool {
+    matches!(
+        tokenize(text).as_deref(),
+        Ok([Token { kind: TokenKind::Name { prefix, local: read }, .. }, Token { kind: TokenKind::Eof, .. }])
+            if prefix.is_empty() && read == local
+    )
 }
 
 /// Characters escaped wherever they occur: the Recommendation's
@@ -737,8 +748,8 @@ endDocument
     fn palette() -> Vec<char> {
         let mut chars: Vec<char> = (0u8..0x80).map(char::from).collect();
         chars.extend([
-            'é', '\u{B7}', '\u{D7}', '\u{300}', '\u{36F}', '\u{203F}', '\u{2040}', '\u{2028}',
-            '\u{FEFF}', '\u{FFFE}', '😀',
+            'é', '\u{A0}', '\u{B7}', '\u{D7}', '\u{300}', '\u{36F}', '\u{1680}', '\u{203F}',
+            '\u{2040}', '\u{2028}', '\u{FEFF}', '\u{FFFE}', '😀',
         ]);
         chars
     }
@@ -771,7 +782,27 @@ endDocument
         }
         locals.extend(
             [
-                "", "12", "%41", "a%4", "%zz", "a%", "%%41", "a.", ".a", "-1", "a\\",
+                "",
+                "12",
+                "%41",
+                "a%4",
+                "%zz",
+                "a%",
+                "%%41",
+                "a.",
+                ".a",
+                "-1",
+                "a\\",
+                "//x",
+                "/*y",
+                "a//x",
+                "a/*y",
+                "\u{1680}a",
+                "a\u{1680}",
+                "\u{A0}a",
+                "a\u{A0}",
+                "\u{2028}a",
+                "a\u{2028}",
             ]
             .map(String::from),
         );
@@ -992,7 +1023,7 @@ endDocument
     fn bare_names_that_would_misread_take_a_prefix() {
         let mut d = Document::new();
         d.namespaces.set_default("http://default.org/");
-        for local in ["12", "", "@a"] {
+        for local in ["12", "", "@a", "//x", "/*y"] {
             d.records.push(element(
                 Kind::Entity,
                 QName::new("http://default.org/", local),
@@ -1000,8 +1031,30 @@ endDocument
             ));
         }
         let text = provn::to_string(&d).unwrap();
-        for expected in ["entity(ns1:12)", "entity(ns1:)", "entity(ns1:@a)"] {
+        for expected in [
+            "entity(ns1:12)",
+            "entity(ns1:)",
+            "entity(ns1:@a)",
+            "entity(ns1://x)",
+            "entity(ns1:/*y)",
+        ] {
             assert!(text.contains(expected), "{text}");
+        }
+        assert!(written_reads_back(&d));
+
+        // Names that lex back as themselves stay bare.
+        for local in ["\u{1680}a", "a/b", "a@b"] {
+            let mut d = Document::new();
+            d.namespaces.set_default("http://default.org/");
+            d.records.push(element(
+                Kind::Entity,
+                QName::new("http://default.org/", local),
+                Attributes::new(),
+            ));
+            let text = provn::to_string(&d).unwrap();
+            assert!(text.contains(&format!("entity({local})")), "{text}");
+            assert!(!text.contains("ns1"), "{text}");
+            assert!(written_reads_back(&d));
         }
         assert!(written_reads_back(&d));
     }
