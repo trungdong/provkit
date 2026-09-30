@@ -61,10 +61,15 @@ pub(crate) fn is_pn_prefix(s: &str) -> bool {
     prefix_len(s) == Some(s.len())
 }
 
-/// The first character `IRI_REF` forbids between its angle brackets: a
-/// control character, a space, or one of `< > " { } | ^ ` \`.
+/// Whether `IRI_REF` forbids `c` between its angle brackets: a control
+/// character, a space, or one of `< > " { } | ^ ` \`.
+#[cfg_attr(not(feature = "provn"), allow(dead_code))]
+pub(crate) fn is_iri_forbidden(c: char) -> bool {
+    c <= ' ' || matches!(c, '<' | '>' | '"' | '{' | '}' | '|' | '^' | '`' | '\\')
+}
+
+/// The first character of `iri` that [`is_iri_forbidden`].
 #[cfg_attr(not(feature = "provn"), allow(dead_code))]
 pub(crate) fn iri_forbidden(iri: &str) -> Option<char> {
-    iri.chars()
-        .find(|&c| c <= ' ' || matches!(c, '<' | '>' | '"' | '{' | '}' | '|' | '^' | '`' | '\\'))
+    iri.chars().find(|&c| is_iri_forbidden(c))
 }

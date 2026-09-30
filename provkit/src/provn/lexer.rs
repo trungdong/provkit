@@ -5,7 +5,9 @@
 //! keyword. The one context-sensitive rule is the language tag, which only
 //! follows a string.
 
-use crate::pn::{PN_CHARS_ESC, is_pn_chars, is_pn_chars_u, is_pn_local_other, prefix_len};
+use crate::pn::{
+    PN_CHARS_ESC, is_iri_forbidden, is_pn_chars, is_pn_chars_u, is_pn_local_other, prefix_len,
+};
 use crate::{Error, Result};
 
 /// A token's class and payload.
@@ -280,7 +282,7 @@ impl<'a> Lexer<'a> {
                 }
                 // Whitespace and control characters end the scan: the IRI never closed.
                 '\0'..=' ' => return Err(self.error("unterminated IRI")),
-                '<' | '"' | '{' | '}' | '|' | '^' | '`' | '\\' => {
+                _ if is_iri_forbidden(c) => {
                     return Err(
                         self.error_at(self.pos + i, format!("invalid character {c:?} in IRI"))
                     );
@@ -771,6 +773,29 @@ line""" "#,
                 tokenize(&format!("{space}ex:a")),
                 Err(Error::Syntax { .. })
             ));
+        }
+    }
+
+    #[test]
+    fn iri_characters_follow_the_shared_rule() {
+        let others = ['\u{7F}', 'é', '\u{A0}', '\u{2028}', '😀'];
+        for c in (b'!'..=b'~').map(char::from).chain(others) {
+            if c == '>' {
+                continue;
+            }
+            let lexed = tokenize(&format!("<a{c}b>"));
+            if is_iri_forbidden(c) {
+                assert!(
+                    syntax_message(&format!("<a{c}b>")).contains("in IRI"),
+                    "{c:?}"
+                );
+            } else {
+                assert_eq!(
+                    lexed.unwrap()[0].kind,
+                    TokenKind::Iri(format!("a{c}b")),
+                    "{c:?}"
+                );
+            }
         }
     }
 }
