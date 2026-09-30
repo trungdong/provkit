@@ -227,7 +227,7 @@ fn report_side(out: &mut String, name: &Path, this: &Document, other: &Document)
         writeln!(
             out,
             "  bundle {}:",
-            provn::statement_name(&bundle.id, &scope)
+            provn::statement_name(&bundle.id, &scope)?
         )?;
         for record in records {
             writeln!(out, "    {}", provn::statement(record, &scope)?)?;

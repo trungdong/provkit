@@ -41,6 +41,7 @@ pub mod error;
 #[cfg(feature = "json")]
 pub mod json;
 pub mod namespaces;
+mod pn;
 #[cfg(feature = "provn")]
 pub mod provn;
 pub mod qname;

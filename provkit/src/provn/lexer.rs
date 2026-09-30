@@ -5,6 +5,7 @@
 //! keyword. The one context-sensitive rule is the language tag, which only
 //! follows a string.
 
+use crate::pn::{PN_CHARS_ESC, is_pn_chars, is_pn_chars_u, is_pn_local_other, prefix_len};
 use crate::{Error, Result};
 
 /// A token's class and payload.
@@ -423,24 +424,6 @@ fn scan_name(s: &str) -> std::result::Result<Option<NameMatch>, NameError> {
     }))
 }
 
-/// Length of a `PN_PREFIX` [53] at the start of `s`, which cannot end in `.`.
-fn prefix_len(s: &str) -> Option<usize> {
-    let mut chars = s.char_indices();
-    let (_, first) = chars.next()?;
-    if !is_pn_chars_base(first) {
-        return None;
-    }
-    let mut end = first.len_utf8();
-    for (i, c) in chars {
-        if is_pn_chars(c) {
-            end = i + c.len_utf8();
-        } else if c != '.' {
-            break;
-        }
-    }
-    Some(end)
-}
-
 /// `PN_LOCAL` [54] at the start of `s`, unescaped, and the bytes it spans.
 /// `base` is `s`'s offset in the scanned text, for error positions. Trailing
 /// bare dots are left unconsumed.
@@ -498,35 +481,6 @@ fn scan_local(s: &str, base: usize) -> std::result::Result<(String, usize), Name
     }
     out.truncate(kept_len);
     Ok((out, kept_end))
-}
-
-/// Characters that may follow `\` in a local part: `PN_CHARS_ESC` [58] plus `:`, `[` and `]`.
-const PN_CHARS_ESC: &str = "_~.-!$&'()*+,;=/?#@%:[]";
-
-/// `PN_CHARS_BASE` [55].
-fn is_pn_chars_base(c: char) -> bool {
-    matches!(c,
-        'A'..='Z' | 'a'..='z' | '\u{C0}'..='\u{D6}' | '\u{D8}'..='\u{F6}' | '\u{F8}'..='\u{2FF}'
-        | '\u{370}'..='\u{37D}' | '\u{37F}'..='\u{1FFF}' | '\u{200C}'..='\u{200D}'
-        | '\u{2070}'..='\u{218F}' | '\u{2C00}'..='\u{2FEF}' | '\u{3001}'..='\u{D7FF}'
-        | '\u{F900}'..='\u{FDCF}' | '\u{FDF0}'..='\u{FFFD}' | '\u{10000}'..='\u{EFFFF}')
-}
-
-fn is_pn_chars_u(c: char) -> bool {
-    is_pn_chars_base(c) || c == '_'
-}
-
-fn is_pn_chars(c: char) -> bool {
-    is_pn_chars_u(c)
-        || c == '-'
-        || c.is_ascii_digit()
-        || c == '\u{B7}'
-        || matches!(c, '\u{300}'..='\u{36F}' | '\u{203F}'..='\u{2040}')
-}
-
-/// The plain characters of `PN_CHARS_OTHERS` [57]; `%` and `\` escapes are handled separately.
-fn is_pn_local_other(c: char) -> bool {
-    matches!(c, '/' | '@' | '~' | '&' | '+' | '*' | '?' | '#' | '$' | '!')
 }
 
 #[cfg(test)]

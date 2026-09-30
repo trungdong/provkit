@@ -171,8 +171,10 @@ impl Namespaces {
         if let Some(prefix) = self.prefix_for(name.namespace()) {
             return Some(prefix.to_owned());
         }
-        // A colon in the local part would read back as a prefix separator.
-        let bare = !name.local().contains(':')
+        // A colon in the local part would read back as a prefix separator,
+        // and an empty local part would vanish.
+        let bare = !name.local().is_empty()
+            && !name.local().contains(':')
             && self
                 .default
                 .as_deref()
@@ -368,6 +370,7 @@ mod tests {
             plain.render(&QName::new("http://default.org/", "x:y")),
             "ns1:x:y"
         );
+        assert_eq!(plain.render(&QName::new("http://default.org/", "")), "ns1:");
     }
 
     #[test]

@@ -4,16 +4,18 @@ use std::fmt::Write as _;
 use std::io;
 
 use crate::document::merged_bundles;
+use crate::pn;
 use crate::qname::well_known::{XSD_DATETIME, XSD_INT};
+use crate::record::{formal_attribute_error, formal_named};
 use crate::{
-    Bundle, Document, FormalAttr, FormalRef, Kind, Namespaces, QName, Record, Result, Value,
+    Bundle, Document, Error, FormalAttr, FormalRef, Kind, Namespaces, QName, Record, Result, Value,
 };
 
 /// Write `document` as PROV-N.
 ///
 /// # Errors
 ///
-/// Returns [`Error::Io`](crate::Error::Io) if `out` fails.
+/// As [`to_string`], plus [`Error::Io`] if `out` fails.
 pub fn write(document: &Document, out: &mut impl io::Write) -> Result<()> {
     out.write_all(to_string(document)?.as_bytes())?;
     Ok(())
@@ -25,10 +27,21 @@ pub fn write(document: &Document, out: &mut impl io::Write) -> Result<()> {
 /// the document is left unchanged. Records without an identifier are written
 /// without one. Bundles that share an identifier are written as one.
 ///
+/// Whatever this function accepts reads back with [`read`](super::read) as
+/// an equal document.
+///
 /// # Errors
 ///
-/// Currently infallible. The `Result` keeps the signature stable if a later
-/// check needs to report an error.
+/// [`Error::Structure`] with format `"PROV-N"` for text PROV-N cannot carry:
+///
+/// - a local part with whitespace, a control character, one of
+///   `{ } < > " | ^ \`, a `%` not followed by two hex digits, or a first
+///   character that cannot start a name (a combining mark, `·`, `‿`, `⁀`);
+/// - a prefix that is not a `PN_PREFIX`;
+/// - a namespace IRI with a character `IRI_REF` forbids.
+///
+/// [`Error::Structure`] with format `"record"` for an attribute that spells
+/// one of the record's own formals.
 pub fn to_string(document: &Document) -> Result<String> {
     // Names are rendered before the declarations are printed, so that every
     // prefix minted along the way is declared.
@@ -36,15 +49,15 @@ pub fn to_string(document: &Document) -> Result<String> {
     let mut body = String::new();
     for record in &document.records {
         body.push_str("  ");
-        expression(record, &mut names, &mut body);
+        expression(record, &mut names, &mut body)?;
         body.push('\n');
     }
     for bundle in merged_bundles(&document.bundles) {
-        write_bundle(&bundle, &names, &mut body);
+        write_bundle(&bundle, &names, &mut body)?;
     }
 
     let mut s = String::from("document\n");
-    let declared = declarations(&names, None, "  ", &mut s);
+    let declared = declarations(&names, None, "  ", &mut s)?;
     if declared {
         s.push('\n');
     }
@@ -60,12 +73,11 @@ pub fn to_string(document: &Document) -> Result<String> {
 ///
 /// # Errors
 ///
-/// Currently infallible. The `Result` keeps the signature stable if a later
-/// check needs to report an error.
+/// As [`to_string`].
 pub fn statement(record: &Record, namespaces: &Namespaces) -> Result<String> {
     let mut names = namespaces.clone();
     let mut s = String::new();
-    expression(record, &mut names, &mut s);
+    expression(record, &mut names, &mut s)?;
     Ok(s)
 }
 
@@ -81,12 +93,48 @@ pub fn statement(record: &Record, namespaces: &Namespaces) -> Result<String> {
 /// let mut names = Namespaces::new();
 /// names.declare("ex", "http://example.org/").unwrap();
 /// let id = QName::new("http://example.org/", "b1");
-/// assert_eq!(provn::statement_name(&id, &names), "ex:b1");
+/// assert_eq!(provn::statement_name(&id, &names)?, "ex:b1");
+/// # Ok::<(), provkit::Error>(())
 /// ```
-#[must_use]
-pub fn statement_name(name: &QName, namespaces: &Namespaces) -> String {
+///
+/// # Errors
+///
+/// As [`to_string`], for the name's local part, prefix and namespace IRI.
+pub fn statement_name(name: &QName, namespaces: &Namespaces) -> Result<String> {
     let mut names = namespaces.clone();
     self::name(name, &mut names)
+}
+
+fn unwritable(message: String) -> Error {
+    Error::Structure {
+        format: "PROV-N",
+        message,
+    }
+}
+
+/// `c` with its code point, so an invisible character shows in a message.
+fn show(c: char) -> String {
+    format!("{c:?} (U+{:04X})", u32::from(c))
+}
+
+fn check_iri(iri: &str) -> Result<()> {
+    match pn::iri_forbidden(iri) {
+        Some(c) => Err(unwritable(format!(
+            "cannot write the namespace <{iri}>: PROV-N cannot carry {} in an IRI",
+            show(c)
+        ))),
+        None => Ok(()),
+    }
+}
+
+fn check_prefix(prefix: &str, iri: &str) -> Result<()> {
+    if pn::is_pn_prefix(prefix) {
+        Ok(())
+    } else {
+        Err(unwritable(format!(
+            "cannot write the prefix `{prefix}` for <{iri}>: it is not a PROV-N PN_PREFIX"
+        )))
+    }
 }
 
 /// Print `default` and `prefix` lines for the entries of `names` that `inherited`
@@ -96,11 +144,12 @@ fn declarations(
     inherited: Option<&Namespaces>,
     indent: &str,
     s: &mut String,
-) -> bool {
+) -> Result<bool> {
     let mut any = false;
     if let Some(default) = names.default_namespace()
         && inherited.and_then(Namespaces::default_namespace) != Some(default)
     {
+        check_iri(default)?;
         let _ = writeln!(s, "{indent}default <{default}>");
         any = true;
     }
@@ -108,29 +157,40 @@ fn declarations(
         if inherited.is_some_and(|o| o.lookup(prefix).is_some_and(|i| i == *iri)) {
             continue;
         }
+        check_prefix(prefix, iri)?;
+        check_iri(iri)?;
         let _ = writeln!(s, "{indent}prefix {prefix} <{iri}>");
         any = true;
     }
-    any
+    Ok(any)
 }
 
-fn write_bundle(bundle: &Bundle, outer: &Namespaces, s: &mut String) {
+fn write_bundle(bundle: &Bundle, outer: &Namespaces, s: &mut String) -> Result<()> {
     let mut names = bundle.namespaces.with_fallback(outer);
     let mut body = String::new();
     for record in &bundle.records {
         body.push_str("    ");
-        expression(record, &mut names, &mut body);
+        expression(record, &mut names, &mut body)?;
         body.push('\n');
     }
-    let id = name(&bundle.id, &mut names);
+    let id = name(&bundle.id, &mut names)?;
     let _ = writeln!(s, "  bundle {id}");
-    declarations(&names, Some(outer), "    ", s);
+    declarations(&names, Some(outer), "    ", s)?;
     s.push_str(&body);
     s.push_str("  endBundle\n");
+    Ok(())
 }
 
-fn expression(r: &Record, names: &mut Namespaces, s: &mut String) {
+fn expression(r: &Record, names: &mut Namespaces, s: &mut String) -> Result<()> {
     let kind = r.kind();
+    // The reader would reject such an attribute, so the writer does too.
+    if let Some(attr) = r
+        .attributes()
+        .iter()
+        .find_map(|(n, _)| formal_named(kind, n))
+    {
+        return Err(formal_attribute_error(kind, attr));
+    }
     let formals = r.formals();
     let mut parts: Vec<String> = Vec::new();
 
@@ -139,20 +199,20 @@ fn expression(r: &Record, names: &mut Namespaces, s: &mut String) {
     if kind.is_element() {
         // Elements never take `-` for the identifier.
         if let Some(id) = r.id() {
-            parts.push(name(id, names));
+            parts.push(name(id, names)?);
         }
         // An activity writes both times or neither.
         if kind == Kind::Activity && !formals.is_empty() {
-            parts.push(formal(&formals, FormalAttr::StartTime, names));
-            parts.push(formal(&formals, FormalAttr::EndTime, names));
+            parts.push(formal(&formals, FormalAttr::StartTime, names)?);
+            parts.push(formal(&formals, FormalAttr::EndTime, names)?);
         }
     } else {
         // A relation without an identifier omits `id;` altogether.
         if let Some(id) = r.id() {
-            let _ = write!(s, "{}; ", name(id, names));
+            let _ = write!(s, "{}; ", name(id, names)?);
         }
         for attr in kind.formals() {
-            parts.push(formal(&formals, *attr, names));
+            parts.push(formal(&formals, *attr, names)?);
         }
     }
     s.push_str(&parts.join(", "));
@@ -167,11 +227,12 @@ fn expression(r: &Record, names: &mut Namespaces, s: &mut String) {
             if i > 0 {
                 s.push_str(", ");
             }
-            let _ = write!(s, "{}={}", name(n, names), value(v, names));
+            let _ = write!(s, "{}={}", name(n, names)?, value(v, names)?);
         }
         s.push(']');
     }
     s.push(')');
+    Ok(())
 }
 
 /// The formal `attr` of a record, or `-` when it is absent.
@@ -179,36 +240,81 @@ fn formal(
     formals: &[(FormalAttr, FormalRef<'_>)],
     attr: FormalAttr,
     names: &mut Namespaces,
-) -> String {
-    match formals.iter().find(|(a, _)| *a == attr) {
-        Some((_, FormalRef::Name(q))) => name(q, names),
+) -> Result<String> {
+    Ok(match formals.iter().find(|(a, _)| *a == attr) {
+        Some((_, FormalRef::Name(q))) => name(q, names)?,
         Some((_, FormalRef::Time(t))) => t.to_string(),
         None => "-".to_owned(),
-    }
+    })
 }
 
 /// `prefix:local`, or a bare `local` in the default namespace, with the local
 /// part escaped.
-fn name(q: &QName, names: &mut Namespaces) -> String {
-    let local = escape_local(q.local());
-    match names.render_parts(q) {
-        Some(prefix) => format!("{prefix}:{local}"),
+fn name(q: &QName, names: &mut Namespaces) -> Result<String> {
+    check_iri(q.namespace())?;
+    let local = escape_local(q)?;
+    // Written bare, an all-digit local reads back as an integer and a
+    // leading `@` as a misplaced language tag, so both take a prefix.
+    let misreads = (!q.local().is_empty() && q.local().bytes().all(|b| b.is_ascii_digit()))
+        || q.local().starts_with('@');
+    let prefix = match names.render_parts(q) {
+        None if misreads => Some(names.ensure_prefix(q.namespace())),
+        other => other,
+    };
+    Ok(match prefix {
+        Some(prefix) => {
+            check_prefix(&prefix, q.namespace())?;
+            format!("{prefix}:{local}")
+        }
         None => local,
-    }
+    })
 }
 
-fn escape_local(local: &str) -> String {
+/// Characters escaped wherever they occur: the Recommendation's
+/// `PN_CHARS_ESC` [55].
+const ALWAYS_ESCAPED: &str = "='(),-:;[].";
+
+/// The local part of `q` as a `PN_LOCAL` that lexes back to the same text.
+///
+/// A character from [`ALWAYS_ESCAPED`] is escaped. Any other character that
+/// the lexer accepts after `\` but not bare in its position is escaped too.
+/// `%` passes through only before two hex digits, since the reader keeps
+/// `%XX` verbatim. Everything else is an error.
+fn escape_local(q: &QName) -> Result<String> {
+    let local = q.local();
     let mut out = String::with_capacity(local.len());
-    for c in local.chars() {
-        if matches!(
-            c,
-            '=' | '\'' | '(' | ')' | ',' | ':' | '-' | '[' | ']' | '.' | ';'
-        ) {
+    for (i, c) in local.char_indices() {
+        let first = i == 0;
+        let bare = pn::is_pn_chars_u(c)
+            || c.is_ascii_digit()
+            || pn::is_pn_local_other(c)
+            || (!first && pn::is_pn_chars(c));
+        if ALWAYS_ESCAPED.contains(c) {
             out.push('\\');
+        } else if c == '%' {
+            let hex = local.as_bytes().get(i + 1..i + 3);
+            if !hex.is_some_and(|h| h.iter().all(u8::is_ascii_hexdigit)) {
+                return Err(unwritable(format!(
+                    "cannot write the name {q}: PROV-N cannot carry a '%' that is not \
+                     followed by two hex digits"
+                )));
+            }
+        } else if !bare && pn::PN_CHARS_ESC.contains(c) {
+            out.push('\\');
+        } else if !bare {
+            let place = if first && pn::is_pn_chars(c) {
+                "at the start of a local part"
+            } else {
+                "in a local part"
+            };
+            return Err(unwritable(format!(
+                "cannot write the name {q}: PROV-N cannot carry {} {place}",
+                show(c)
+            )));
         }
         out.push(c);
     }
-    out
+    Ok(out)
 }
 
 fn string(s: &str) -> String {
@@ -235,29 +341,29 @@ fn bare_int(lexical: &str, datatype: &QName) -> bool {
     *datatype == *XSD_INT && !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
 }
 
-fn value(v: &Value, names: &mut Namespaces) -> String {
-    match v {
+fn value(v: &Value, names: &mut Namespaces) -> Result<String> {
+    Ok(match v {
         Value::Str(s) => string(s),
         Value::LangStr(l) => format!("{}@{}", string(l.value()), l.lang()),
-        Value::QName(q) => format!("'{}'", name(q, names)),
+        Value::QName(q) => format!("'{}'", name(q, names)?),
         Value::DateTime(d) => format!(
             "{} %% {}",
             string(&d.to_string()),
-            name(&XSD_DATETIME, names)
+            name(&XSD_DATETIME, names)?
         ),
         Value::Typed { lexical, datatype } if bare_int(lexical, datatype) => lexical.clone(),
         Value::Typed { lexical, datatype } => {
-            format!("{} %% {}", string(lexical), name(datatype, names))
+            format!("{} %% {}", string(lexical), name(datatype, names)?)
         }
-    }
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use crate::qname::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT};
     use crate::{
-        Attributes, Bundle, DateTime, Document, Formal, FormalAttr as F, Kind, LangStr, Namespaces,
-        QName, Record, Value, provn,
+        Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, LangStr,
+        Namespaces, QName, Record, Value, provn,
     };
 
     fn ex(l: &str) -> QName {
@@ -589,6 +695,270 @@ endDocument
         assert_eq!(&*table.lookup("o").unwrap(), "http://o.org/");
     }
 
+    /// Write `d`; when the writer accepts it, it must read back equal.
+    /// Returns whether the writer accepted it.
+    fn written_reads_back(d: &Document) -> bool {
+        match provn::to_string(d) {
+            Ok(text) => {
+                let back = provn::read(&text).unwrap_or_else(|e| panic!("{e}\n{text}"));
+                assert_eq!(back, *d, "{text}");
+                true
+            }
+            Err(Error::Structure {
+                format: "PROV-N", ..
+            }) => false,
+            Err(e) => panic!("unexpected error {e:?} for {d:?}"),
+        }
+    }
+
+    /// A document using `local` in every name position, under a declared
+    /// prefix and bare in the default namespace.
+    fn every_position(local: &str) -> Document {
+        let default = "http://default.org/";
+        let mut d = document(vec![]);
+        d.namespaces.set_default(default);
+        for ns in ["http://example.org/", default] {
+            let n = QName::new(ns, local);
+            let mut a = Attributes::new();
+            a.insert(n.clone(), Value::QName(n.clone()));
+            a.insert(ex("t"), Value::typed("x", n.clone()).unwrap());
+            d.records.push(element(Kind::Entity, n.clone(), a));
+            d.records.push(relation(
+                Kind::Usage,
+                Some(n.clone()),
+                vec![(F::Entity, Formal::Name(n.clone()))],
+            ));
+            d.bundles.push(Bundle {
+                id: n,
+                namespaces: Namespaces::new(),
+                records: vec![],
+            });
+        }
+        d
+    }
+
+    /// Every ASCII character and a sample beyond it, including combining
+    /// marks, `·`, `‿`, non-characters and separators.
+    fn palette() -> Vec<char> {
+        let mut chars: Vec<char> = (0u8..0x80).map(char::from).collect();
+        chars.extend([
+            'é', '\u{B7}', '\u{D7}', '\u{300}', '\u{36F}', '\u{203F}', '\u{2040}', '\u{2028}',
+            '\u{FEFF}', '\u{FFFE}', '😀',
+        ]);
+        chars
+    }
+
+    #[test]
+    fn whatever_the_writer_accepts_reads_back_equal() {
+        let chars = palette();
+        let mut locals: Vec<String> = Vec::new();
+        for &c in &chars {
+            locals.extend([
+                c.to_string(),
+                format!("a{c}"),
+                format!("a{c}b"),
+                format!("{c}a"),
+            ]);
+        }
+        // Pseudo-random strings of one to four palette characters, so pairs
+        // such as `%4` followed by a letter, or `\.` mixes, are covered.
+        let mut seed: u64 = 0x5eed;
+        for _ in 0..3000 {
+            let mut local = String::new();
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            for _ in 0..=(seed >> 60) % 4 {
+                seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+                let i = usize::try_from(seed >> 33).unwrap() % chars.len();
+                local.push(chars[i]);
+            }
+            locals.push(local);
+        }
+        locals.extend(
+            [
+                "", "12", "%41", "a%4", "%zz", "a%", "%%41", "a.", ".a", "-1", "a\\",
+            ]
+            .map(String::from),
+        );
+        let (mut accepted, mut rejected) = (0, 0);
+        for local in &locals {
+            if written_reads_back(&every_position(local)) {
+                accepted += 1;
+            } else {
+                rejected += 1;
+            }
+        }
+        assert!(accepted > 1000 && rejected > 100, "{accepted} {rejected}");
+
+        // Namespace IRIs, minted and default, and declared prefixes.
+        for &c in &chars {
+            let iri = format!("http://example.org/{c}/");
+            let mut minted = Document::new();
+            minted.records.push(element(
+                Kind::Entity,
+                QName::new(iri.as_str(), "e"),
+                Attributes::new(),
+            ));
+            written_reads_back(&minted);
+            let mut default = Document::new();
+            default.namespaces.set_default(iri.as_str());
+            written_reads_back(&default);
+            for prefix in [format!("p{c}"), format!("{c}p"), format!("p{c}q")] {
+                let mut declared = Document::new();
+                if declared
+                    .namespaces
+                    .declare(&prefix, "http://p.org/")
+                    .is_ok()
+                {
+                    declared.records.push(element(
+                        Kind::Entity,
+                        QName::new("http://p.org/", "e"),
+                        Attributes::new(),
+                    ));
+                    written_reads_back(&declared);
+                }
+            }
+        }
+    }
+
+    fn unwritable_message(d: &Document) -> String {
+        match provn::to_string(d) {
+            Err(Error::Structure { format, message }) => {
+                assert_eq!(format, "PROV-N");
+                message
+            }
+            other => panic!("expected a PROV-N structure error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unrepresentable_local_parts_are_errors() {
+        let cases = [
+            ("a b", "' ' (U+0020)"),
+            ("a\tb", "'\\t' (U+0009)"),
+            ("a\u{7}b", "'\\u{7}' (U+0007)"),
+            ("a{b", "'{'"),
+            ("a}b", "'}'"),
+            ("a<b", "'<'"),
+            ("a>b", "'>'"),
+            ("a\"b", "'\"'"),
+            ("a|b", "'|'"),
+            ("a^b", "'^'"),
+            ("a\\b", "'\\\\'"),
+            ("a`b", "'`'"),
+            ("a%", "'%'"),
+            ("a%4", "'%'"),
+            ("a%zz", "'%'"),
+            ("\u{301}a", "at the start"),
+            ("\u{B7}a", "at the start"),
+        ];
+        for (local, needle) in cases {
+            let d = document(vec![element(Kind::Entity, ex(local), Attributes::new())]);
+            let message = unwritable_message(&d);
+            assert!(message.contains(needle), "{local:?}: {message}");
+            assert!(message.contains("http://example.org/"), "{message}");
+        }
+        // The same local parts work in the middle where the grammar allows them.
+        let d = document(vec![element(
+            Kind::Entity,
+            ex("a\u{301}\u{B7}"),
+            Attributes::new(),
+        )]);
+        assert!(written_reads_back(&d));
+    }
+
+    #[test]
+    fn unrepresentable_iris_are_errors() {
+        let name_in = |iri: &str| element(Kind::Entity, QName::new(iri, "e"), Attributes::new());
+        let mut minted = Document::new();
+        minted.records.push(name_in("http://x.org/a b/"));
+        assert!(unwritable_message(&minted).contains("' ' (U+0020) in an IRI"));
+
+        let mut default = Document::new();
+        default.namespaces.set_default("http://x.org/>");
+        assert!(unwritable_message(&default).contains("<http://x.org/>>"));
+
+        let mut declared = Document::new();
+        declared.namespaces.declare("q", "http://x.org/\"").unwrap();
+        assert!(unwritable_message(&declared).contains("'\"'"));
+
+        let names = Namespaces::new();
+        assert!(matches!(
+            provn::statement_name(&QName::new("http://x.org/{", "e"), &names),
+            Err(Error::Structure { .. })
+        ));
+        assert!(matches!(
+            provn::statement(&name_in("http://x.org/|"), &names),
+            Err(Error::Structure { .. })
+        ));
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn a_json_key_with_a_trailing_space_cannot_be_written() {
+        let d = crate::json::read(
+            r#"{"prefix": {"ex": "http://example.org/"},
+                "wasAttributedTo": {"_:a": {"prov:entity": "ex:e", "prov:agent ": "ex:ag"}}}"#,
+        )
+        .unwrap();
+        let Record::Attribution(a) = &d.records[0] else {
+            panic!()
+        };
+        assert_eq!(a.agent, None);
+        let message = unwritable_message(&d);
+        assert!(message.contains("prov#agent "), "{message}");
+        assert!(message.contains("' ' (U+0020)"), "{message}");
+    }
+
+    #[test]
+    fn other_escapable_characters_are_written_bare_and_read_back() {
+        let local = "_a~b!c$d&e*f+g/h?i#j@k%41";
+        let d = document(vec![element(Kind::Entity, ex(local), Attributes::new())]);
+        assert_eq!(line(d.records[0].clone()), format!("entity(ex:{local})"));
+        assert!(written_reads_back(&d));
+    }
+
+    #[test]
+    fn bare_names_that_would_misread_take_a_prefix() {
+        let mut d = Document::new();
+        d.namespaces.set_default("http://default.org/");
+        for local in ["12", "", "@a"] {
+            d.records.push(element(
+                Kind::Entity,
+                QName::new("http://default.org/", local),
+                Attributes::new(),
+            ));
+        }
+        let text = provn::to_string(&d).unwrap();
+        for expected in ["entity(ns1:12)", "entity(ns1:)", "entity(ns1:@a)"] {
+            assert!(text.contains(expected), "{text}");
+        }
+        assert!(written_reads_back(&d));
+    }
+
+    #[test]
+    fn an_attribute_spelling_an_own_formal_cannot_be_written() {
+        let mut a = Attributes::new();
+        a.insert(
+            QName::new(crate::namespaces::PROV, "entity"),
+            ex("x").into(),
+        );
+        let r = Record::Usage(crate::Usage {
+            id: None,
+            activity: Some(ex("a")),
+            entity: None,
+            time: None,
+            attributes: a,
+        });
+        let d = document(vec![r]);
+        assert!(matches!(
+            provn::to_string(&d),
+            Err(Error::Structure {
+                format: "record",
+                ..
+            })
+        ));
+    }
+
     #[test]
     fn io_failure_is_reported_as_io() {
         struct Broken;
@@ -601,7 +971,7 @@ endDocument
             }
         }
         let err = provn::write(&Document::new(), &mut Broken).unwrap_err();
-        assert!(matches!(err, crate::Error::Io(_)), "{err:?}");
+        assert!(matches!(err, Error::Io(_)), "{err:?}");
         let mut ok = Vec::new();
         provn::write(&Document::new(), &mut ok).unwrap();
         assert_eq!(ok, b"document\nendDocument\n");
