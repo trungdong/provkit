@@ -1,4 +1,4 @@
-use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT, XSD_INTEGER, XSD_LONG, XSD_QNAME};
+use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT, XSD_INTEGER, XSD_LONG};
 use crate::{
     Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, LangStr,
     Namespaces, QName, Record, Value, provn,
@@ -375,52 +375,6 @@ fn written_reads_back(d: &Document) -> bool {
         Err(Error::Unwritable { .. } | Error::UnwritableNamespace { .. }) => false,
         Err(e) => panic!("unexpected error {e:?} for {d:?}"),
     }
-}
-
-#[test]
-fn a_qualified_name_literal_resolves_exactly_when_provn_can_write_it() {
-    let names = document(vec![]).namespaces;
-    // Every ASCII character alone and in context.
-    let locals = (0u8..0x80).map(char::from).flat_map(|c| {
-        [
-            c.to_string(),
-            format!("a{c}"),
-            format!("a{c}b"),
-            format!("{c}a"),
-        ]
-    });
-    let (mut resolved, mut rejected) = (0, 0);
-    for local in locals {
-        let text = format!("ex:{local}");
-        let writable = local
-            .char_indices()
-            .all(|(at, c)| crate::pn::local_char(&local, at, c).is_some());
-        match Value::typed_in(&names, &text, XSD_QNAME.clone()) {
-            Ok(Value::QName(q)) => {
-                assert!(writable, "{text:?}");
-                assert_eq!(q, ex(&local));
-                assert!(provn::name(&q, &mut names.clone()).is_ok(), "{text:?}");
-                // It is written, and reads back equal from both formats.
-                let mut a = Attributes::new();
-                a.insert(ex("v"), Value::QName(q));
-                let d = document(vec![element(Kind::Entity, ex("e"), a)]);
-                assert!(written_reads_back(&d), "{text:?}");
-                #[cfg(feature = "json")]
-                {
-                    let json = crate::json::to_string(&d).unwrap();
-                    assert_eq!(crate::json::read(&json).unwrap(), d, "{json}");
-                }
-                resolved += 1;
-            }
-            Err(Error::InvalidQName(l)) => {
-                assert!(!writable, "{text:?}");
-                assert_eq!(l, local);
-                rejected += 1;
-            }
-            other => panic!("{text:?}: {other:?}"),
-        }
-    }
-    assert!(resolved > 100 && rejected > 50, "{resolved} {rejected}");
 }
 
 /// The name and reason of the `Unwritable` error from writing `d`.

@@ -180,6 +180,37 @@ fn sample_values() -> Vec<Value> {
 }
 
 #[test]
+fn a_qualified_name_literal_resolves_exactly_when_a_name_can_be_built() {
+    let (mut resolved, mut rejected) = (0, 0);
+    for local in sample_texts() {
+        let text = serde_json::json!({
+            "prefix": {"ex": "http://example.org/"},
+            "entity": {"ex:e": {"ex:v": {"$": format!("ex:{local}"), "type": "xsd:QName"}}},
+        })
+        .to_string();
+        match (QName::new("http://example.org/", &local), json::read(&text)) {
+            (Ok(q), Ok(d)) => {
+                let mut a = Attributes::new();
+                a.insert(ex("v"), Value::QName(q));
+                let expected = document(vec![element(Kind::Entity, ex("e"), a)]);
+                assert_eq!(d, expected, "{local:?}");
+                // It is written, and reads back equal from both formats.
+                assert!(written_reads_back(&d), "{local:?}");
+                let json = json::to_string(&d).unwrap();
+                assert_eq!(json::read(&json).unwrap(), d, "{json}");
+                resolved += 1;
+            }
+            (Err(_), Err(Error::InvalidQName(l))) => {
+                assert_eq!(l, local);
+                rejected += 1;
+            }
+            (built, read) => panic!("{local:?}: {built:?} against {read:?}"),
+        }
+    }
+    assert!(resolved > 1000 && rejected > 100, "{resolved} {rejected}");
+}
+
+#[test]
 fn whatever_the_writer_accepts_reads_back_equal() {
     let chars = palette();
     let locals = sample_texts();
