@@ -6,7 +6,7 @@ mod lexer;
 mod parser;
 mod write;
 
-use crate::sink::{DocumentBuilder, Sink};
+use crate::sink::DocumentBuilder;
 use crate::{Document, Result, strip_bom};
 
 pub use write::{name, statement, to_string, write};
@@ -100,17 +100,17 @@ pub fn read_report(text: &str, profile: Profile) -> Result<(Document, Vec<Ignore
     Ok((builder.finish(), ignored))
 }
 
-/// Read PROV-N text under `profile`, sending events to `sink` as each
+/// Read PROV-N text under `profile`, sending events to `builder` as each
 /// statement is parsed. Returns the extensibility expressions left out. On an
-/// error the sink has already received the events that came before it.
+/// error the builder has already received the events that came before it.
 pub(crate) fn read_into_with(
     text: &str,
     profile: Profile,
-    sink: &mut impl Sink,
+    builder: &mut DocumentBuilder,
 ) -> Result<Vec<Ignored>> {
     let tokens = lexer::tokenize(text)?;
     let mut parser = parser::Parser::new(text, &tokens, profile);
-    parser.document(sink)?;
+    parser.document(builder)?;
     Ok(parser.ignored)
 }
 

@@ -1,9 +1,9 @@
-//! Wire structs to Sink events.
+//! Wire structs to document-builder events.
 
 use indexmap::IndexMap;
 
 use super::wire::{JsonDocument, JsonRecord, JsonSection, JsonValue};
-use crate::sink::Sink;
+use crate::sink::DocumentBuilder;
 use crate::value::trim_xsd_space;
 use crate::well_known::XSD_DATETIME;
 use crate::{
@@ -29,9 +29,9 @@ fn namespaces(prefix: &IndexMap<String, String>) -> Result<Namespaces> {
     Ok(ns)
 }
 
-pub(super) fn emit(wire: &JsonDocument, sink: &mut impl Sink) -> Result<()> {
+pub(super) fn emit(wire: &JsonDocument, sink: &mut DocumentBuilder) -> Result<()> {
     let doc_ns = namespaces(&wire.prefix)?;
-    sink.start_document(doc_ns.clone())?;
+    sink.start_document(doc_ns.clone());
     emit_sections(&wire.sections, &doc_ns, sink)?;
     for (key, bundle) in &wire.bundle {
         let bundle_ns = namespaces(&bundle.prefix)?;
@@ -43,15 +43,16 @@ pub(super) fn emit(wire: &JsonDocument, sink: &mut impl Sink) -> Result<()> {
         let id = scope.resolve(key)?;
         sink.start_bundle(id, bundle_ns.clone())?;
         emit_sections(&bundle.sections, &scope, sink)?;
-        sink.end_bundle()?;
+        sink.end_bundle();
     }
-    sink.end_document()
+    sink.end_document();
+    Ok(())
 }
 
 fn emit_sections(
     sections: &IndexMap<String, JsonSection>,
     scope: &Namespaces,
-    sink: &mut impl Sink,
+    sink: &mut DocumentBuilder,
 ) -> Result<()> {
     for (section, records) in sections {
         let kind = Kind::from_name(section)
@@ -60,7 +61,7 @@ fn emit_sections(
             let id = record_id(kind, key, scope)?;
             for body in group.as_slice() {
                 for record in records_from(kind, id.as_ref(), body, scope)? {
-                    sink.record(record)?;
+                    sink.record(record);
                 }
             }
         }

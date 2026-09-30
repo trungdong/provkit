@@ -1,7 +1,7 @@
 //! Recursive-descent parser for PROV-N (Recommendation section 3).
 //!
 //! One method per production. Names resolve through [`Namespaces`], records are
-//! built by [`Record::from_parts`], and every event goes to a [`Sink`].
+//! built by [`Record::from_parts`], and every event goes to a [`DocumentBuilder`].
 //!
 //! Every error carries a position. A grammar error is [`Error::Syntax`], and
 //! an error from the name, value or record layer is wrapped by [`at`].
@@ -11,7 +11,7 @@
 
 use super::lexer::{Token, TokenKind};
 use super::{Ignored, Profile};
-use crate::sink::Sink;
+use crate::sink::DocumentBuilder;
 use crate::well_known::{PROV, XSD};
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
@@ -203,10 +203,10 @@ impl<'t> Parser<'t> {
 
     // document ::= "document" namespaceDeclarations? (expression | bundle)* "endDocument"
 
-    pub(super) fn document(&mut self, sink: &mut impl Sink) -> Result<()> {
+    pub(super) fn document(&mut self, sink: &mut DocumentBuilder) -> Result<()> {
         self.keyword("document")?;
         self.document_ns = self.namespace_declarations()?;
-        sink.start_document(self.document_ns.clone())?;
+        sink.start_document(self.document_ns.clone());
         let mut after_bundle = false;
         while !self.is_keyword("endDocument") {
             if self.peek().kind == TokenKind::Eof {
@@ -234,7 +234,8 @@ impl<'t> Parser<'t> {
         if self.peek().kind != TokenKind::Eof {
             return Err(self.expected("end of input"));
         }
-        sink.end_document()
+        sink.end_document();
+        Ok(())
     }
 
     // namespaceDeclarations ::= (defaultNamespaceDeclaration | namespaceDeclaration)*
@@ -309,7 +310,7 @@ impl<'t> Parser<'t> {
 
     // bundle ::= "bundle" identifier namespaceDeclarations? expression* "endBundle"
 
-    fn bundle(&mut self, sink: &mut impl Sink) -> Result<()> {
+    fn bundle(&mut self, sink: &mut DocumentBuilder) -> Result<()> {
         self.bump();
         let id = self.identifier("a bundle identifier")?;
         let ns = self.namespace_declarations()?;
@@ -328,7 +329,8 @@ impl<'t> Parser<'t> {
         }
         self.bump();
         self.bundle_names = None;
-        sink.end_bundle()
+        sink.end_bundle();
+        Ok(())
     }
 
     /// One statement: a PROV expression, sent to `sink` as a record, or an
@@ -336,7 +338,7 @@ impl<'t> Parser<'t> {
     /// with a prefix starts an extensibility expression (section 5), except
     /// `prov:mentionOf` followed by the shape of a mention; a bare unknown
     /// keyword is a syntax error.
-    fn statement(&mut self, sink: &mut impl Sink) -> Result<()> {
+    fn statement(&mut self, sink: &mut DocumentBuilder) -> Result<()> {
         let is_extension = match &self.peek().kind {
             TokenKind::Name { prefix, .. } if prefix.is_empty() => false,
             TokenKind::Name { prefix, local } => {
@@ -347,8 +349,8 @@ impl<'t> Parser<'t> {
         if is_extension {
             self.extensibility_expression()
         } else {
-            let record = self.expression()?;
-            sink.record(record)
+            sink.record(self.expression()?);
+            Ok(())
         }
     }
 

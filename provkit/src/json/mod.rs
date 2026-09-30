@@ -6,7 +6,7 @@ mod write;
 
 pub use write::{to_string, write};
 
-use crate::sink::{DocumentBuilder, Sink};
+use crate::sink::DocumentBuilder;
 use crate::{Document, Result, strip_bom};
 
 /// Read a PROV-JSON document.
@@ -24,11 +24,11 @@ pub fn read(text: &str) -> Result<Document> {
     Ok(builder.finish())
 }
 
-/// Read PROV-JSON text, sending events to `sink`. On an error the sink has
-/// already received the events that came before it.
-pub(crate) fn read_into(text: &str, sink: &mut impl Sink) -> Result<()> {
+/// Read PROV-JSON text, sending events to `builder`. On an error the builder
+/// has already received the events that came before it.
+pub(crate) fn read_into(text: &str, builder: &mut DocumentBuilder) -> Result<()> {
     let wire: wire::JsonDocument = serde_json::from_str(text)?;
-    read::emit(&wire, sink)
+    read::emit(&wire, builder)
 }
 
 #[cfg(test)]

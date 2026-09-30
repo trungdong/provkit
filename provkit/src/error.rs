@@ -3,6 +3,11 @@
 use crate::{Kind, QName};
 
 /// Every failure the crate can report.
+///
+/// A variant is feature-gated only when its payload type comes from an
+/// optional dependency: [`Error::Json`] holds a `serde_json::Error`. Every
+/// other variant, including the ones only one reader or writer produces,
+/// exists under every feature set.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
@@ -29,7 +34,6 @@ pub enum Error {
         error: Box<Error>,
     },
     /// PROV-JSON that is valid JSON but not a PROV document.
-    #[cfg(feature = "json")]
     #[error("PROV-JSON: {message}")]
     JsonStructure {
         /// What was wrong.
