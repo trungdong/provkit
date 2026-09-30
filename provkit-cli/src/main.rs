@@ -287,7 +287,7 @@ fn statement_line(record: &Record, namespaces: &Namespaces) -> String {
     };
     format!(
         "{}({}) {UNWRITABLE}",
-        record.kind().provn_keyword(),
+        record.kind().name(),
         parts.join(separator)
     )
 }

@@ -6,9 +6,7 @@ use std::collections::HashMap;
 use indexmap::IndexMap;
 
 use crate::document::merged_bundles;
-use crate::{
-    Attributes, Bundle, Document, Error, Formal, FormalAttr, FormalRef, Kind, QName, Record, Result,
-};
+use crate::{Attributes, Bundle, Document, Error, Formal, FormalAttr, Kind, QName, Record, Result};
 
 impl Document {
     /// A copy of the document in which records sharing an identifier and a
@@ -118,8 +116,8 @@ fn check_kinds(id: &QName, kinds: impl Iterator<Item = Kind>) -> Result<()> {
                     id: id.clone(),
                     reason: format!(
                         "{} and {} cannot share an identifier",
-                        other.json_key(),
-                        kind.json_key()
+                        other.name(),
+                        kind.name()
                     ),
                 });
             }
@@ -135,13 +133,10 @@ fn merge(kind: Kind, id: &QName, members: &[&Record]) -> Result<Record> {
     for &attr in kind.formals() {
         let mut chosen: Option<Formal> = None;
         for record in members {
-            let Some((_, value)) = record.formals().into_iter().find(|(a, _)| *a == attr) else {
+            let Some(value) = record.formal(attr) else {
                 continue;
             };
-            let value = match value {
-                FormalRef::Name(q) => Formal::Name(q.clone()),
-                FormalRef::Time(t) => Formal::Time(t.clone()),
-            };
+            let value = value.to_owned();
             match &chosen {
                 None => chosen = Some(value),
                 Some(existing) if *existing == value => {}

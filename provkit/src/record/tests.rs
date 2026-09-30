@@ -11,32 +11,23 @@ fn t() -> DateTime {
 /// A value for `attr` whose text names the formal, so a swapped field shows.
 fn formal_for(attr: FormalAttr) -> Formal {
     if attr.is_time() {
-        let minute = u8::try_from(ALL_FORMALS.iter().position(|f| *f == attr).unwrap()).unwrap();
+        let position = FormalAttr::ALL.iter().position(|f| *f == attr).unwrap();
+        let minute = u8::try_from(position).unwrap();
         Formal::Time(DateTime::new(2011, 11, 16, 16, minute, 0, 0, Some(0)).unwrap())
     } else {
         Formal::Name(q(attr.local_name()))
     }
 }
 
-fn owned(r: FormalRef<'_>) -> Formal {
-    match r {
-        FormalRef::Name(q) => Formal::Name(q.clone()),
-        FormalRef::Time(t) => Formal::Time(t.clone()),
-    }
-}
-
 #[test]
 fn tables() {
     assert_eq!(Kind::ALL.len(), 18);
-    assert_eq!(
-        Kind::from_json_key("wasGeneratedBy"),
-        Some(Kind::Generation)
-    );
-    assert_eq!(Kind::from_json_key("wasGenerated"), None);
-    assert_eq!(Kind::Entity.json_key(), "entity");
-    assert_eq!(Kind::Generation.json_key(), "wasGeneratedBy");
-    assert_eq!(Kind::Generation.provn_keyword(), "wasGeneratedBy");
-    assert_eq!(Kind::Mention.provn_keyword(), "mentionOf");
+    assert_eq!(Kind::from_name("wasGeneratedBy"), Some(Kind::Generation));
+    assert_eq!(Kind::from_name("wasGenerated"), None);
+    assert_eq!(Kind::from_name("Generation"), None);
+    assert_eq!(Kind::Entity.name(), "entity");
+    assert_eq!(Kind::Generation.name(), "wasGeneratedBy");
+    assert_eq!(Kind::Mention.name(), "mentionOf");
     assert_eq!(
         Kind::Generation.formals(),
         &[FormalAttr::Entity, FormalAttr::Activity, FormalAttr::Time]
@@ -51,15 +42,59 @@ fn tables() {
 }
 
 #[test]
-fn keys_and_local_names_round_trip() {
-    for kind in Kind::ALL {
-        assert_eq!(Kind::from_json_key(kind.json_key()), Some(kind));
+fn names_and_local_names_round_trip() {
+    for &kind in Kind::ALL {
+        assert_eq!(Kind::from_name(kind.name()), Some(kind));
     }
-    for attr in ALL_FORMALS {
+    assert_eq!(FormalAttr::ALL.len(), 26);
+    for &attr in FormalAttr::ALL {
         assert_eq!(FormalAttr::from_local_name(attr.local_name()), Some(attr));
     }
-    let times: Vec<_> = ALL_FORMALS.into_iter().filter(|f| f.is_time()).collect();
-    assert_eq!(times, [F::Time, F::StartTime, F::EndTime]);
+    let times: Vec<_> = FormalAttr::ALL.iter().filter(|f| f.is_time()).collect();
+    assert_eq!(times, [&F::Time, &F::StartTime, &F::EndTime]);
+}
+
+/// Three rows of the table against PROV-DM and the PROV-N grammar, spelt out
+/// by hand: the keyword, the shape, the formals in order and, for PROV-N, the
+/// argument counts.
+#[test]
+fn table_rows_match_prov_dm() {
+    let row = |kind: Kind, name: &str, is_element: bool, formals: &[F], arities: &[usize]| {
+        assert_eq!(kind.name(), name);
+        assert_eq!(kind.is_element(), is_element, "{name}");
+        assert_eq!(kind.formals(), formals, "{name}");
+        #[cfg(feature = "provn")]
+        assert_eq!(kind.arities(), arities, "{name}");
+        #[cfg(not(feature = "provn"))]
+        let _ = arities;
+    };
+    row(
+        Kind::Activity,
+        "activity",
+        true,
+        &[F::StartTime, F::EndTime],
+        &[0, 2],
+    );
+    row(
+        Kind::Derivation,
+        "wasDerivedFrom",
+        false,
+        &[
+            F::GeneratedEntity,
+            F::UsedEntity,
+            F::Activity,
+            F::Generation,
+            F::Usage,
+        ],
+        &[2, 5],
+    );
+    row(
+        Kind::Delegation,
+        "actedOnBehalfOf",
+        false,
+        &[F::Delegate, F::Responsible, F::Activity],
+        &[2, 3],
+    );
 }
 
 #[test]
@@ -132,7 +167,7 @@ fn from_parts_builds_a_generation() {
 
 #[test]
 fn from_parts_builds_every_kind_empty() {
-    for kind in Kind::ALL {
+    for &kind in Kind::ALL {
         let id = kind.is_element().then(|| q("x"));
         let r = Record::from_parts(kind, id.clone(), vec![], Attributes::new()).unwrap();
         assert_eq!(r.kind(), kind);
@@ -144,7 +179,7 @@ fn from_parts_builds_every_kind_empty() {
 
 #[test]
 fn formals_round_trip_through_from_parts_for_every_kind() {
-    for kind in Kind::ALL {
+    for &kind in Kind::ALL {
         // Given in reverse, so table order in the output is not an echo of the input.
         let parts: Vec<_> = kind
             .formals()
@@ -163,13 +198,17 @@ fn formals_round_trip_through_from_parts_for_every_kind() {
         let attrs: Vec<_> = formals.iter().map(|(a, _)| *a).collect();
         assert_eq!(attrs, kind.formals(), "{kind:?} order");
         for (a, v) in &formals {
-            assert_eq!(owned(*v), formal_for(*a), "{kind:?} {a:?}");
+            assert_eq!(v.to_owned(), formal_for(*a), "{kind:?} {a:?}");
+            assert_eq!(r.formal(*a), Some(*v), "{kind:?} {a:?}");
         }
 
         let rebuilt = Record::from_parts(
             kind,
             r.id().cloned(),
-            formals.into_iter().map(|(a, v)| (a, owned(v))).collect(),
+            formals
+                .into_iter()
+                .map(|(a, v)| (a, v.to_owned()))
+                .collect(),
             r.attributes().clone(),
         )
         .unwrap();
@@ -272,7 +311,7 @@ fn records_compare_and_hash_by_value() {
         None,
         r.formals()
             .into_iter()
-            .map(|(a, v)| (a, owned(v)))
+            .map(|(a, v)| (a, v.to_owned()))
             .collect(),
         Attributes::new(),
     )
@@ -282,9 +321,77 @@ fn records_compare_and_hash_by_value() {
 
 #[test]
 fn attributes_mut_edits_every_variant() {
-    for kind in Kind::ALL {
+    for &kind in Kind::ALL {
         let mut r = Record::from_parts(kind, Some(q("x")), vec![], Attributes::new()).unwrap();
         assert!(r.attributes_mut().insert(q("label"), Value::from("x")));
         assert_eq!(r.attributes().iter().count(), 1, "{kind:?}");
     }
+}
+
+#[test]
+fn formal_reads_one_value() {
+    let r = Record::from_parts(
+        Kind::Generation,
+        None,
+        vec![
+            (FormalAttr::Entity, Formal::Name(q("e1"))),
+            (FormalAttr::Time, Formal::Time(t())),
+        ],
+        Attributes::new(),
+    )
+    .unwrap();
+    assert_eq!(
+        r.formal(FormalAttr::Entity),
+        Some(FormalRef::Name(&q("e1")))
+    );
+    assert_eq!(r.formal(FormalAttr::Time), Some(FormalRef::Time(&t())));
+    // A formal of the kind that is absent, and a formal of another kind.
+    assert_eq!(r.formal(FormalAttr::Activity), None);
+    assert_eq!(r.formal(FormalAttr::Plan), None);
+    // Every formal is absent from a record of a kind that has none.
+    let e = crate::test_util::entity("e");
+    assert!(FormalAttr::ALL.iter().all(|&a| e.formal(a).is_none()));
+}
+
+#[test]
+fn formal_ref_to_owned_copies_the_value() {
+    let (name, time) = (q("e1"), t());
+    assert_eq!(FormalRef::Name(&name).to_owned(), Formal::Name(q("e1")));
+    assert_eq!(FormalRef::Time(&time).to_owned(), Formal::Time(t()));
+}
+
+#[cfg(any(feature = "json", feature = "provn"))]
+#[test]
+fn check_attributes_rejects_a_hand_built_own_formal() {
+    let prov = |l: &str| QName::new(PROV, l);
+    let usage = |name: QName| {
+        let mut attributes = Attributes::new();
+        attributes.insert(name, Value::QName(q("x")));
+        Record::Usage(Usage {
+            id: None,
+            activity: Some(q("a")),
+            entity: None,
+            time: None,
+            attributes,
+        })
+    };
+    let e = usage(prov("entity")).check_attributes().unwrap_err();
+    assert!(
+        matches!(
+            e,
+            Error::InvalidRecord {
+                kind: Kind::Usage,
+                ..
+            }
+        ),
+        "{e:?}"
+    );
+    // The text is the one `Record::from_parts` gives.
+    assert_eq!(
+        e.to_string(),
+        "used: prov:entity is given as an attribute; \
+         its value belongs in the positional argument"
+    );
+    // A formal of another kind is a plain attribute.
+    assert!(usage(prov("plan")).check_attributes().is_ok());
 }

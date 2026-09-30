@@ -11,6 +11,14 @@ follows [Semantic Versioning](https://semver.org/).
 - `provkit` library:
   - PROV-DM model with a `Record` enum and a struct per PROV-DM type.
   - Every relation formal attribute is optional.
+  - `Kind`, the type of a record. `Kind::name` is both the PROV-N keyword and
+    the PROV-JSON key, `Kind::from_name` is its inverse, and `Kind::ALL` lists
+    the eighteen kinds in PROV-DM order.
+  - `Record::formal` reads one formal attribute and `Record::formals` lists
+    those present. `FormalRef::to_owned` gives an owned `Formal`, and
+    `FormalAttr::ALL` lists every formal attribute.
+  - `Kind` and `Record` are `#[non_exhaustive]`, so a `match` on either in
+    another crate needs a wildcard arm.
   - Strict name resolution with `QName` and `Namespaces`.
   - `Value` with plain, language-tagged, name, `dateTime` and typed literals.
   - PROV-JSON read and write (`json` module).

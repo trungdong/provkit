@@ -53,7 +53,7 @@ fn emit_sections(
     sink: &mut impl Sink,
 ) -> Result<()> {
     for (section, records) in sections {
-        let kind = Kind::from_json_key(section)
+        let kind = Kind::from_name(section)
             .ok_or_else(|| structure(format!("unknown record kind `{section}`")))?;
         for (key, group) in records {
             let id = record_id(kind, key, scope)?;
@@ -73,7 +73,7 @@ fn record_id(kind: Kind, key: &str, scope: &Namespaces) -> Result<Option<QName>>
         if kind.is_element() {
             return Err(structure(format!(
                 "{} `{key}` needs a real identifier",
-                kind.json_key()
+                kind.name()
             )));
         }
         return Ok(None);

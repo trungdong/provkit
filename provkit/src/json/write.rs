@@ -6,7 +6,6 @@ use indexmap::IndexMap;
 
 use super::wire::{JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany};
 use crate::document::merged_bundles;
-use crate::record::{formal_attribute_error, formal_named};
 use crate::well_known::{PROV_INTERNATIONALIZED_STRING, XSD_DATETIME, XSD_QNAME};
 use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
 
@@ -142,7 +141,7 @@ fn sections(
         })
         .collect();
     let mut out = IndexMap::new();
-    for kind in Kind::ALL {
+    for &kind in Kind::ALL {
         let mut section: IndexMap<String, Vec<JsonRecord>> = IndexMap::new();
         for (record, blank) in records
             .iter()
@@ -173,7 +172,7 @@ fn sections(
                 (id, group)
             })
             .collect();
-        out.insert(kind.json_key().to_owned(), section);
+        out.insert(kind.name().to_owned(), section);
     }
     Ok(out)
 }
@@ -181,14 +180,7 @@ fn sections(
 /// A record's body. An attribute spelling one of the record's own formals
 /// would overwrite or pose as that formal, so it is an error.
 fn record_wire(record: &Record, table: &mut Namespaces) -> Result<JsonRecord> {
-    let kind = record.kind();
-    if let Some(attr) = record
-        .attributes()
-        .iter()
-        .find_map(|(n, _)| formal_named(kind, n))
-    {
-        return Err(formal_attribute_error(kind, attr));
-    }
+    record.check_attributes()?;
     let mut body = JsonRecord::new();
     for (attr, value) in record.formals() {
         let text = match value {
@@ -404,8 +396,8 @@ mod tests {
             id: ex("e"),
             attributes: a,
         }));
-        for kind in Kind::ALL {
-            let id = Some(ex(kind.json_key()));
+        for &kind in Kind::ALL {
+            let id = Some(ex(kind.name()));
             d.records
                 .push(Record::from_parts(kind, id, vec![], Attributes::new()).unwrap());
         }

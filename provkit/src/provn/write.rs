@@ -6,7 +6,6 @@ use std::io;
 use super::lexer::{Token, TokenKind, tokenize};
 use crate::document::merged_bundles;
 use crate::pn;
-use crate::record::{formal_attribute_error, formal_named};
 use crate::well_known::{XSD_DATETIME, XSD_INT};
 use crate::{
     Bundle, Document, Error, FormalAttr, FormalRef, Kind, Namespaces, QName, Record, Result, Value,
@@ -187,19 +186,12 @@ fn write_bundle(bundle: &Bundle, outer: &Namespaces, s: &mut String) -> Result<(
 }
 
 fn expression(r: &Record, names: &mut Namespaces, s: &mut String) -> Result<()> {
-    let kind = r.kind();
     // The reader would reject such an attribute, so the writer does too.
-    if let Some(attr) = r
-        .attributes()
-        .iter()
-        .find_map(|(n, _)| formal_named(kind, n))
-    {
-        return Err(formal_attribute_error(kind, attr));
-    }
-    let formals = r.formals();
+    r.check_attributes()?;
+    let kind = r.kind();
     let mut parts: Vec<String> = Vec::new();
 
-    s.push_str(kind.provn_keyword());
+    s.push_str(kind.name());
     s.push('(');
     if kind.is_element() {
         // Elements never take `-` for the identifier.
@@ -207,17 +199,17 @@ fn expression(r: &Record, names: &mut Namespaces, s: &mut String) -> Result<()> 
             parts.push(name(id, names)?);
         }
         // An activity writes both times or neither.
-        if kind == Kind::Activity && !formals.is_empty() {
-            parts.push(formal(&formals, FormalAttr::StartTime, names)?);
-            parts.push(formal(&formals, FormalAttr::EndTime, names)?);
+        if kind == Kind::Activity && !r.formals().is_empty() {
+            parts.push(formal(r, FormalAttr::StartTime, names)?);
+            parts.push(formal(r, FormalAttr::EndTime, names)?);
         }
     } else {
         // A relation without an identifier omits `id;` altogether.
         if let Some(id) = r.id() {
             let _ = write!(s, "{}; ", name(id, names)?);
         }
-        for attr in kind.formals() {
-            parts.push(formal(&formals, *attr, names)?);
+        for &attr in kind.formals() {
+            parts.push(formal(r, attr, names)?);
         }
     }
     s.push_str(&parts.join(", "));
@@ -240,15 +232,11 @@ fn expression(r: &Record, names: &mut Namespaces, s: &mut String) -> Result<()> 
     Ok(())
 }
 
-/// The formal `attr` of a record, or `-` when it is absent.
-fn formal(
-    formals: &[(FormalAttr, FormalRef<'_>)],
-    attr: FormalAttr,
-    names: &mut Namespaces,
-) -> Result<String> {
-    Ok(match formals.iter().find(|(a, _)| *a == attr) {
-        Some((_, FormalRef::Name(q))) => name(q, names)?,
-        Some((_, FormalRef::Time(t))) => t.to_string(),
+/// The formal `attr` of `record`, or `-` when it is absent.
+fn formal(record: &Record, attr: FormalAttr, names: &mut Namespaces) -> Result<String> {
+    Ok(match record.formal(attr) {
+        Some(FormalRef::Name(q)) => name(q, names)?,
+        Some(FormalRef::Time(t)) => t.to_string(),
         None => "-".to_owned(),
     })
 }

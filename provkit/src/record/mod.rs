@@ -3,47 +3,6 @@
 use crate::well_known::PROV;
 use crate::{Attributes, DateTime, Error, QName, Result};
 
-/// The PROV-DM type of a record.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Kind {
-    /// `entity`.
-    Entity,
-    /// `activity`.
-    Activity,
-    /// `agent`.
-    Agent,
-    /// `wasGeneratedBy`.
-    Generation,
-    /// `used`.
-    Usage,
-    /// `wasInformedBy`.
-    Communication,
-    /// `wasStartedBy`.
-    Start,
-    /// `wasEndedBy`.
-    End,
-    /// `wasInvalidatedBy`.
-    Invalidation,
-    /// `wasDerivedFrom`.
-    Derivation,
-    /// `wasAttributedTo`.
-    Attribution,
-    /// `wasAssociatedWith`.
-    Association,
-    /// `actedOnBehalfOf`.
-    Delegation,
-    /// `wasInfluencedBy`.
-    Influence,
-    /// `specializationOf`.
-    Specialization,
-    /// `alternateOf`.
-    Alternate,
-    /// `mentionOf`.
-    Mention,
-    /// `hadMember`.
-    Membership,
-}
-
 /// A formal attribute name (PROV-DM's positional arguments).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum FormalAttr {
@@ -103,101 +62,37 @@ pub enum FormalAttr {
 
 use FormalAttr as F;
 
-impl Kind {
-    /// Every kind, elements first, then relations in PROV-DM order.
-    pub const ALL: [Kind; 18] = [
-        Kind::Entity,
-        Kind::Activity,
-        Kind::Agent,
-        Kind::Generation,
-        Kind::Usage,
-        Kind::Communication,
-        Kind::Start,
-        Kind::End,
-        Kind::Invalidation,
-        Kind::Derivation,
-        Kind::Attribution,
-        Kind::Association,
-        Kind::Delegation,
-        Kind::Influence,
-        Kind::Specialization,
-        Kind::Alternate,
-        Kind::Mention,
-        Kind::Membership,
+impl FormalAttr {
+    /// Every formal attribute.
+    pub const ALL: &'static [FormalAttr] = &[
+        F::Entity,
+        F::Activity,
+        F::Agent,
+        F::Plan,
+        F::Trigger,
+        F::Starter,
+        F::Ender,
+        F::Informed,
+        F::Informant,
+        F::Delegate,
+        F::Responsible,
+        F::Influencee,
+        F::Influencer,
+        F::GeneratedEntity,
+        F::UsedEntity,
+        F::Generation,
+        F::Usage,
+        F::SpecificEntity,
+        F::GeneralEntity,
+        F::Alternate1,
+        F::Alternate2,
+        F::Collection,
+        F::Bundle,
+        F::Time,
+        F::StartTime,
+        F::EndTime,
     ];
 
-    /// The PROV-JSON section key, which is also the PROV-N keyword.
-    pub fn json_key(self) -> &'static str {
-        match self {
-            Kind::Entity => "entity",
-            Kind::Activity => "activity",
-            Kind::Agent => "agent",
-            Kind::Generation => "wasGeneratedBy",
-            Kind::Usage => "used",
-            Kind::Communication => "wasInformedBy",
-            Kind::Start => "wasStartedBy",
-            Kind::End => "wasEndedBy",
-            Kind::Invalidation => "wasInvalidatedBy",
-            Kind::Derivation => "wasDerivedFrom",
-            Kind::Attribution => "wasAttributedTo",
-            Kind::Association => "wasAssociatedWith",
-            Kind::Delegation => "actedOnBehalfOf",
-            Kind::Influence => "wasInfluencedBy",
-            Kind::Specialization => "specializationOf",
-            Kind::Alternate => "alternateOf",
-            Kind::Mention => "mentionOf",
-            Kind::Membership => "hadMember",
-        }
-    }
-
-    /// The PROV-N statement keyword (the same text as the JSON key).
-    pub fn provn_keyword(self) -> &'static str {
-        self.json_key()
-    }
-
-    /// The kind for a JSON key or PROV-N keyword.
-    pub fn from_json_key(key: &str) -> Option<Kind> {
-        Kind::ALL.into_iter().find(|k| k.json_key() == key)
-    }
-
-    /// Entity, activity and agent; everything else is a relation.
-    pub fn is_element(self) -> bool {
-        matches!(self, Kind::Entity | Kind::Activity | Kind::Agent)
-    }
-
-    /// The kind's formal attributes, in PROV-DM order.
-    // One row per relation mirrors the PROV-DM table, even where rows coincide.
-    #[allow(clippy::match_same_arms)]
-    pub fn formals(self) -> &'static [FormalAttr] {
-        match self {
-            Kind::Entity | Kind::Agent => &[],
-            Kind::Activity => &[F::StartTime, F::EndTime],
-            Kind::Generation => &[F::Entity, F::Activity, F::Time],
-            Kind::Usage => &[F::Activity, F::Entity, F::Time],
-            Kind::Communication => &[F::Informed, F::Informant],
-            Kind::Start => &[F::Activity, F::Trigger, F::Starter, F::Time],
-            Kind::End => &[F::Activity, F::Trigger, F::Ender, F::Time],
-            Kind::Invalidation => &[F::Entity, F::Activity, F::Time],
-            Kind::Derivation => &[
-                F::GeneratedEntity,
-                F::UsedEntity,
-                F::Activity,
-                F::Generation,
-                F::Usage,
-            ],
-            Kind::Attribution => &[F::Entity, F::Agent],
-            Kind::Association => &[F::Activity, F::Agent, F::Plan],
-            Kind::Delegation => &[F::Delegate, F::Responsible, F::Activity],
-            Kind::Influence => &[F::Influencee, F::Influencer],
-            Kind::Specialization => &[F::SpecificEntity, F::GeneralEntity],
-            Kind::Alternate => &[F::Alternate1, F::Alternate2],
-            Kind::Mention => &[F::SpecificEntity, F::GeneralEntity, F::Bundle],
-            Kind::Membership => &[F::Collection, F::Entity],
-        }
-    }
-}
-
-impl FormalAttr {
     /// The local name under `prov:` (`entity`, `generatedEntity`, `startTime`, ...).
     pub fn local_name(self) -> &'static str {
         match self {
@@ -232,7 +127,10 @@ impl FormalAttr {
 
     /// The formal for a `prov:` local name.
     pub fn from_local_name(name: &str) -> Option<FormalAttr> {
-        ALL_FORMALS.into_iter().find(|f| f.local_name() == name)
+        FormalAttr::ALL
+            .iter()
+            .copied()
+            .find(|f| f.local_name() == name)
     }
 
     /// Whether the value is a dateTime rather than a name.
@@ -240,55 +138,6 @@ impl FormalAttr {
         matches!(self, F::Time | F::StartTime | F::EndTime)
     }
 }
-
-/// The formal of `kind` that `name` spells, when `name` is the IRI of one of
-/// the kind's formals (the PROV namespace plus the formal's local name).
-pub(crate) fn formal_named(kind: Kind, name: &QName) -> Option<FormalAttr> {
-    kind.formals()
-        .iter()
-        .copied()
-        .find(|f| name.is(PROV, f.local_name()))
-}
-
-/// The error for an attribute that spells one of the record's own formals.
-pub(crate) fn formal_attribute_error(kind: Kind, attr: FormalAttr) -> Error {
-    invalid(
-        kind,
-        format!(
-            "prov:{} is given as an attribute; its value belongs in the positional argument",
-            attr.local_name()
-        ),
-    )
-}
-
-const ALL_FORMALS: [FormalAttr; 26] = [
-    F::Entity,
-    F::Activity,
-    F::Agent,
-    F::Plan,
-    F::Trigger,
-    F::Starter,
-    F::Ender,
-    F::Informed,
-    F::Informant,
-    F::Delegate,
-    F::Responsible,
-    F::Influencee,
-    F::Influencer,
-    F::GeneratedEntity,
-    F::UsedEntity,
-    F::Generation,
-    F::Usage,
-    F::SpecificEntity,
-    F::GeneralEntity,
-    F::Alternate1,
-    F::Alternate2,
-    F::Collection,
-    F::Bundle,
-    F::Time,
-    F::StartTime,
-    F::EndTime,
-];
 
 /// An owned formal attribute value, for [`Record::from_parts`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -308,297 +157,440 @@ pub enum FormalRef<'a> {
     Time(&'a DateTime),
 }
 
-/// An entity.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Entity {
-    /// The identifier.
-    pub id: QName,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
+impl FormalRef<'_> {
+    /// An owned copy.
+    pub fn to_owned(&self) -> Formal {
+        match *self {
+            FormalRef::Name(q) => Formal::Name(q.clone()),
+            FormalRef::Time(t) => Formal::Time(t.clone()),
+        }
+    }
 }
 
-/// An activity.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Activity {
-    /// The identifier.
-    pub id: QName,
-    /// `prov:startTime`.
-    pub start_time: Option<DateTime>,
-    /// `prov:endTime`.
-    pub end_time: Option<DateTime>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
+/// A type that a formal's field holds, which is [`QName`] for a name and
+/// [`DateTime`] for a time.
+trait FormalValue {
+    /// The value that `formal` holds. [`Formals::new`] has checked its type.
+    fn from_formal(formal: Formal) -> Self;
+
+    /// The value as a borrowed formal.
+    fn as_formal(&self) -> FormalRef<'_>;
 }
 
-/// An agent.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Agent {
-    /// The identifier.
-    pub id: QName,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
+impl FormalValue for QName {
+    fn from_formal(formal: Formal) -> Self {
+        match formal {
+            Formal::Name(q) => q,
+            Formal::Time(_) => unreachable!("checked in Formals::new"),
+        }
+    }
+
+    fn as_formal(&self) -> FormalRef<'_> {
+        FormalRef::Name(self)
+    }
 }
 
-/// A generation (`wasGeneratedBy`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Generation {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:entity`.
-    pub entity: Option<QName>,
-    /// `prov:activity`.
-    pub activity: Option<QName>,
-    /// `prov:time`.
-    pub time: Option<DateTime>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
+impl FormalValue for DateTime {
+    fn from_formal(formal: Formal) -> Self {
+        match formal {
+            Formal::Time(t) => t,
+            Formal::Name(_) => unreachable!("checked in Formals::new"),
+        }
+    }
+
+    fn as_formal(&self) -> FormalRef<'_> {
+        FormalRef::Time(self)
+    }
 }
 
-/// A usage (`used`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Usage {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:activity`.
-    pub activity: Option<QName>,
-    /// `prov:entity`.
-    pub entity: Option<QName>,
-    /// `prov:time`.
-    pub time: Option<DateTime>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
+/// Generates [`Kind`], [`Record`], the struct of each kind and every `match`
+/// over the kinds from one table.
+///
+/// A row is `Variant "keyword" shape [arities] { field: FormalAttr, .. }`,
+/// under the struct's doc line. The shape is `element` or `relation`, and the
+/// arities are the argument counts PROV-N allows after the identifier. Each
+/// field carries its own doc line.
+macro_rules! records {
+    // The identifier is mandatory on an element and optional on a relation.
+    (@is_element element) => { true };
+    (@is_element relation) => { false };
+    (@id_type element) => { QName };
+    (@id_type relation) => { Option<QName> };
+    (@new_id element $kind:ident $id:ident) => {
+        $id.ok_or_else(|| invalid($kind, "needs an identifier".to_owned()))?
+    };
+    (@new_id relation $kind:ident $id:ident) => { $id };
+    (@id element $record:ident) => { Some(&$record.id) };
+    (@id relation $record:ident) => { $record.id.as_ref() };
+
+    // A formal that `FormalAttr::is_time` names holds a time; the rest hold names.
+    (@value_type Time) => { DateTime };
+    (@value_type StartTime) => { DateTime };
+    (@value_type EndTime) => { DateTime };
+    (@value_type $attr:ident) => { QName };
+
+    ($(
+        $(#[$doc:meta])*
+        $name:ident $keyword:literal $shape:ident [$($arity:literal),*] {
+            $($(#[$field_doc:meta])* $field:ident: $attr:ident,)*
+        }
+    )*) => {
+        /// The PROV-DM type of a record.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        #[non_exhaustive]
+        pub enum Kind {
+            $(#[doc = concat!("`", $keyword, "`.")] $name,)*
+        }
+
+        impl Kind {
+            /// Every kind, in PROV-DM order.
+            pub const ALL: &'static [Kind] = &[$(Kind::$name),*];
+
+            /// The kind's name, which is its PROV-N keyword and its PROV-JSON key.
+            pub fn name(self) -> &'static str {
+                match self {
+                    $(Kind::$name => $keyword,)*
+                }
+            }
+
+            /// The kind with that name.
+            pub fn from_name(name: &str) -> Option<Kind> {
+                match name {
+                    $($keyword => Some(Kind::$name),)*
+                    _ => None,
+                }
+            }
+
+            /// Entity, activity and agent; everything else is a relation.
+            pub fn is_element(self) -> bool {
+                match self {
+                    $(Kind::$name => records!(@is_element $shape),)*
+                }
+            }
+
+            /// The kind's formal attributes, in PROV-DM order.
+            pub fn formals(self) -> &'static [FormalAttr] {
+                match self {
+                    $(Kind::$name => &[$(FormalAttr::$attr),*],)*
+                }
+            }
+
+            /// Argument counts PROV-N allows after the identifier.
+            #[cfg(feature = "provn")]
+            pub(crate) fn arities(self) -> &'static [usize] {
+                match self {
+                    $(Kind::$name => &[$($arity),*],)*
+                }
+            }
+        }
+
+        $(
+            $(#[$doc])*
+            #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+            pub struct $name {
+                /// The identifier.
+                pub id: records!(@id_type $shape),
+                $($(#[$field_doc])* pub $field: Option<records!(@value_type $attr)>,)*
+                /// Non-formal attributes.
+                pub attributes: Attributes,
+            }
+        )*
+
+        /// A PROV record of any of the eighteen PROV-DM types.
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        #[non_exhaustive]
+        pub enum Record {
+            $($(#[$doc])* $name($name),)*
+        }
+
+        impl Record {
+            /// The record's kind.
+            pub fn kind(&self) -> Kind {
+                match self {
+                    $(Record::$name(_) => Kind::$name,)*
+                }
+            }
+
+            /// The identifier, if any.
+            pub fn id(&self) -> Option<&QName> {
+                match self {
+                    $(Record::$name(r) => records!(@id $shape r),)*
+                }
+            }
+
+            /// Non-formal attributes.
+            pub fn attributes(&self) -> &Attributes {
+                match self {
+                    $(Record::$name(r) => &r.attributes,)*
+                }
+            }
+
+            /// Non-formal attributes, mutably.
+            pub fn attributes_mut(&mut self) -> &mut Attributes {
+                match self {
+                    $(Record::$name(r) => &mut r.attributes,)*
+                }
+            }
+
+            /// The value of one formal attribute, if present.
+            pub fn formal(&self, attr: FormalAttr) -> Option<FormalRef<'_>> {
+                match (self, attr) {
+                    $($(
+                        (Record::$name(r), FormalAttr::$attr) => {
+                            r.$field.as_ref().map(FormalValue::as_formal)
+                        }
+                    )*)*
+                    _ => None,
+                }
+            }
+
+            /// A record of `kind` from parts that [`Record::from_parts`] has
+            /// checked, apart from the identifier of an element.
+            fn assemble(
+                kind: Kind,
+                identifier: Option<QName>,
+                mut formals: Formals,
+                attributes: Attributes,
+            ) -> Result<Record> {
+                Ok(match kind {
+                    $(Kind::$name => Record::$name($name {
+                        id: records!(@new_id $shape kind identifier),
+                        $($field: formals.take(FormalAttr::$attr),)*
+                        attributes,
+                    }),)*
+                })
+            }
+        }
+    };
 }
 
-/// A communication (`wasInformedBy`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Communication {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:informed`.
-    pub informed: Option<QName>,
-    /// `prov:informant`.
-    pub informant: Option<QName>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// A start (`wasStartedBy`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Start {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:activity`.
-    pub activity: Option<QName>,
-    /// `prov:trigger`.
-    pub trigger: Option<QName>,
-    /// `prov:starter`.
-    pub starter: Option<QName>,
-    /// `prov:time`.
-    pub time: Option<DateTime>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// An end (`wasEndedBy`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct End {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:activity`.
-    pub activity: Option<QName>,
-    /// `prov:trigger`.
-    pub trigger: Option<QName>,
-    /// `prov:ender`.
-    pub ender: Option<QName>,
-    /// `prov:time`.
-    pub time: Option<DateTime>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// An invalidation (`wasInvalidatedBy`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Invalidation {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:entity`.
-    pub entity: Option<QName>,
-    /// `prov:activity`.
-    pub activity: Option<QName>,
-    /// `prov:time`.
-    pub time: Option<DateTime>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// A derivation (`wasDerivedFrom`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Derivation {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:generatedEntity`.
-    pub generated_entity: Option<QName>,
-    /// `prov:usedEntity`.
-    pub used_entity: Option<QName>,
-    /// `prov:activity`.
-    pub activity: Option<QName>,
-    /// `prov:generation`.
-    pub generation: Option<QName>,
-    /// `prov:usage`.
-    pub usage: Option<QName>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// An attribution (`wasAttributedTo`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Attribution {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:entity`.
-    pub entity: Option<QName>,
-    /// `prov:agent`.
-    pub agent: Option<QName>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// An association (`wasAssociatedWith`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Association {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:activity`.
-    pub activity: Option<QName>,
-    /// `prov:agent`.
-    pub agent: Option<QName>,
-    /// `prov:plan`.
-    pub plan: Option<QName>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// A delegation (`actedOnBehalfOf`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Delegation {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:delegate`.
-    pub delegate: Option<QName>,
-    /// `prov:responsible`.
-    pub responsible: Option<QName>,
-    /// `prov:activity`.
-    pub activity: Option<QName>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// An influence (`wasInfluencedBy`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Influence {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:influencee`.
-    pub influencee: Option<QName>,
-    /// `prov:influencer`.
-    pub influencer: Option<QName>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// A specialisation (`specializationOf`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Specialization {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:specificEntity`.
-    pub specific_entity: Option<QName>,
-    /// `prov:generalEntity`.
-    pub general_entity: Option<QName>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// An alternate (`alternateOf`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Alternate {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:alternate1`.
-    pub alternate1: Option<QName>,
-    /// `prov:alternate2`.
-    pub alternate2: Option<QName>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// A mention (`mentionOf`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Mention {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:specificEntity`.
-    pub specific_entity: Option<QName>,
-    /// `prov:generalEntity`.
-    pub general_entity: Option<QName>,
-    /// `prov:bundle`.
-    pub bundle: Option<QName>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// A membership (`hadMember`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Membership {
-    /// The identifier.
-    pub id: Option<QName>,
-    /// `prov:collection`.
-    pub collection: Option<QName>,
-    /// `prov:entity`.
-    pub entity: Option<QName>,
-    /// Non-formal attributes.
-    pub attributes: Attributes,
-}
-
-/// A PROV record of any of the eighteen PROV-DM types.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Record {
+records! {
     /// An entity.
-    Entity(Entity),
+    Entity "entity" element [0] {}
+
     /// An activity.
-    Activity(Activity),
+    Activity "activity" element [0, 2] {
+        /// `prov:startTime`.
+        start_time: StartTime,
+        /// `prov:endTime`.
+        end_time: EndTime,
+    }
+
     /// An agent.
-    Agent(Agent),
-    /// A generation.
-    Generation(Generation),
-    /// A usage.
-    Usage(Usage),
-    /// A communication.
-    Communication(Communication),
-    /// A start.
-    Start(Start),
-    /// An end.
-    End(End),
-    /// An invalidation.
-    Invalidation(Invalidation),
-    /// A derivation.
-    Derivation(Derivation),
-    /// An attribution.
-    Attribution(Attribution),
-    /// An association.
-    Association(Association),
-    /// A delegation.
-    Delegation(Delegation),
-    /// An influence.
-    Influence(Influence),
-    /// A specialisation.
-    Specialization(Specialization),
-    /// An alternate.
-    Alternate(Alternate),
-    /// A mention.
-    Mention(Mention),
-    /// A membership.
-    Membership(Membership),
+    Agent "agent" element [0] {}
+
+    /// A generation (`wasGeneratedBy`).
+    Generation "wasGeneratedBy" relation [1, 3] {
+        /// `prov:entity`.
+        entity: Entity,
+        /// `prov:activity`.
+        activity: Activity,
+        /// `prov:time`.
+        time: Time,
+    }
+
+    /// A usage (`used`).
+    Usage "used" relation [1, 3] {
+        /// `prov:activity`.
+        activity: Activity,
+        /// `prov:entity`.
+        entity: Entity,
+        /// `prov:time`.
+        time: Time,
+    }
+
+    /// A communication (`wasInformedBy`).
+    Communication "wasInformedBy" relation [2] {
+        /// `prov:informed`.
+        informed: Informed,
+        /// `prov:informant`.
+        informant: Informant,
+    }
+
+    /// A start (`wasStartedBy`).
+    Start "wasStartedBy" relation [1, 4] {
+        /// `prov:activity`.
+        activity: Activity,
+        /// `prov:trigger`.
+        trigger: Trigger,
+        /// `prov:starter`.
+        starter: Starter,
+        /// `prov:time`.
+        time: Time,
+    }
+
+    /// An end (`wasEndedBy`).
+    End "wasEndedBy" relation [1, 4] {
+        /// `prov:activity`.
+        activity: Activity,
+        /// `prov:trigger`.
+        trigger: Trigger,
+        /// `prov:ender`.
+        ender: Ender,
+        /// `prov:time`.
+        time: Time,
+    }
+
+    /// An invalidation (`wasInvalidatedBy`).
+    Invalidation "wasInvalidatedBy" relation [1, 3] {
+        /// `prov:entity`.
+        entity: Entity,
+        /// `prov:activity`.
+        activity: Activity,
+        /// `prov:time`.
+        time: Time,
+    }
+
+    /// A derivation (`wasDerivedFrom`).
+    Derivation "wasDerivedFrom" relation [2, 5] {
+        /// `prov:generatedEntity`.
+        generated_entity: GeneratedEntity,
+        /// `prov:usedEntity`.
+        used_entity: UsedEntity,
+        /// `prov:activity`.
+        activity: Activity,
+        /// `prov:generation`.
+        generation: Generation,
+        /// `prov:usage`.
+        usage: Usage,
+    }
+
+    /// An attribution (`wasAttributedTo`).
+    Attribution "wasAttributedTo" relation [2] {
+        /// `prov:entity`.
+        entity: Entity,
+        /// `prov:agent`.
+        agent: Agent,
+    }
+
+    /// An association (`wasAssociatedWith`).
+    Association "wasAssociatedWith" relation [1, 3] {
+        /// `prov:activity`.
+        activity: Activity,
+        /// `prov:agent`.
+        agent: Agent,
+        /// `prov:plan`.
+        plan: Plan,
+    }
+
+    /// A delegation (`actedOnBehalfOf`).
+    Delegation "actedOnBehalfOf" relation [2, 3] {
+        /// `prov:delegate`.
+        delegate: Delegate,
+        /// `prov:responsible`.
+        responsible: Responsible,
+        /// `prov:activity`.
+        activity: Activity,
+    }
+
+    /// An influence (`wasInfluencedBy`).
+    Influence "wasInfluencedBy" relation [2] {
+        /// `prov:influencee`.
+        influencee: Influencee,
+        /// `prov:influencer`.
+        influencer: Influencer,
+    }
+
+    /// A specialisation (`specializationOf`).
+    Specialization "specializationOf" relation [2] {
+        /// `prov:specificEntity`.
+        specific_entity: SpecificEntity,
+        /// `prov:generalEntity`.
+        general_entity: GeneralEntity,
+    }
+
+    /// An alternate (`alternateOf`).
+    Alternate "alternateOf" relation [2] {
+        /// `prov:alternate1`.
+        alternate1: Alternate1,
+        /// `prov:alternate2`.
+        alternate2: Alternate2,
+    }
+
+    /// A mention (`mentionOf`).
+    Mention "mentionOf" relation [3] {
+        /// `prov:specificEntity`.
+        specific_entity: SpecificEntity,
+        /// `prov:generalEntity`.
+        general_entity: GeneralEntity,
+        /// `prov:bundle`.
+        bundle: Bundle,
+    }
+
+    /// A membership (`hadMember`).
+    Membership "hadMember" relation [2] {
+        /// `prov:collection`.
+        collection: Collection,
+        /// `prov:entity`.
+        entity: Entity,
+    }
+}
+
+impl Kind {
+    /// An error if `attributes` holds a name that spells one of this kind's
+    /// formals (`prov:activity` on `wasGeneratedBy`).
+    fn check_attributes(self, attributes: &Attributes) -> Result<()> {
+        let own_formal = attributes
+            .iter()
+            .find_map(|(name, _)| formal_named(self, name));
+        match own_formal {
+            Some(attr) => Err(invalid(
+                self,
+                format!(
+                    "prov:{} is given as an attribute; its value belongs in the positional argument",
+                    attr.local_name()
+                ),
+            )),
+            None => Ok(()),
+        }
+    }
+}
+
+impl Record {
+    /// Build a record of `kind` from its parts. Elements need an identifier;
+    /// formals must belong to the kind, have the right value type, and appear
+    /// at most once. No attribute may be named `prov:` plus the local name of
+    /// one of the kind's formals (`prov:activity` on `wasGeneratedBy`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidRecord`] naming `kind` when the parts break
+    /// one of these rules.
+    pub fn from_parts(
+        kind: Kind,
+        id: Option<QName>,
+        formals: Vec<(FormalAttr, Formal)>,
+        attributes: Attributes,
+    ) -> Result<Record> {
+        let formals = Formals::new(kind, formals)?;
+        kind.check_attributes(&attributes)?;
+        Record::assemble(kind, id, formals, attributes)
+    }
+
+    /// The formal attributes that are present, in table order.
+    pub fn formals(&self) -> Vec<(FormalAttr, FormalRef<'_>)> {
+        let present = |&attr: &FormalAttr| Some((attr, self.formal(attr)?));
+        self.kind().formals().iter().filter_map(present).collect()
+    }
+
+    /// An error if an attribute is named after one of this record's own formals.
+    #[cfg(any(feature = "json", feature = "provn"))]
+    pub(crate) fn check_attributes(&self) -> Result<()> {
+        self.kind().check_attributes(self.attributes())
+    }
+}
+
+/// The formal of `kind` that `name` spells, when `name` is the IRI of one of
+/// the kind's formals (the PROV namespace plus the formal's local name).
+pub(crate) fn formal_named(kind: Kind, name: &QName) -> Option<FormalAttr> {
+    kind.formals()
+        .iter()
+        .copied()
+        .find(|f| name.is(PROV, f.local_name()))
+}
+
+fn invalid(kind: Kind, message: String) -> Error {
+    Error::InvalidRecord { kind, message }
 }
 
 /// Consumes a list of formals, checking each against the kind's table.
@@ -637,369 +629,10 @@ impl Formals {
         Ok(Formals { items })
     }
 
-    fn name(&mut self, attr: FormalAttr) -> Option<QName> {
+    /// The value of `attr`, removed from the list.
+    fn take<T: FormalValue>(&mut self, attr: FormalAttr) -> Option<T> {
         let i = self.items.iter().position(|(a, _)| *a == attr)?;
-        match self.items.remove(i).1 {
-            Formal::Name(q) => Some(q),
-            Formal::Time(_) => unreachable!("checked in Formals::new"),
-        }
-    }
-
-    fn time(&mut self, attr: FormalAttr) -> Option<DateTime> {
-        let i = self.items.iter().position(|(a, _)| *a == attr)?;
-        match self.items.remove(i).1 {
-            Formal::Time(t) => Some(t),
-            Formal::Name(_) => unreachable!("checked in Formals::new"),
-        }
-    }
-}
-
-fn invalid(kind: Kind, message: String) -> Error {
-    Error::InvalidRecord { kind, message }
-}
-
-/// Collects present formals for [`Record::formals`].
-struct FormalList<'a>(Vec<(FormalAttr, FormalRef<'a>)>);
-
-impl<'a> FormalList<'a> {
-    fn name(&mut self, attr: FormalAttr, value: Option<&'a QName>) {
-        if let Some(q) = value {
-            self.0.push((attr, FormalRef::Name(q)));
-        }
-    }
-
-    fn time(&mut self, attr: FormalAttr, value: Option<&'a DateTime>) {
-        if let Some(t) = value {
-            self.0.push((attr, FormalRef::Time(t)));
-        }
-    }
-}
-
-impl Record {
-    /// Build a record of `kind` from its parts. Elements need an identifier;
-    /// formals must belong to the kind, have the right value type, and appear
-    /// at most once. No attribute may be named `prov:` plus the local name of
-    /// one of the kind's formals (`prov:activity` on `wasGeneratedBy`).
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Error::InvalidRecord`] naming `kind` when the parts break
-    /// one of these rules.
-    // One arm per kind; splitting it would scatter the table.
-    #[allow(clippy::too_many_lines)]
-    pub fn from_parts(
-        kind: Kind,
-        id: Option<QName>,
-        formals: Vec<(FormalAttr, Formal)>,
-        attributes: Attributes,
-    ) -> Result<Record> {
-        let mut f = Formals::new(kind, formals)?;
-        if let Some(attr) = attributes.iter().find_map(|(n, _)| formal_named(kind, n)) {
-            return Err(formal_attribute_error(kind, attr));
-        }
-        let element_id =
-            |id: Option<QName>| id.ok_or_else(|| invalid(kind, "needs an identifier".to_owned()));
-        Ok(match kind {
-            Kind::Entity => Record::Entity(Entity {
-                id: element_id(id)?,
-                attributes,
-            }),
-            Kind::Activity => Record::Activity(Activity {
-                id: element_id(id)?,
-                start_time: f.time(F::StartTime),
-                end_time: f.time(F::EndTime),
-                attributes,
-            }),
-            Kind::Agent => Record::Agent(Agent {
-                id: element_id(id)?,
-                attributes,
-            }),
-            Kind::Generation => Record::Generation(Generation {
-                id,
-                entity: f.name(F::Entity),
-                activity: f.name(F::Activity),
-                time: f.time(F::Time),
-                attributes,
-            }),
-            Kind::Usage => Record::Usage(Usage {
-                id,
-                activity: f.name(F::Activity),
-                entity: f.name(F::Entity),
-                time: f.time(F::Time),
-                attributes,
-            }),
-            Kind::Communication => Record::Communication(Communication {
-                id,
-                informed: f.name(F::Informed),
-                informant: f.name(F::Informant),
-                attributes,
-            }),
-            Kind::Start => Record::Start(Start {
-                id,
-                activity: f.name(F::Activity),
-                trigger: f.name(F::Trigger),
-                starter: f.name(F::Starter),
-                time: f.time(F::Time),
-                attributes,
-            }),
-            Kind::End => Record::End(End {
-                id,
-                activity: f.name(F::Activity),
-                trigger: f.name(F::Trigger),
-                ender: f.name(F::Ender),
-                time: f.time(F::Time),
-                attributes,
-            }),
-            Kind::Invalidation => Record::Invalidation(Invalidation {
-                id,
-                entity: f.name(F::Entity),
-                activity: f.name(F::Activity),
-                time: f.time(F::Time),
-                attributes,
-            }),
-            Kind::Derivation => Record::Derivation(Derivation {
-                id,
-                generated_entity: f.name(F::GeneratedEntity),
-                used_entity: f.name(F::UsedEntity),
-                activity: f.name(F::Activity),
-                generation: f.name(F::Generation),
-                usage: f.name(F::Usage),
-                attributes,
-            }),
-            Kind::Attribution => Record::Attribution(Attribution {
-                id,
-                entity: f.name(F::Entity),
-                agent: f.name(F::Agent),
-                attributes,
-            }),
-            Kind::Association => Record::Association(Association {
-                id,
-                activity: f.name(F::Activity),
-                agent: f.name(F::Agent),
-                plan: f.name(F::Plan),
-                attributes,
-            }),
-            Kind::Delegation => Record::Delegation(Delegation {
-                id,
-                delegate: f.name(F::Delegate),
-                responsible: f.name(F::Responsible),
-                activity: f.name(F::Activity),
-                attributes,
-            }),
-            Kind::Influence => Record::Influence(Influence {
-                id,
-                influencee: f.name(F::Influencee),
-                influencer: f.name(F::Influencer),
-                attributes,
-            }),
-            Kind::Specialization => Record::Specialization(Specialization {
-                id,
-                specific_entity: f.name(F::SpecificEntity),
-                general_entity: f.name(F::GeneralEntity),
-                attributes,
-            }),
-            Kind::Alternate => Record::Alternate(Alternate {
-                id,
-                alternate1: f.name(F::Alternate1),
-                alternate2: f.name(F::Alternate2),
-                attributes,
-            }),
-            Kind::Mention => Record::Mention(Mention {
-                id,
-                specific_entity: f.name(F::SpecificEntity),
-                general_entity: f.name(F::GeneralEntity),
-                bundle: f.name(F::Bundle),
-                attributes,
-            }),
-            Kind::Membership => Record::Membership(Membership {
-                id,
-                collection: f.name(F::Collection),
-                entity: f.name(F::Entity),
-                attributes,
-            }),
-        })
-    }
-
-    /// The record's kind.
-    pub fn kind(&self) -> Kind {
-        match self {
-            Record::Entity(_) => Kind::Entity,
-            Record::Activity(_) => Kind::Activity,
-            Record::Agent(_) => Kind::Agent,
-            Record::Generation(_) => Kind::Generation,
-            Record::Usage(_) => Kind::Usage,
-            Record::Communication(_) => Kind::Communication,
-            Record::Start(_) => Kind::Start,
-            Record::End(_) => Kind::End,
-            Record::Invalidation(_) => Kind::Invalidation,
-            Record::Derivation(_) => Kind::Derivation,
-            Record::Attribution(_) => Kind::Attribution,
-            Record::Association(_) => Kind::Association,
-            Record::Delegation(_) => Kind::Delegation,
-            Record::Influence(_) => Kind::Influence,
-            Record::Specialization(_) => Kind::Specialization,
-            Record::Alternate(_) => Kind::Alternate,
-            Record::Mention(_) => Kind::Mention,
-            Record::Membership(_) => Kind::Membership,
-        }
-    }
-
-    /// The identifier, if any.
-    pub fn id(&self) -> Option<&QName> {
-        match self {
-            Record::Entity(r) => Some(&r.id),
-            Record::Activity(r) => Some(&r.id),
-            Record::Agent(r) => Some(&r.id),
-            Record::Generation(r) => r.id.as_ref(),
-            Record::Usage(r) => r.id.as_ref(),
-            Record::Communication(r) => r.id.as_ref(),
-            Record::Start(r) => r.id.as_ref(),
-            Record::End(r) => r.id.as_ref(),
-            Record::Invalidation(r) => r.id.as_ref(),
-            Record::Derivation(r) => r.id.as_ref(),
-            Record::Attribution(r) => r.id.as_ref(),
-            Record::Association(r) => r.id.as_ref(),
-            Record::Delegation(r) => r.id.as_ref(),
-            Record::Influence(r) => r.id.as_ref(),
-            Record::Specialization(r) => r.id.as_ref(),
-            Record::Alternate(r) => r.id.as_ref(),
-            Record::Mention(r) => r.id.as_ref(),
-            Record::Membership(r) => r.id.as_ref(),
-        }
-    }
-
-    /// Non-formal attributes.
-    pub fn attributes(&self) -> &Attributes {
-        match self {
-            Record::Entity(r) => &r.attributes,
-            Record::Activity(r) => &r.attributes,
-            Record::Agent(r) => &r.attributes,
-            Record::Generation(r) => &r.attributes,
-            Record::Usage(r) => &r.attributes,
-            Record::Communication(r) => &r.attributes,
-            Record::Start(r) => &r.attributes,
-            Record::End(r) => &r.attributes,
-            Record::Invalidation(r) => &r.attributes,
-            Record::Derivation(r) => &r.attributes,
-            Record::Attribution(r) => &r.attributes,
-            Record::Association(r) => &r.attributes,
-            Record::Delegation(r) => &r.attributes,
-            Record::Influence(r) => &r.attributes,
-            Record::Specialization(r) => &r.attributes,
-            Record::Alternate(r) => &r.attributes,
-            Record::Mention(r) => &r.attributes,
-            Record::Membership(r) => &r.attributes,
-        }
-    }
-
-    /// Non-formal attributes, mutably.
-    pub fn attributes_mut(&mut self) -> &mut Attributes {
-        match self {
-            Record::Entity(r) => &mut r.attributes,
-            Record::Activity(r) => &mut r.attributes,
-            Record::Agent(r) => &mut r.attributes,
-            Record::Generation(r) => &mut r.attributes,
-            Record::Usage(r) => &mut r.attributes,
-            Record::Communication(r) => &mut r.attributes,
-            Record::Start(r) => &mut r.attributes,
-            Record::End(r) => &mut r.attributes,
-            Record::Invalidation(r) => &mut r.attributes,
-            Record::Derivation(r) => &mut r.attributes,
-            Record::Attribution(r) => &mut r.attributes,
-            Record::Association(r) => &mut r.attributes,
-            Record::Delegation(r) => &mut r.attributes,
-            Record::Influence(r) => &mut r.attributes,
-            Record::Specialization(r) => &mut r.attributes,
-            Record::Alternate(r) => &mut r.attributes,
-            Record::Mention(r) => &mut r.attributes,
-            Record::Membership(r) => &mut r.attributes,
-        }
-    }
-
-    /// The formal attributes that are present, in table order.
-    pub fn formals(&self) -> Vec<(FormalAttr, FormalRef<'_>)> {
-        let mut out = FormalList(Vec::new());
-        match self {
-            Record::Entity(_) | Record::Agent(_) => {}
-            Record::Activity(r) => {
-                out.time(F::StartTime, r.start_time.as_ref());
-                out.time(F::EndTime, r.end_time.as_ref());
-            }
-            Record::Generation(r) => {
-                out.name(F::Entity, r.entity.as_ref());
-                out.name(F::Activity, r.activity.as_ref());
-                out.time(F::Time, r.time.as_ref());
-            }
-            Record::Usage(r) => {
-                out.name(F::Activity, r.activity.as_ref());
-                out.name(F::Entity, r.entity.as_ref());
-                out.time(F::Time, r.time.as_ref());
-            }
-            Record::Communication(r) => {
-                out.name(F::Informed, r.informed.as_ref());
-                out.name(F::Informant, r.informant.as_ref());
-            }
-            Record::Start(r) => {
-                out.name(F::Activity, r.activity.as_ref());
-                out.name(F::Trigger, r.trigger.as_ref());
-                out.name(F::Starter, r.starter.as_ref());
-                out.time(F::Time, r.time.as_ref());
-            }
-            Record::End(r) => {
-                out.name(F::Activity, r.activity.as_ref());
-                out.name(F::Trigger, r.trigger.as_ref());
-                out.name(F::Ender, r.ender.as_ref());
-                out.time(F::Time, r.time.as_ref());
-            }
-            Record::Invalidation(r) => {
-                out.name(F::Entity, r.entity.as_ref());
-                out.name(F::Activity, r.activity.as_ref());
-                out.time(F::Time, r.time.as_ref());
-            }
-            Record::Derivation(r) => {
-                out.name(F::GeneratedEntity, r.generated_entity.as_ref());
-                out.name(F::UsedEntity, r.used_entity.as_ref());
-                out.name(F::Activity, r.activity.as_ref());
-                out.name(F::Generation, r.generation.as_ref());
-                out.name(F::Usage, r.usage.as_ref());
-            }
-            Record::Attribution(r) => {
-                out.name(F::Entity, r.entity.as_ref());
-                out.name(F::Agent, r.agent.as_ref());
-            }
-            Record::Association(r) => {
-                out.name(F::Activity, r.activity.as_ref());
-                out.name(F::Agent, r.agent.as_ref());
-                out.name(F::Plan, r.plan.as_ref());
-            }
-            Record::Delegation(r) => {
-                out.name(F::Delegate, r.delegate.as_ref());
-                out.name(F::Responsible, r.responsible.as_ref());
-                out.name(F::Activity, r.activity.as_ref());
-            }
-            Record::Influence(r) => {
-                out.name(F::Influencee, r.influencee.as_ref());
-                out.name(F::Influencer, r.influencer.as_ref());
-            }
-            Record::Specialization(r) => {
-                out.name(F::SpecificEntity, r.specific_entity.as_ref());
-                out.name(F::GeneralEntity, r.general_entity.as_ref());
-            }
-            Record::Alternate(r) => {
-                out.name(F::Alternate1, r.alternate1.as_ref());
-                out.name(F::Alternate2, r.alternate2.as_ref());
-            }
-            Record::Mention(r) => {
-                out.name(F::SpecificEntity, r.specific_entity.as_ref());
-                out.name(F::GeneralEntity, r.general_entity.as_ref());
-                out.name(F::Bundle, r.bundle.as_ref());
-            }
-            Record::Membership(r) => {
-                out.name(F::Collection, r.collection.as_ref());
-                out.name(F::Entity, r.entity.as_ref());
-            }
-        }
-        out.0
+        Some(T::from_formal(self.items.remove(i).1))
     }
 }
 

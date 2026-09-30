@@ -36,7 +36,7 @@ pub enum Error {
         message: String,
     },
     /// Parts that do not make a record of their kind.
-    #[error("{}: {message}", .kind.json_key())]
+    #[error("{}: {message}", .kind.name())]
     InvalidRecord {
         /// The kind being built.
         kind: Kind,

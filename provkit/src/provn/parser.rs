@@ -15,30 +15,17 @@ use crate::{
     Result, Value,
 };
 
-/// The statement keyword `prefix:local` as a kind and its allowed argument
-/// counts after any `id;`, or `None` for anything else.
-fn classify(prefix: &str, local: &str, profile: Profile) -> Option<(Kind, &'static [usize])> {
-    if (prefix, local) == ("prov", "mentionOf")
-        || (profile == Profile::Default && (prefix, local) == ("", "mentionOf"))
-    {
-        return Some((Kind::Mention, &[3]));
-    }
-    if !prefix.is_empty() {
-        return None;
-    }
-    Some(match local {
-        "entity" | "agent" => (Kind::from_json_key(local)?, &[0]),
-        "activity" => (Kind::Activity, &[0, 2]),
-        "wasGeneratedBy" | "used" | "wasInvalidatedBy" | "wasAssociatedWith" => {
-            (Kind::from_json_key(local)?, &[1, 3])
-        }
-        "wasStartedBy" | "wasEndedBy" => (Kind::from_json_key(local)?, &[1, 4]),
-        "wasInformedBy" | "wasAttributedTo" | "wasInfluencedBy" | "alternateOf"
-        | "specializationOf" | "hadMember" => (Kind::from_json_key(local)?, &[2]),
-        "actedOnBehalfOf" => (Kind::Delegation, &[2, 3]),
-        "wasDerivedFrom" => (Kind::Derivation, &[2, 5]),
-        _ => return None,
-    })
+/// The kind that the statement keyword `prefix:local` names, or `None` for
+/// anything else. `mentionOf` is written `prov:mentionOf`, and only
+/// [`Profile::Default`] also reads it bare. Every other keyword is bare.
+fn classify(prefix: &str, local: &str, profile: Profile) -> Option<Kind> {
+    let kind = Kind::from_name(local)?;
+    let accepted = if kind == Kind::Mention {
+        prefix == "prov" || (prefix.is_empty() && profile == Profile::Default)
+    } else {
+        prefix.is_empty()
+    };
+    accepted.then_some(kind)
 }
 
 /// Attach `token`'s position to an error that has none.
@@ -301,7 +288,7 @@ impl<'t> Parser<'t> {
         let TokenKind::Name { prefix, local } = &start.kind else {
             return Err(self.expected("a statement"));
         };
-        let (kind, arities) = classify(prefix, local, self.profile).ok_or_else(|| {
+        let kind = classify(prefix, local, self.profile).ok_or_else(|| {
             let message = if !prefix.is_empty() {
                 format!(
                     "expected a PROV statement, found the extensibility expression \
@@ -365,6 +352,7 @@ impl<'t> Parser<'t> {
         self.expect(&TokenKind::RParen, closing)?;
         let attributes = attributes.unwrap_or_default();
 
+        let arities = kind.arities();
         if !arities.contains(&args.len()) {
             let allowed = arities
                 .iter()
@@ -375,7 +363,7 @@ impl<'t> Parser<'t> {
                 start,
                 format!(
                     "expected {allowed} arguments to {}, found {}",
-                    kind.provn_keyword(),
+                    kind.name(),
                     args.len()
                 ),
             ));
@@ -409,7 +397,7 @@ impl<'t> Parser<'t> {
                             "expected an identifier for argument {} of {} under the strict \
                              profile, found '-'",
                             i + 1,
-                            kind.provn_keyword()
+                            kind.name()
                         ),
                     ));
                 }
