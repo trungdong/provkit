@@ -24,7 +24,9 @@ follows [Semantic Versioning](https://semver.org/).
   - `Attributes` clones share one allocation and copy it on the first write.
     Its `Hash` sorts the per-pair hashes, `Attributes::remove` keeps the order
     of the rest, and it implements `FromIterator`, `Extend` and `IntoIterator`
-    (owned and by reference).
+    (owned and by reference). `Attributes::iter` returns `AttributesIter`,
+    and `into_iter` returns `AttributesIntoIter`; both are the crate's own
+    types, so no dependency is part of the public API.
   - Strict name resolution with `QName` and `Namespaces`. `QName::new`
     returns `Result` and rejects a local part PROV-N cannot write, even
     with an escape (a space, a control character, one of `{ } < > " | ^ \`

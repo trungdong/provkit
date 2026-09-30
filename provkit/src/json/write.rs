@@ -195,7 +195,7 @@ fn record_wire(record: &Record, table: &mut Namespaces) -> Result<JsonRecord> {
     }
     // Several values under one name become an array, in insertion order.
     let mut grouped: IndexMap<String, Vec<JsonValue>> = IndexMap::new();
-    for (name, value) in record.attributes().iter() {
+    for (name, value) in record.attributes() {
         let key = table.render(name);
         grouped
             .entry(key)

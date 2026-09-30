@@ -42,8 +42,10 @@ impl Attributes {
     }
 
     /// Pairs in insertion order.
-    pub fn iter(&self) -> impl Iterator<Item = (&QName, &Value)> {
-        self.pairs.iter().map(|(n, v)| (n, v))
+    pub fn iter(&self) -> Iter<'_> {
+        Iter {
+            inner: self.pairs.iter(),
+        }
     }
 
     /// Every value under `name`, in insertion order.
@@ -72,7 +74,7 @@ impl Attributes {
             self.pairs = Arc::clone(&other.pairs);
             return;
         }
-        for (n, v) in other.iter() {
+        for (n, v) in other {
             self.insert(n.clone(), v.clone());
         }
     }
@@ -103,8 +105,6 @@ impl Equivalent<(QName, Value)> for PairKey<'_> {
     }
 }
 
-type PairRef<'a> = (&'a QName, &'a Value);
-
 impl FromIterator<(QName, Value)> for Attributes {
     fn from_iter<I: IntoIterator<Item = (QName, Value)>>(iter: I) -> Self {
         Self {
@@ -123,26 +123,77 @@ impl Extend<(QName, Value)> for Attributes {
     }
 }
 
+/// Borrowed pairs of an [`Attributes`], in insertion order.
+#[derive(Clone, Debug)]
+pub struct Iter<'a> {
+    inner: indexmap::set::Iter<'a, (QName, Value)>,
+}
+
+impl<'a> Iterator for Iter<'a> {
+    type Item = (&'a QName, &'a Value);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next().map(|(n, v)| (n, v))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl DoubleEndedIterator for Iter<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.inner.next_back().map(|(n, v)| (n, v))
+    }
+}
+
+impl ExactSizeIterator for Iter<'_> {}
+
+/// Owned pairs of an [`Attributes`], in insertion order.
+#[derive(Debug)]
+pub struct IntoIter {
+    inner: indexmap::set::IntoIter<(QName, Value)>,
+}
+
+impl Iterator for IntoIter {
+    type Item = (QName, Value);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner.next()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.inner.size_hint()
+    }
+}
+
+impl DoubleEndedIterator for IntoIter {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.inner.next_back()
+    }
+}
+
+impl ExactSizeIterator for IntoIter {}
+
 impl IntoIterator for Attributes {
     type Item = (QName, Value);
-    type IntoIter = indexmap::set::IntoIter<(QName, Value)>;
+    type IntoIter = IntoIter;
 
     /// Owned pairs in insertion order. Copies the pairs only if the storage
     /// is shared.
-    fn into_iter(self) -> Self::IntoIter {
-        Arc::unwrap_or_clone(self.pairs).into_iter()
+    fn into_iter(self) -> IntoIter {
+        IntoIter {
+            inner: Arc::unwrap_or_clone(self.pairs).into_iter(),
+        }
     }
 }
 
 impl<'a> IntoIterator for &'a Attributes {
-    type Item = PairRef<'a>;
-    type IntoIter = std::iter::Map<
-        indexmap::set::Iter<'a, (QName, Value)>,
-        fn(&'a (QName, Value)) -> PairRef<'a>,
-    >;
+    type Item = (&'a QName, &'a Value);
+    type IntoIter = Iter<'a>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        self.pairs.iter().map(|(n, v)| (n, v))
+    fn into_iter(self) -> Iter<'a> {
+        self.iter()
     }
 }
 
@@ -307,6 +358,19 @@ mod tests {
         assert_eq!(owned.len(), 2);
         assert_eq!(owned[0].0, ex("a"));
         assert_eq!(b.len(), 2);
+    }
+
+    #[test]
+    fn iterators_know_their_length_and_run_backwards() {
+        let a: Attributes = [(ex("a"), Value::from("1")), (ex("b"), Value::from("2"))]
+            .into_iter()
+            .collect();
+        let mut borrowed: Iter<'_> = a.iter();
+        assert_eq!(borrowed.len(), 2);
+        assert_eq!(borrowed.next_back().unwrap().0, &ex("b"));
+        let mut owned: IntoIter = a.into_iter();
+        assert_eq!(owned.len(), 2);
+        assert_eq!(owned.next_back().unwrap().0, ex("b"));
     }
 
     #[test]

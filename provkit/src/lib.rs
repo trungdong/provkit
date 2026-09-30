@@ -70,7 +70,7 @@ mod value;
 #[cfg(test)]
 pub(crate) mod test_util;
 
-pub use attributes::Attributes;
+pub use attributes::{Attributes, IntoIter as AttributesIntoIter, Iter as AttributesIter};
 pub use datetime::DateTime;
 pub use document::{Bundle, Document};
 pub use error::{Error, Result};
