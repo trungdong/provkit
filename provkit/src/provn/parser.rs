@@ -562,6 +562,22 @@ mod tests {
     }
 
     #[test]
+    fn attribute_named_after_an_own_formal_is_rejected() {
+        let e = err(
+            "wasGeneratedBy(ex:e, ex:a, -, [prov:activity='ex:a2'])",
+            Profile::Default,
+        );
+        let message = syntax_message(e);
+        assert!(message.contains("prov:activity"), "{message}");
+        // prov:type and prov:label on a relation stay attributes.
+        let d = doc(
+            "wasGeneratedBy(ex:e, ex:a, -, [prov:type='ex:T', prov:label=\"l\"])",
+            Profile::Strict,
+        );
+        assert_eq!(d.records[0].attributes().len(), 2);
+    }
+
+    #[test]
     fn elements_relations_and_ids() {
         let d = doc(
             "entity(ex:e1)\nactivity(a1, 2011-11-16T16:05:33Z, -)\n\

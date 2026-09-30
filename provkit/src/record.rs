@@ -1,5 +1,6 @@
 //! Records: the eighteen PROV-DM types and the enum that holds them.
 
+use crate::namespaces::PROV;
 use crate::{Attributes, DateTime, Error, QName, Result};
 
 /// The PROV-DM type of a record.
@@ -238,6 +239,27 @@ impl FormalAttr {
     pub fn is_time(self) -> bool {
         matches!(self, F::Time | F::StartTime | F::EndTime)
     }
+}
+
+/// The formal of `kind` that `name` spells, when `name` is `prov:` plus the
+/// local name of one of the kind's formals.
+pub(crate) fn formal_named(kind: Kind, name: &QName) -> Option<FormalAttr> {
+    if &**name.namespace() != PROV {
+        return None;
+    }
+    kind.formals()
+        .iter()
+        .copied()
+        .find(|f| f.local_name() == name.local())
+}
+
+/// The error for an attribute that spells one of the record's own formals.
+pub(crate) fn formal_attribute_error(kind: Kind, attr: FormalAttr) -> Error {
+    structure(format!(
+        "{} has an attribute prov:{}; its value belongs in the positional argument",
+        kind.json_key(),
+        attr.local_name()
+    ))
 }
 
 const ALL_FORMALS: [FormalAttr; 26] = [
@@ -655,7 +677,8 @@ impl<'a> FormalList<'a> {
 impl Record {
     /// Build a record of `kind` from its parts. Elements need an identifier;
     /// formals must belong to the kind, have the right value type, and appear
-    /// at most once.
+    /// at most once. No attribute may be named `prov:` plus the local name of
+    /// one of the kind's formals (`prov:activity` on `wasGeneratedBy`).
     // One arm per kind; splitting it would scatter the table.
     #[allow(clippy::too_many_lines)]
     pub fn from_parts(
@@ -665,6 +688,9 @@ impl Record {
         attributes: Attributes,
     ) -> Result<Record> {
         let mut f = Formals::new(kind, formals)?;
+        if let Some(attr) = attributes.iter().find_map(|(n, _)| formal_named(kind, n)) {
+            return Err(formal_attribute_error(kind, attr));
+        }
         let element_id = |id: Option<QName>| {
             id.ok_or_else(|| structure(format!("{} needs an identifier", kind.json_key())))
         };
@@ -1192,6 +1218,30 @@ mod tests {
                 (FormalAttr::Entity, Formal::Name(q("b"))),
             ]
         ));
+    }
+
+    #[test]
+    fn attribute_named_after_an_own_formal_is_rejected() {
+        let prov = |l: &str| QName::new(PROV, l);
+        let mut clash = Attributes::new();
+        clash.insert(prov("activity"), Value::QName(q("a2")));
+        match Record::from_parts(Kind::Generation, None, vec![], clash) {
+            Err(Error::Structure { format, message }) => {
+                assert_eq!(format, "record");
+                assert!(message.contains("prov:activity"), "{message}");
+                assert!(message.contains("positional argument"), "{message}");
+            }
+            other => panic!("expected a structure error, got {other:?}"),
+        }
+        // A formal of another kind, and prov:type and prov:label, are plain attributes.
+        let mut fine = Attributes::new();
+        fine.insert(prov("plan"), Value::QName(q("p")));
+        fine.insert(prov("type"), Value::from("t"));
+        fine.insert(prov("label"), Value::from("l"));
+        for kind in [Kind::Generation, Kind::Usage, Kind::Entity] {
+            let r = Record::from_parts(kind, Some(q("x")), vec![], fine.clone()).unwrap();
+            assert_eq!(r.attributes().len(), 3);
+        }
     }
 
     #[test]

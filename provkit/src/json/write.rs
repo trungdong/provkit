@@ -7,6 +7,7 @@ use indexmap::IndexMap;
 use super::wire::{JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany};
 use crate::document::merged_bundles;
 use crate::qname::well_known::{PROV_INTERNATIONALIZED_STRING, XSD_DATETIME, XSD_QNAME};
+use crate::record::{formal_attribute_error, formal_named};
 use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
 
 /// Write `document` as PROV-JSON, pretty-printed with two-space indentation.
@@ -47,7 +48,7 @@ fn to_wire(document: &Document) -> Result<JsonDocument> {
     // caller's document. It is written last, after every name has been seen.
     let mut table = document.namespaces.clone();
     let mut next_blank = 0;
-    let sections = sections(&document.records, &mut table, &mut next_blank);
+    let sections = sections(&document.records, &mut table, &mut next_blank)?;
     let mut bundles = IndexMap::new();
     for bundle in merged_bundles(&document.bundles) {
         let (key, wire) = bundle_wire(&bundle, &table, &mut next_blank)?;
@@ -75,7 +76,7 @@ fn bundle_wire(
         table.set_default(default.clone());
     }
     let key = table.render(&bundle.id);
-    let sections = sections(&bundle.records, &mut table, next_blank);
+    let sections = sections(&bundle.records, &mut table, next_blank)?;
     // Entries the document already declares are inherited, not repeated.
     let inherited = |prefix: &str, iri: &str| outer.lookup(prefix).is_some_and(|o| *o == *iri);
     let prefix = prefix_table(
@@ -110,7 +111,7 @@ fn sections(
     records: &[Record],
     table: &mut Namespaces,
     next_blank: &mut usize,
-) -> IndexMap<String, JsonSection> {
+) -> Result<IndexMap<String, JsonSection>> {
     let blanks: Vec<Option<String>> = records
         .iter()
         .map(|r| {
@@ -136,7 +137,7 @@ fn sections(
             section
                 .entry(key)
                 .or_default()
-                .push(record_wire(record, table));
+                .push(record_wire(record, table)?);
         }
         if section.is_empty() {
             continue;
@@ -154,10 +155,20 @@ fn sections(
             .collect();
         out.insert(kind.json_key().to_owned(), section);
     }
-    out
+    Ok(out)
 }
 
-fn record_wire(record: &Record, table: &mut Namespaces) -> JsonRecord {
+/// A record's body. An attribute spelling one of the record's own formals
+/// would overwrite or pose as that formal, so it is an error.
+fn record_wire(record: &Record, table: &mut Namespaces) -> Result<JsonRecord> {
+    let kind = record.kind();
+    if let Some(attr) = record
+        .attributes()
+        .iter()
+        .find_map(|(n, _)| formal_named(kind, n))
+    {
+        return Err(formal_attribute_error(kind, attr));
+    }
     let mut body = JsonRecord::new();
     for (attr, value) in record.formals() {
         let text = match value {
@@ -183,7 +194,7 @@ fn record_wire(record: &Record, table: &mut Namespaces) -> JsonRecord {
         };
         body.insert(name, value);
     }
-    body
+    Ok(body)
 }
 
 /// Only plain strings are written bare. Everything else is a `$` object, so
@@ -405,6 +416,31 @@ mod tests {
         let text = json::to_string(&d).unwrap();
         assert!(text.contains("\"ex:b\""), "key uses the bundle's table");
         assert_eq!(json::read(&text).unwrap(), d);
+    }
+
+    #[test]
+    fn attribute_spelling_an_own_formal_fails_to_write() {
+        let mut attributes = Attributes::new();
+        attributes.insert(
+            QName::new(crate::namespaces::PROV, "activity"),
+            ex("a2").into(),
+        );
+        let mut d = Document::new();
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        d.records.push(Record::Generation(Generation {
+            id: None,
+            entity: Some(ex("e")),
+            activity: Some(ex("a")),
+            time: None,
+            attributes,
+        }));
+        match json::to_string(&d) {
+            Err(crate::Error::Structure { format, message }) => {
+                assert_eq!(format, "record");
+                assert!(message.contains("prov:activity"), "{message}");
+            }
+            other => panic!("expected a structure error, got {other:?}"),
+        }
     }
 
     #[test]
