@@ -126,7 +126,7 @@ impl Sink for DocumentBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::{entity, q};
+    use crate::test_util::{entity, ex};
 
     #[test]
     fn builds_a_document_with_a_bundle() {
@@ -135,7 +135,7 @@ mod tests {
         let mut b = DocumentBuilder::new();
         b.start_document(ns.clone()).unwrap();
         b.record(entity("e1")).unwrap();
-        b.start_bundle(q("b"), Namespaces::new()).unwrap();
+        b.start_bundle(ex("b"), Namespaces::new()).unwrap();
         b.record(entity("e2")).unwrap();
         b.end_bundle().unwrap();
         b.record(entity("e3")).unwrap();
@@ -144,7 +144,7 @@ mod tests {
         assert_eq!(d.namespaces, ns);
         assert_eq!(d.records, [entity("e1"), entity("e3")]);
         assert_eq!(d.bundles.len(), 1);
-        assert_eq!(d.bundles[0].id, q("b"));
+        assert_eq!(d.bundles[0].id, ex("b"));
         assert_eq!(d.bundles[0].records, [entity("e2")]);
     }
 
@@ -152,11 +152,11 @@ mod tests {
     fn duplicate_bundle() {
         let mut b = DocumentBuilder::new();
         b.start_document(Namespaces::new()).unwrap();
-        b.start_bundle(q("b"), Namespaces::new()).unwrap();
+        b.start_bundle(ex("b"), Namespaces::new()).unwrap();
         b.end_bundle().unwrap();
         assert!(matches!(
-            b.start_bundle(q("b"), Namespaces::new()),
-            Err(Error::DuplicateBundle(id)) if id == q("b")
+            b.start_bundle(ex("b"), Namespaces::new()),
+            Err(Error::DuplicateBundle(id)) if id == ex("b")
         ));
     }
 
@@ -165,18 +165,18 @@ mod tests {
         let mut b = DocumentBuilder::new();
         b.start_document(Namespaces::new()).unwrap();
         for i in 0..20_000 {
-            b.start_bundle(q(&format!("b{i}")), Namespaces::new())
+            b.start_bundle(ex(&format!("b{i}")), Namespaces::new())
                 .unwrap();
             b.end_bundle().unwrap();
         }
         assert!(matches!(
-            b.start_bundle(q("b7"), Namespaces::new()),
+            b.start_bundle(ex("b7"), Namespaces::new()),
             Err(Error::DuplicateBundle(_))
         ));
         b.end_document().unwrap();
         let d = b.finish();
         assert_eq!(d.bundles.len(), 20_000);
-        assert_eq!(d.bundles[0].id, q("b0"));
-        assert_eq!(d.bundles[19_999].id, q("b19999"));
+        assert_eq!(d.bundles[0].id, ex("b0"));
+        assert_eq!(d.bundles[19_999].id, ex("b19999"));
     }
 }

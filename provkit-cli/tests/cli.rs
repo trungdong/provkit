@@ -550,11 +550,43 @@ fn compare_declares_the_prefixes_it_mints() {
     let out = String::from_utf8(out).unwrap();
     assert!(out.contains("entity(ns1:12)"), "{out}");
     assert!(out.contains("prefix ns1 <http://one.org/>"), "{out}");
-    assert!(
-        out.contains("prefix ns1 <http://two.org/>")
-            || out.contains("prefix ns2 <http://two.org/>"),
+    assert!(out.contains("    prefix ns1 <http://two.org/>"), "{out}");
+}
+
+#[test]
+fn compare_mints_the_next_free_prefix() {
+    let dir = scratch("compare_mints_the_next_free_prefix");
+    let a = dir.join("a.json");
+    let b = dir.join("b.json");
+    // A bare name that starts with digits cannot be written without a
+    // prefix, and `ns1` is already bound to another namespace.
+    std::fs::write(
+        &a,
+        r#"{"prefix": {"default": "http://one.org/", "ns1": "http://taken.org/"},
+        "entity": {"12": {}},
+        "bundle": {"b": {"prefix": {"default": "http://two.org/"}, "entity": {"34": {}}}}}"#,
+    )
+    .unwrap();
+    std::fs::write(&b, "{}").unwrap();
+    let out = provkit()
+        .arg("compare")
+        .arg(&a)
+        .arg(&b)
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let out = String::from_utf8(out).unwrap();
+    assert_eq!(
+        out.lines().filter(|l| l.contains("prefix ns")).count(),
+        2,
         "{out}"
     );
+    assert!(out.contains("  entity(ns2:12)"), "{out}");
+    assert!(out.contains("  prefix ns2 <http://one.org/>"), "{out}");
+    assert!(out.contains("    entity(ns2:34)"), "{out}");
+    assert!(out.contains("    prefix ns2 <http://two.org/>"), "{out}");
 }
 
 #[test]
@@ -626,6 +658,53 @@ fn a_closed_output_pipe_ends_quietly() {
     let status = child.wait().unwrap();
     assert_eq!(stderr, "");
     assert_eq!(status.code(), Some(0));
+}
+
+#[test]
+fn compare_keeps_its_exit_code_when_the_output_pipe_closes() {
+    use std::fmt::Write as _;
+    use std::io::Read;
+    use std::process::Stdio;
+
+    // One side holds 50 000 distinct entities, so the report fills the pipe
+    // buffer before the reader closes it.
+    let dir = scratch("compare_keeps_its_exit_code_when_the_output_pipe_closes");
+    let big = dir.join("big.provn");
+    let empty = dir.join("empty.provn");
+    let entities = (0..50_000).fold(String::new(), |mut out, i| {
+        writeln!(out, "  entity(ex:e{i})").unwrap();
+        out
+    });
+    std::fs::write(
+        &big,
+        format!("document\n  prefix ex <http://example.org/>\n{entities}endDocument\n"),
+    )
+    .unwrap();
+    std::fs::write(&empty, "document\nendDocument\n").unwrap();
+
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_provkit"))
+        .arg("compare")
+        .arg(&big)
+        .arg(&empty)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdout = child.stdout.take().unwrap();
+    let mut first = [0u8; 8];
+    stdout.read_exact(&mut first).unwrap();
+    drop(stdout);
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    let status = child.wait().unwrap();
+    assert_eq!(stderr, "");
+    // The documents differ, so the closed pipe leaves the exit code at 1.
+    assert_eq!(status.code(), Some(1));
 }
 
 #[test]

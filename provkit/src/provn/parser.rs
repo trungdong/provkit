@@ -639,6 +639,7 @@ pub(super) fn describe(kind: &TokenKind) -> String {
 #[cfg(test)]
 mod tests {
     use crate::provn::Profile;
+    use crate::test_util::ex;
     use crate::{Document, Error, Kind, QName, Record, Value, provn};
 
     const HEAD: &str =
@@ -654,10 +655,6 @@ mod tests {
 
     fn err(body: &str, profile: Profile) -> Error {
         read(body, profile).unwrap_err()
-    }
-
-    fn ex(l: &str) -> QName {
-        QName::new("http://example.org/", l).unwrap()
     }
 
     fn syntax_message(e: Error) -> String {
@@ -816,6 +813,12 @@ mod tests {
                 (5, 1),
             ),
             (
+                format!(
+                    "document\n{p}bundle ex:b\nprefix ey <http://e/>\ndefault <http://d/>\nendBundle\nendDocument\n"
+                ),
+                (5, 1),
+            ),
+            (
                 format!("document\n{p}hadMember(ex:m; ex:c, ex:e)\nendDocument\n"),
                 (3, 11),
             ),
@@ -848,6 +851,17 @@ mod tests {
                 }
                 other => panic!("{text}: expected a syntax error, got {other:?}"),
             }
+        }
+    }
+
+    #[test]
+    fn strict_reads_an_empty_bundle() {
+        let text =
+            "document\nprefix ex <http://example.org/>\nbundle ex:b\nendBundle\nendDocument\n";
+        for profile in [Profile::Strict, Profile::Default] {
+            let d = provn::read_with(text, profile).unwrap();
+            assert_eq!(d.bundles.len(), 1);
+            assert!(d.bundles[0].records.is_empty());
         }
     }
 
@@ -899,6 +913,39 @@ mod tests {
                 "007"
             ]
         );
+    }
+
+    #[test]
+    fn a_bare_minus_zero_is_an_int_and_a_plus_sign_is_a_syntax_error() {
+        let d = doc("entity(ex:e, [ex:a=-0])", Profile::Strict);
+        assert!(matches!(
+            values(&d)[0],
+            Value::Typed { lexical, datatype } if lexical == "-0" && datatype.local() == "int"
+        ));
+        for profile in [Profile::Strict, Profile::Default] {
+            assert!(matches!(
+                err("entity(ex:e, [ex:a=+5])", profile),
+                Error::Syntax { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn a_language_tag_ends_at_an_underscore_and_the_rest_is_a_syntax_error() {
+        for profile in [Profile::Strict, Profile::Default] {
+            assert!(matches!(
+                err(r#"entity(ex:e, [ex:a="x" @en_US])"#, profile),
+                Error::Syntax { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn a_brace_outside_a_dictionary_is_a_syntax_error_at_the_brace() {
+        match provn::read_with("document { endDocument", Profile::Default) {
+            Err(Error::Syntax { line, column, .. }) => assert_eq!((line, column), (1, 10)),
+            other => panic!("expected a syntax error, got {other:?}"),
+        }
     }
 
     #[test]
@@ -1130,10 +1177,10 @@ mod tests {
 
     #[test]
     fn a_qualified_name_literal_whose_text_is_not_a_name_is_an_error() {
-        for (literal, local) in [
+        for (literal, text) in [
             (r#""not a name" %% prov:QUALIFIED_NAME"#, "not a name"),
-            (r#""ex:a b" %% xsd:QName"#, "a b"),
-            (r#""ex:a%4" %% xsd:QName"#, "a%4"),
+            (r#""ex:a b" %% xsd:QName"#, "ex:a b"),
+            (r#""ex:a%4" %% xsd:QName"#, "ex:a%4"),
             (r#""" %% xsd:QName"#, ""),
         ] {
             let (position, inner) = located(err(
@@ -1142,7 +1189,7 @@ mod tests {
             ));
             assert_eq!(position, (4, 20), "{literal}");
             assert!(
-                matches!(&inner, Error::InvalidQName(l) if l == local),
+                matches!(&inner, Error::InvalidQName(t) if t == text),
                 "{literal}: {inner:?}"
             );
         }

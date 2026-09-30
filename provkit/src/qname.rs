@@ -37,7 +37,7 @@ impl QName {
     /// escape: a space, a control character, one of `{ } < > " | ^ \`
     /// or a backtick, a `%` not followed by two hex digits, or a first
     /// character that may only continue a name (`·`, `‿`, `⁀` or a
-    /// combining mark). An empty local part is valid.
+    /// combining mark). An empty local part is valid. The error carries `local`.
     pub fn new(namespace: &str, local: &str) -> Result<Self> {
         Self::in_namespace(Arc::from(namespace), local)
     }

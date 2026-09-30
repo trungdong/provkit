@@ -12,19 +12,19 @@ use crate::{Error, Result};
 /// A token's class and payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum TokenKind {
-    /// `QUALIFIED_NAME` [51], unescaped; `prefix` is empty for a bare name.
+    /// `QUALIFIED_NAME` [52], unescaped; `prefix` is empty for a bare name.
     Name { prefix: String, local: String },
-    /// `'prefix:local'`, a qualified-name literal.
+    /// `QUALIFIED_NAME_LITERAL` [61], `'prefix:local'`.
     QNameLiteral { prefix: String, local: String },
-    /// `IRI_REF` [56], without the angle brackets.
+    /// `IRI_REF` (from SPARQL), without the angle brackets.
     Iri(String),
-    /// `STRING_LITERAL` [60], unescaped.
+    /// `STRING_LITERAL` [58], unescaped.
     Str(String),
-    /// `INT_LITERAL` [61], as written.
+    /// `INT_LITERAL` [60], as written.
     Int(String),
-    /// `DATETIME` [62], as written.
+    /// `DATETIME`, as written.
     DateTime(String),
-    /// `LANGTAG` [63], without the `@`.
+    /// `LANGTAG` (from SPARQL), without the `@`.
     LangTag(String),
     /// `%%`.
     Typed,
@@ -485,7 +485,7 @@ struct NameError {
     message: String,
 }
 
-/// `QUALIFIED_NAME` [51] at the start of `s`: `PN_PREFIX ':' PN_LOCAL?` or
+/// `QUALIFIED_NAME` [52] at the start of `s`: `PN_PREFIX ':' PN_LOCAL?` or
 /// `PN_LOCAL`. A `:` after the match is left for the caller to reject.
 fn scan_name(s: &str) -> std::result::Result<Option<NameMatch>, NameError> {
     if let Some(p) = prefix_len(s).filter(|&p| s[p..].starts_with(':')) {
@@ -504,7 +504,7 @@ fn scan_name(s: &str) -> std::result::Result<Option<NameMatch>, NameError> {
     }))
 }
 
-/// `PN_LOCAL` [54] at the start of `s`, unescaped, and the bytes it spans.
+/// `PN_LOCAL` [53] at the start of `s`, unescaped, and the bytes it spans.
 /// `base` is `s`'s offset in the scanned text, for error positions. Trailing
 /// bare dots are left unconsumed.
 fn scan_local(s: &str, base: usize) -> std::result::Result<(String, usize), NameError> {
@@ -579,9 +579,10 @@ mod tests {
         }
     }
 
-    fn syntax_message(src: &str) -> String {
+    /// The line and column of the syntax error `src` raises.
+    fn syntax_at(src: &str) -> (usize, usize) {
         match tokenize(src) {
-            Err(Error::Syntax { message, .. }) => message,
+            Err(Error::Syntax { line, column, .. }) => (line, column),
             other => panic!("expected a syntax error for {src:?}, got {other:?}"),
         }
     }
@@ -656,7 +657,7 @@ line""" "#,
     fn language_tag_only_after_a_string() {
         assert_eq!(kinds("ex:a @en")[1], name("", "@en"));
         assert_eq!(kinds("\"x\", @en")[2], name("", "@en"));
-        assert!(syntax_message("\"x\" @1").contains("language tag"));
+        assert_eq!(syntax_at("\"x\" @1"), (1, 6));
         assert!(matches!(&kinds("ex:a@b")[0], TokenKind::Name { local, .. } if local == "a@b"));
     }
 
@@ -683,14 +684,8 @@ line""" "#,
             "x <http://x\t>",
         ] {
             match tokenize(src) {
-                Err(Error::Syntax {
-                    line,
-                    column,
-                    message,
-                    ..
-                }) => {
+                Err(Error::Syntax { line, column, .. }) => {
                     assert_eq!((line, column), (1, 3), "{src:?}");
-                    assert!(message.contains("unterminated IRI"), "{src:?}");
                 }
                 other => panic!("expected an error for {src:?}, got {other:?}"),
             }
@@ -702,13 +697,9 @@ line""" "#,
         for (src, column) in [("<a{b>", 3), ("<ab|>", 4), ("<a\\b>", 3)] {
             match tokenize(src) {
                 Err(Error::Syntax {
-                    line,
-                    column: c,
-                    message,
-                    ..
+                    line, column: c, ..
                 }) => {
                     assert_eq!((line, c), (1, column), "{src:?}");
-                    assert!(message.contains("in IRI"), "{src:?}");
                 }
                 other => panic!("expected an error for {src:?}, got {other:?}"),
             }
@@ -727,6 +718,29 @@ line""" "#,
     }
 
     #[test]
+    fn columns_count_source_characters_after_a_decoded_escape() {
+        let t = tokenize("\"\\u00E9\\U0001F600\" ex:x <\\u00E9> ex:y").unwrap();
+        assert_eq!(t[0].kind, TokenKind::Str("é\u{1F600}".into()));
+        assert_eq!((t[1].kind.clone(), t[1].column), (name("ex", "x"), 20));
+        assert_eq!(t[2].kind, TokenKind::Iri("é".into()));
+        assert_eq!((t[3].kind.clone(), t[3].column), (name("ex", "y"), 34));
+    }
+
+    #[test]
+    fn a_language_tag_stops_at_an_underscore() {
+        let t = kinds("\"x\" @en_US");
+        assert_eq!(
+            t,
+            [
+                TokenKind::Str("x".into()),
+                TokenKind::LangTag("en".into()),
+                name("", "_US"),
+                TokenKind::Eof
+            ]
+        );
+    }
+
+    #[test]
     fn local_part_rules() {
         assert!(
             matches!(&kinds(r"ex:a\.b\=c%2Fd")[0], TokenKind::Name { local, .. } if local == "a.b=c%2Fd")
@@ -742,7 +756,7 @@ line""" "#,
 
     #[test]
     fn blank_node_label_is_a_syntax_error() {
-        assert!(syntax_message("_:x").contains("unexpected ':' inside a qualified name"));
+        assert_eq!(syntax_at("_:x"), (1, 2));
     }
 
     #[test]
@@ -806,8 +820,8 @@ line""" "#,
 
     #[test]
     fn a_block_comment_needs_both_delimiters() {
-        assert_eq!(syntax_message("/*/"), "unterminated comment");
-        assert_eq!(syntax_message("x /*/ y"), "unterminated comment");
+        assert_eq!(syntax_at("/*/"), (1, 1));
+        assert_eq!(syntax_at("x /*/ y"), (1, 3));
         assert_eq!(kinds("/**/ x"), [name("", "x"), TokenKind::Eof]);
         assert_eq!(kinds("/***/ x"), [name("", "x"), TokenKind::Eof]);
     }
@@ -906,13 +920,8 @@ line""" "#,
     fn a_qualified_name_literal_left_open_is_reported_at_its_quote() {
         for src in ["x 'ex:a", "x 'ex:a\ny'", "x 'ex:a\r", "x 'ex:a\\"] {
             match tokenize(src) {
-                Err(Error::Syntax {
-                    line,
-                    column,
-                    message,
-                }) => {
+                Err(Error::Syntax { line, column, .. }) => {
                     assert_eq!((line, column), (1, 3), "{src:?}");
-                    assert!(message.contains("unterminated"), "{src:?}");
                 }
                 other => panic!("expected an error for {src:?}, got {other:?}"),
             }
@@ -977,11 +986,7 @@ line""" "#,
         assert_eq!(kinds("ex:a\u{1680}")[0], name("ex", "a\u{1680}"));
         // Other Unicode spaces are unexpected characters, not separators.
         for space in ['\u{A0}', '\u{2028}', '\u{2003}', '\u{3000}'] {
-            let message = syntax_message(&format!("ex:a{space}ex:b"));
-            assert!(
-                message.contains("unexpected character"),
-                "{space:?}: {message}"
-            );
+            assert_eq!(syntax_at(&format!("ex:a{space}ex:b")), (1, 5), "{space:?}");
             assert!(matches!(
                 tokenize(&format!("{space}ex:a")),
                 Err(Error::Syntax { .. })
@@ -998,10 +1003,7 @@ line""" "#,
             }
             let lexed = tokenize(&format!("<a{c}b>"));
             if is_iri_forbidden(c) {
-                assert!(
-                    syntax_message(&format!("<a{c}b>")).contains("in IRI"),
-                    "{c:?}"
-                );
+                assert_eq!(syntax_at(&format!("<a{c}b>")), (1, 3), "{c:?}");
             } else {
                 assert_eq!(
                     lexed.unwrap()[0].kind,

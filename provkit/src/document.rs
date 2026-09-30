@@ -135,15 +135,7 @@ impl Eq for Document {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::{agent, entity, q};
-
-    fn bundle(id: &str, records: Vec<Record>) -> Bundle {
-        Bundle {
-            id: q(id),
-            namespaces: Namespaces::new(),
-            records,
-        }
-    }
+    use crate::test_util::{agent, bundle, entity, ex};
 
     #[test]
     fn equality_is_a_set_over_records() {
@@ -154,6 +146,32 @@ mod tests {
         assert_eq!(a, b);
         b.records.push(entity("e3"));
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn a_bundle_compares_by_identifier_and_record_set() {
+        let mut with_table = bundle("b", vec![entity("e1"), entity("e2")]);
+        with_table.namespaces.declare("x", "http://x.org/").unwrap();
+        let reordered = bundle("b", vec![entity("e2"), entity("e1"), entity("e1")]);
+        assert_eq!(with_table, reordered);
+        assert_ne!(with_table, bundle("c", vec![entity("e1"), entity("e2")]));
+        assert_ne!(with_table, bundle("b", vec![entity("e1")]));
+    }
+
+    #[test]
+    fn an_empty_bundle_is_not_an_absent_one() {
+        let mut with = Document::new();
+        with.bundles.push(bundle("b", vec![]));
+        assert_ne!(with, Document::new());
+    }
+
+    #[test]
+    fn a_top_level_record_is_not_the_same_record_in_a_bundle() {
+        let mut top = Document::new();
+        top.records.push(entity("e"));
+        let mut inside = Document::new();
+        inside.bundles.push(bundle("b", vec![entity("e")]));
+        assert_ne!(top, inside);
     }
 
     #[test]
@@ -184,7 +202,7 @@ mod tests {
         b.bundles[0].records.clear();
         assert_ne!(a, b);
         b.bundles[0].records.push(entity("e2"));
-        b.bundles[0].id = q("d");
+        b.bundles[0].id = ex("d");
         assert_ne!(a, b);
     }
 
@@ -215,10 +233,10 @@ mod tests {
             .extend([entity("e1"), entity("e2"), agent("e1"), agent("e3")]);
         d.bundles.push(bundle("b", vec![entity("e4")]));
         d.bundles.push(bundle("c", vec![entity("e1"), agent("e5")]));
-        assert_eq!(d.bundle(&q("c")), Some(&d.bundles[1]));
-        assert_eq!(d.bundle(&q("e1")), None);
+        assert_eq!(d.bundle(&ex("c")), Some(&d.bundles[1]));
+        assert_eq!(d.bundle(&ex("e1")), None);
         assert_eq!(
-            d.records_with_id(&q("e1")).collect::<Vec<_>>(),
+            d.records_with_id(&ex("e1")).collect::<Vec<_>>(),
             [&entity("e1"), &agent("e1")]
         );
         assert_eq!(
@@ -249,9 +267,9 @@ mod tests {
         let merged = doc.merged_bundles();
         assert!(matches!(merged, Cow::Owned(_)));
         assert_eq!(merged.len(), 2);
-        assert_eq!(merged[0].id, q("b"));
+        assert_eq!(merged[0].id, ex("b"));
         assert_eq!(merged[0].records, [entity("e1"), entity("e3")]);
-        assert_eq!(merged[1].id, q("c"));
+        assert_eq!(merged[1].id, ex("c"));
     }
 
     #[test]
@@ -278,6 +296,6 @@ mod tests {
             ],
             ..Document::default()
         };
-        assert_eq!(doc.bundle(&q("b")).unwrap().records, [entity("e1")]);
+        assert_eq!(doc.bundle(&ex("b")).unwrap().records, [entity("e1")]);
     }
 }

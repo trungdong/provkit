@@ -1,15 +1,14 @@
 //! Round trips over generated names, values and namespace IRIs. Whatever the
 //! PROV-N writer accepts reads back as an equal document.
 
-use provkit::well_known::{self, XSD_INT, XSD_LONG};
+mod common;
+
+use common::ex;
+use provkit::well_known::{self, XSD_INT, XSD_INTEGER, XSD_LONG};
 use provkit::{
     Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, LangStr,
     Namespaces, QName, Record, Value, json, provn,
 };
-
-fn ex(l: &str) -> QName {
-    QName::new("http://example.org/", l).unwrap()
-}
 
 fn dt() -> DateTime {
     DateTime::parse("2011-11-16T16:05:33Z").unwrap()
@@ -120,6 +119,8 @@ fn sample_texts() -> Vec<String> {
             "a.",
             ".a",
             "-1",
+            "-0",
+            "99999999999999999999",
             "a\\",
             "//x",
             "/*y",
@@ -160,6 +161,7 @@ fn sample_values() -> Vec<Value> {
     let datatypes = [
         XSD_INT.clone(),
         XSD_LONG.clone(),
+        XSD_INTEGER.clone(),
         well_known::XSD_STRING.clone(),
         well_known::XSD_DATETIME.clone(),
         well_known::XSD_DOUBLE.clone(),
@@ -198,8 +200,8 @@ fn a_qualified_name_literal_resolves_exactly_when_a_name_can_be_built() {
                 assert_eq!(json::read(&json).unwrap(), d, "{json}");
                 resolved += 1;
             }
-            (Err(_), Err(Error::InvalidQName(l))) => {
-                assert_eq!(l, local);
+            (Err(_), Err(Error::InvalidQName(t))) => {
+                assert_eq!(t, format!("ex:{local}"));
                 rejected += 1;
             }
             (built, read) => panic!("{local:?}: {built:?} against {read:?}"),

@@ -133,7 +133,9 @@ const QNAME_REASON: &str =
 impl Value {
     /// A literal with a datatype. `xsd:string` folds to [`Value::Str`], a
     /// well-formed `xsd:dateTime` is parsed, and anything else is kept as
-    /// written, whether or not its text is well-formed for the datatype.
+    /// written, whether or not its text is well-formed for the datatype. The
+    /// space, tab, CR and LF around a dateTime are trimmed before it is
+    /// parsed, and the parsed value drops them.
     ///
     /// ```
     /// use provkit::{Value, well_known::{XSD_DATETIME, XSD_INT, XSD_QNAME}};
@@ -154,7 +156,7 @@ impl Value {
         if datatype == *XSD_STRING {
             Ok(Value::Str(lexical))
         } else if datatype == *XSD_DATETIME {
-            Ok(match DateTime::parse(&lexical) {
+            Ok(match DateTime::parse(trim_xsd_space(&lexical)) {
                 Ok(parsed) => Value::DateTime(parsed),
                 Err(_) => Value::Typed { lexical, datatype },
             })
@@ -234,9 +236,15 @@ impl Value {
         };
         let folded = *datatype == *XSD_STRING
             || is_qname_datatype(datatype)
-            || (*datatype == *XSD_DATETIME && DateTime::parse(lexical).is_ok());
+            || (*datatype == *XSD_DATETIME && DateTime::parse(trim_xsd_space(lexical)).is_ok());
         !folded
     }
+}
+
+/// `lexical` without the space, tab, CR and LF that XSD collapses around a
+/// number, a boolean or a dateTime.
+fn trim_xsd_space(lexical: &str) -> &str {
+    lexical.trim_matches([' ', '\t', '\r', '\n'])
 }
 
 fn is_qname_datatype(datatype: &QName) -> bool {
@@ -284,7 +292,7 @@ impl Hash for Value {
 }
 
 /// What a typed literal compares and hashes by, beside its datatype.
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 enum Key<'a> {
     /// An integer's sign, true when negative, and its digits without leading
     /// zeros. Zero has no digits and is never negative.
@@ -305,7 +313,7 @@ impl<'a> Key<'a> {
     /// The key of `lexical` under `datatype`. XSD trims the space, tab, CR
     /// and LF around a number or boolean before reading it.
     fn of(lexical: &'a str, datatype: &QName) -> Self {
-        let text = lexical.trim_matches([' ', '\t', '\r', '\n']);
+        let text = trim_xsd_space(lexical);
         let integers: [&QName; 13] = [
             &XSD_INT,
             &XSD_LONG,
@@ -554,6 +562,42 @@ mod tests {
             Value::typed("1", XSD_INT.clone()).unwrap(),
             Value::typed("1", XSD_INT.clone()).unwrap()
         );
+    }
+
+    #[test]
+    fn a_padded_datetime_reads_as_a_datetime_and_prints_trimmed() {
+        let padded = typed(" \t2011-11-16T16:05:33Z\r\n", &XSD_DATETIME);
+        let Value::DateTime(parsed) = &padded else {
+            panic!("expected Value::DateTime, got {padded:?}");
+        };
+        assert_eq!(parsed.to_string(), "2011-11-16T16:05:33Z");
+        assert_eq!(padded, typed("2011-11-16T16:05:33Z", &XSD_DATETIME));
+        assert!(padded.has_one_representation());
+        // Other white space is not trimmed, so the text stays ill-formed.
+        let other = typed("\u{A0}2011-11-16T16:05:33Z", &XSD_DATETIME);
+        assert!(matches!(other, Value::Typed { .. }));
+        assert!(other.has_one_representation());
+        // A padded `Typed` that should have been parsed is reported.
+        let unfolded = Value::Typed {
+            lexical: " 2011-11-16T16:05:33Z ".into(),
+            datatype: XSD_DATETIME.clone(),
+        };
+        assert!(!unfolded.has_one_representation());
+    }
+
+    #[test]
+    fn a_well_formed_key_never_equals_the_text_key_of_the_same_content() {
+        assert_ne!(Key::Integer(false, "5"), Key::Text("5"));
+        assert_ne!(Key::Decimal(false, "1", ""), Key::Text("1"));
+        assert_ne!(Key::Boolean(true), Key::Text("true"));
+        assert_ne!(Key::Float(0), Key::Text("0"));
+        // Through `Key::of`, the well-formed spellings meet and the
+        // ill-formed ones stay apart from them.
+        assert_eq!(Key::of("+5", &XSD_INT), Key::of("5", &XSD_INT));
+        assert_ne!(Key::of("5", &XSD_INT), Key::of("5.0", &XSD_INT));
+        assert!(matches!(Key::of("5.0", &XSD_INT), Key::Text("5.0")));
+        assert!(matches!(Key::of("1", &XSD_BOOLEAN), Key::Boolean(true)));
+        assert!(matches!(Key::of("yes", &XSD_BOOLEAN), Key::Text("yes")));
     }
 
     #[test]
@@ -817,10 +861,11 @@ mod tests {
             }
             // A local part PROV-N cannot write, under a prefix or bare.
             for local in ["a b", "a\\.b", "a%", "<a>", "\u{301}a"] {
+                let text = format!("ex:{local}");
                 assert!(
                     matches!(
-                        Value::typed_in(&with_default, &format!("ex:{local}"), datatype.clone()),
-                        Err(Error::InvalidQName(l)) if l == local
+                        Value::typed_in(&with_default, &text, datatype.clone()),
+                        Err(Error::InvalidQName(t)) if t == text
                     ),
                     "{local:?}"
                 );

@@ -483,6 +483,7 @@ mod tests {
             "2011-02-29T00:00:00",
             "2011-11-16T24:00:01",
             "2011-11-16 16:05:33",
+            "+2012-01-01T00:00:00",
             "2011-11-16T16:05:33+15:00",
             "not a date",
             "",
@@ -567,6 +568,23 @@ mod tests {
         assert!(min < max_year);
         assert!(max_year > min);
         assert!(DateTime::new(i64::MAX, 12, 31, 24, 0, 0, 0, None).is_err());
+
+        let far_min = DateTime::parse("-9223372036854775807-01-01T00:00:00+14:00").unwrap();
+        assert_eq!(hash(&far_min), hash(&far_min.clone()));
+        assert!(far_min < max);
+        assert!(max > far_min);
+        assert_ne!(far_min, min);
+    }
+
+    #[test]
+    fn negative_years_follow_the_proleptic_leap_rule() {
+        for text in ["-0004-02-29T00:00:00", "-0400-02-29T00:00:00"] {
+            assert!(DateTime::parse(text).is_ok(), "{text}");
+        }
+        assert!(matches!(
+            DateTime::parse("-0100-02-29T00:00:00"),
+            Err(Error::InvalidLiteral { .. })
+        ));
     }
 
     #[test]
@@ -574,6 +592,10 @@ mod tests {
         let zero = DateTime::parse("0000-02-29T00:00:00Z").unwrap();
         assert_eq!(zero.year(), 0);
         assert_eq!(DateTime::parse("-0000-02-29T00:00:00Z").unwrap(), zero);
+        assert_eq!(
+            hash(&DateTime::parse("-0000-02-29T00:00:00Z").unwrap()),
+            hash(&zero)
+        );
         assert!(DateTime::parse("-0001-02-29T00:00:00Z").is_err());
         assert!(
             DateTime::parse("0000-01-01T00:00:00").unwrap()

@@ -29,12 +29,18 @@ follows [Semantic Versioning](https://semver.org/).
     or a backtick, a `%` not followed by two hex digits, or a first
     character that may only continue a name), with `Error::InvalidQName`.
     Every name the readers build goes through the same check.
+    `Namespaces::resolve` puts the whole text it was given in
+    `Error::InvalidQName`, for example `ex:a b`; `QName::new` puts the local
+    part there.
   - `Value` with plain, language-tagged, name, `dateTime` and typed literals.
     No typed literal is rejected for its text, except under a qualified-name
     datatype. `Value::typed` and both readers keep an ill-formed one as
     `Value::Typed`, and each value is written with the text it was read
     with. A `dateTime` in a formal position must still parse, and
     `Value::typed` still refuses a qualified-name datatype.
+  - `Value::typed` trims the space, tab, CR and LF around an `xsd:dateTime`
+    before parsing it, as XSD does for numbers. A padded well-formed
+    `dateTime` is a `Value::DateTime` and is written without the padding.
   - `Value` compares and hashes by value under one datatype. Spellings of
     one integer (`"5"`, `" 5 "`, `"+5"`, `"005"`), decimal, `xsd:double`,
     `xsd:float` or `xsd:boolean` are equal, so `Attributes` keeps one pair

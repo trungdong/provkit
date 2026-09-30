@@ -235,7 +235,7 @@ fn show(formal: &Formal) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_util::q;
+    use crate::test_util::{bundle, ex};
     use crate::well_known::PROV_LABEL;
     use crate::{
         Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, Namespaces,
@@ -247,7 +247,7 @@ mod tests {
         if let Some(l) = label {
             a.insert(PROV_LABEL.clone(), l.into());
         }
-        Record::from_parts(kind, Some(q(id)), formals, a).unwrap()
+        Record::from_parts(kind, Some(ex(id)), formals, a).unwrap()
     }
 
     fn anon(kind: Kind, formals: Vec<(F, Formal)>) -> Record {
@@ -259,7 +259,7 @@ mod tests {
     }
 
     fn name(l: &str) -> Formal {
-        Formal::Name(q(l))
+        Formal::Name(ex(l))
     }
 
     #[test]
@@ -288,7 +288,7 @@ mod tests {
         };
         assert_eq!(
             (g.entity.clone(), g.activity.clone()),
-            (Some(q("e")), Some(q("a")))
+            (Some(ex("e")), Some(ex("a")))
         );
         let labels: Vec<_> = g.attributes.get(&PROV_LABEL).collect();
         assert_eq!(
@@ -311,7 +311,7 @@ mod tests {
             let Record::Generation(g) = &u.records[0] else {
                 panic!()
             };
-            assert_eq!(g.activity, Some(q("a")));
+            assert_eq!(g.activity, Some(ex("a")));
         }
     }
 
@@ -346,7 +346,7 @@ mod tests {
         ));
         match d.unified() {
             Err(Error::Unification { id, reason }) => {
-                assert_eq!(id, q("g"));
+                assert_eq!(id, ex("g"));
                 assert!(
                     reason.contains("prov:time")
                         && reason.contains("2014-06-23T12:28:53Z")
@@ -515,7 +515,7 @@ mod tests {
         d.records.push(rec(Kind::Entity, "c", vec![], None));
         let u = d.unified().unwrap();
         let ids: Vec<_> = u.records.iter().map(|r| r.id().unwrap().clone()).collect();
-        assert_eq!(ids, [q("b"), q("a"), q("c")]);
+        assert_eq!(ids, [ex("b"), ex("a"), ex("c")]);
     }
 
     #[test]
@@ -561,11 +561,6 @@ mod tests {
 
     #[test]
     fn bundles_unify_independently() {
-        let bundle = |id: &str, records: Vec<Record>| Bundle {
-            id: q(id),
-            namespaces: Namespaces::new(),
-            records,
-        };
         let mut d = Document::new();
         d.records.push(rec(Kind::Entity, "e", vec![], Some("top")));
         d.bundles.push(bundle(
@@ -596,7 +591,7 @@ mod tests {
             let mut ns = Namespaces::new();
             ns.declare("o", iri).unwrap();
             Bundle {
-                id: q("b"),
+                id: ex("b"),
                 namespaces: ns,
                 records: vec![rec(Kind::Entity, "e", vec![], Some(label))],
             }
@@ -612,16 +607,15 @@ mod tests {
 
     #[test]
     fn bundles_sharing_an_identifier_merge_first() {
-        let bundle = |records: Vec<Record>| Bundle {
-            id: q("b"),
-            namespaces: Namespaces::new(),
-            records,
-        };
         let mut d = Document::new();
-        d.bundles
-            .push(bundle(vec![rec(Kind::Entity, "e", vec![], Some("one"))]));
-        d.bundles
-            .push(bundle(vec![rec(Kind::Entity, "e", vec![], Some("two"))]));
+        d.bundles.push(bundle(
+            "b",
+            vec![rec(Kind::Entity, "e", vec![], Some("one"))],
+        ));
+        d.bundles.push(bundle(
+            "b",
+            vec![rec(Kind::Entity, "e", vec![], Some("two"))],
+        ));
         let u = d.unified().unwrap();
         assert_eq!(u.bundles.len(), 1);
         assert_eq!(u.bundles[0].records.len(), 1);
@@ -665,12 +659,12 @@ mod tests {
         let mut a = Attributes::new();
         a.insert(
             crate::QName::new(crate::well_known::PROV, "activity").unwrap(),
-            q("x").into(),
+            ex("x").into(),
         );
         let generation = |attributes: Attributes| {
             Record::Generation(crate::Generation {
-                id: Some(q("g")),
-                entity: Some(q("e")),
+                id: Some(ex("g")),
+                entity: Some(ex("e")),
                 activity: None,
                 time: None,
                 attributes,

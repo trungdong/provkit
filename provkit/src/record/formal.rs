@@ -159,7 +159,8 @@ pub enum FormalRef<'a> {
 }
 
 impl FormalRef<'_> {
-    /// An owned copy.
+    /// An owned [`Formal`] copy. This inherent method takes precedence over
+    /// [`ToOwned::to_owned`], which would return another `FormalRef`.
     pub fn to_owned(&self) -> Formal {
         match *self {
             FormalRef::Name(q) => Formal::Name(q.clone()),

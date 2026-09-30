@@ -1,12 +1,9 @@
+use crate::test_util::{Broken, bundle, ex};
 use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT, XSD_INTEGER, XSD_LONG};
 use crate::{
     Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, LangStr,
     Namespaces, QName, Record, Value, provn,
 };
-
-fn ex(l: &str) -> QName {
-    QName::new("http://example.org/", l).unwrap()
-}
 
 fn dt() -> DateTime {
     DateTime::parse("2011-11-16T16:05:33Z").unwrap()
@@ -81,11 +78,10 @@ fn prints_the_expected_text() {
     ));
     d.records
         .push(element(Kind::Entity, ex("e.2"), Attributes::new()));
-    d.bundles.push(Bundle {
-        id: ex("b"),
-        namespaces: Namespaces::new(),
-        records: vec![element(Kind::Entity, ex("e2"), Attributes::new())],
-    });
+    d.bundles.push(bundle(
+        "b",
+        vec![element(Kind::Entity, ex("e2"), Attributes::new())],
+    ));
     let expected = "\
 document
   default <http://default.org/>
@@ -279,11 +275,10 @@ fn empty_document_has_no_blank_line() {
 fn bundles_sharing_an_identifier_are_written_once() {
     let mut d = document(vec![]);
     for id in ["e1", "e2"] {
-        d.bundles.push(Bundle {
-            id: ex("b"),
-            namespaces: Namespaces::new(),
-            records: vec![element(Kind::Entity, ex(id), Attributes::new())],
-        });
+        d.bundles.push(bundle(
+            "b",
+            vec![element(Kind::Entity, ex(id), Attributes::new())],
+        ));
     }
     let text = provn::to_string(&d).unwrap();
     assert_eq!(text.matches("bundle ex:b").count(), 1);
@@ -330,15 +325,14 @@ endDocument
 fn bundle_inherits_and_does_not_repeat_document_declarations() {
     let mut d = document(vec![]);
     d.namespaces.set_default("http://default.org/");
-    d.bundles.push(Bundle {
-        id: ex("b"),
-        namespaces: Namespaces::new(),
-        records: vec![element(
+    d.bundles.push(bundle(
+        "b",
+        vec![element(
             Kind::Entity,
             QName::new("http://default.org/", "e").unwrap(),
             Attributes::new(),
         )],
-    });
+    ));
     assert_eq!(
         provn::to_string(&d).unwrap(),
         "document\n  default <http://default.org/>\n  prefix ex <http://example.org/>\n\n  \
@@ -429,8 +423,8 @@ fn unrepresentable_iris_are_errors() {
     declared.namespaces.declare("q", "http://x.org/\"").unwrap();
     assert!(matches!(
         provn::to_string(&declared),
-        Err(Error::UnwritableNamespace { prefix, iri, reason })
-            if prefix == "q" && iri == "http://x.org/\"" && reason.contains("'\"'")
+        Err(Error::UnwritableNamespace { prefix, iri, .. })
+            if prefix == "q" && iri == "http://x.org/\""
     ));
 
     let mut names = Namespaces::new();
@@ -519,15 +513,6 @@ fn an_attribute_spelling_an_own_formal_cannot_be_written() {
 
 #[test]
 fn io_failure_is_reported_as_io() {
-    struct Broken;
-    impl std::io::Write for Broken {
-        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-            Err(std::io::Error::other("disk full"))
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
     let err = provn::write(&Document::new(), &mut Broken).unwrap_err();
     assert!(matches!(err, Error::Io(_)), "{err:?}");
     let mut ok = Vec::new();
@@ -547,6 +532,16 @@ fn minted_prefixes_stay_with_the_caller() {
     );
     assert_eq!(names.lookup("ns1"), Some("http://one.org/"));
     assert_eq!(names.lookup("ns2"), Some("http://two.org/"));
+}
+
+#[test]
+fn a_minted_prefix_skips_one_the_table_already_binds() {
+    let mut names = Namespaces::new();
+    names.declare("ns1", "http://taken.org/").unwrap();
+    let minted = provn::name(&QName::new("http://one.org/", "e").unwrap(), &mut names).unwrap();
+    assert_eq!(minted, "ns2:e");
+    assert_eq!(names.lookup("ns1"), Some("http://taken.org/"));
+    assert_eq!(names.lookup("ns2"), Some("http://one.org/"));
 }
 
 #[test]

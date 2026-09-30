@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{Report, corpus_dir, files};
+use common::{JSON_CORPUS_SIZE, Report, corpus_dir, files};
 use provkit::Document;
 use provkit::provn::Profile;
 
@@ -133,7 +133,7 @@ const EXCLUDED_PROVTOOLBOX_DOCUMENTS: &[(&str, &str)] = &[
     ),
     (
         "container2.provn",
-        "'%% <http://example.org/type>' uses a bare IRI as a datatype; production [53] requires datatype to be a qualifiedName",
+        "'%% <http://example.org/type>' uses a bare IRI as a datatype; production [42] requires datatype to be a qualifiedName",
     ),
 ];
 
@@ -147,372 +147,32 @@ enum Difference {
     DatatypePalette,
 }
 
-/// `ProvPy` 3.2.1's `KNOWN_DIFFERENCES`: twins not asserted equal.
-const KNOWN_DIFFERENCES: &[(&str, Difference)] = &[
-    ("activity3.provn", Difference::DynamicTimestamp),
-    ("activity5.provn", Difference::DynamicTimestamp),
-    ("activity6.provn", Difference::DynamicTimestamp),
-    ("activity7.provn", Difference::DynamicTimestamp),
-    ("activity8.provn", Difference::DynamicTimestamp),
-    ("activity9.provn", Difference::DynamicTimestamp),
-    ("agent6.provn", Difference::DynamicTimestamp),
-    ("agent7.provn", Difference::DynamicTimestamp),
-    ("agent8.provn", Difference::DynamicTimestamp),
-    ("association7.provn", Difference::DynamicTimestamp),
-    ("association9.provn", Difference::DynamicTimestamp),
-    (
-        "attr_association_one_role_attr27.provn",
-        Difference::DynamicTimestamp,
-    ),
-    (
-        "attr_association_one_role_attr32.provn",
-        Difference::DynamicTimestamp,
-    ),
-    ("attr_entity_one_attr27.provn", Difference::DynamicTimestamp),
-    ("attr_entity_one_attr32.provn", Difference::DynamicTimestamp),
-    (
-        "attr_entity_one_location_attr27.provn",
-        Difference::DynamicTimestamp,
-    ),
-    (
-        "attr_entity_one_location_attr32.provn",
-        Difference::DynamicTimestamp,
-    ),
-    (
-        "attr_entity_one_other_attr27.provn",
-        Difference::DynamicTimestamp,
-    ),
-    (
-        "attr_entity_one_other_attr32.provn",
-        Difference::DynamicTimestamp,
-    ),
-    (
-        "attr_entity_one_value_attr27.provn",
-        Difference::DynamicTimestamp,
-    ),
-    (
-        "attr_entity_one_value_attr32.provn",
-        Difference::DynamicTimestamp,
-    ),
-    ("attribution7.provn", Difference::DynamicTimestamp),
-    ("attribution8.provn", Difference::DynamicTimestamp),
-    ("communication6.provn", Difference::DynamicTimestamp),
-    ("communication7.provn", Difference::DynamicTimestamp),
-    ("delegation7.provn", Difference::DynamicTimestamp),
-    ("delegation8.provn", Difference::DynamicTimestamp),
-    ("derivation8.provn", Difference::DynamicTimestamp),
-    ("derivation9.provn", Difference::DynamicTimestamp),
-    ("end10.provn", Difference::DynamicTimestamp),
-    ("end7.provn", Difference::DynamicTimestamp),
-    ("end8.provn", Difference::DynamicTimestamp),
-    ("entity10.provn", Difference::DynamicTimestamp),
-    ("entity5.provn", Difference::DynamicTimestamp),
-    ("entity6.provn", Difference::DynamicTimestamp),
-    ("entity7.provn", Difference::DynamicTimestamp),
-    ("entity8.provn", Difference::DynamicTimestamp),
-    ("entity9.provn", Difference::DynamicTimestamp),
-    ("generation4.provn", Difference::DynamicTimestamp),
-    ("generation5.provn", Difference::DynamicTimestamp),
-    ("generation7.provn", Difference::DynamicTimestamp),
-    ("influence6.provn", Difference::DynamicTimestamp),
-    ("influence7.provn", Difference::DynamicTimestamp),
-    ("invalidation4.provn", Difference::DynamicTimestamp),
-    ("invalidation5.provn", Difference::DynamicTimestamp),
-    ("invalidation7.provn", Difference::DynamicTimestamp),
-    ("scruffy-end1-M.provn", Difference::DynamicTimestamp),
-    ("scruffy-end1-S.provn", Difference::DynamicTimestamp),
-    ("scruffy-end2-M.provn", Difference::DynamicTimestamp),
-    ("scruffy-end2-S.provn", Difference::DynamicTimestamp),
-    ("scruffy-end3-M.provn", Difference::DynamicTimestamp),
-    ("scruffy-end3-S.provn", Difference::DynamicTimestamp),
-    ("scruffy-end4-M.provn", Difference::DynamicTimestamp),
-    ("scruffy-end4-S.provn", Difference::DynamicTimestamp),
-    ("scruffy-generation1-M.provn", Difference::DynamicTimestamp),
-    ("scruffy-generation1-S.provn", Difference::DynamicTimestamp),
-    ("scruffy-generation2-M.provn", Difference::DynamicTimestamp),
-    ("scruffy-generation2-S.provn", Difference::DynamicTimestamp),
-    (
-        "scruffy-invalidation1-M.provn",
-        Difference::DynamicTimestamp,
-    ),
-    (
-        "scruffy-invalidation1-S.provn",
-        Difference::DynamicTimestamp,
-    ),
-    (
-        "scruffy-invalidation2-M.provn",
-        Difference::DynamicTimestamp,
-    ),
-    (
-        "scruffy-invalidation2-S.provn",
-        Difference::DynamicTimestamp,
-    ),
-    ("scruffy-start1-M.provn", Difference::DynamicTimestamp),
-    ("scruffy-start1-S.provn", Difference::DynamicTimestamp),
-    ("scruffy-start2-M.provn", Difference::DynamicTimestamp),
-    ("scruffy-start2-S.provn", Difference::DynamicTimestamp),
-    ("scruffy-start3-M.provn", Difference::DynamicTimestamp),
-    ("scruffy-start3-S.provn", Difference::DynamicTimestamp),
-    ("scruffy-start4-M.provn", Difference::DynamicTimestamp),
-    ("scruffy-start4-S.provn", Difference::DynamicTimestamp),
-    ("scruffy-usage1-M.provn", Difference::DynamicTimestamp),
-    ("scruffy-usage1-S.provn", Difference::DynamicTimestamp),
-    ("scruffy-usage2-M.provn", Difference::DynamicTimestamp),
-    ("scruffy-usage2-S.provn", Difference::DynamicTimestamp),
-    ("start10.provn", Difference::DynamicTimestamp),
-    ("start7.provn", Difference::DynamicTimestamp),
-    ("start8.provn", Difference::DynamicTimestamp),
-    ("usage4.provn", Difference::DynamicTimestamp),
-    ("usage5.provn", Difference::DynamicTimestamp),
-    ("usage7.provn", Difference::DynamicTimestamp),
-    ("attr_activity0.provn", Difference::DatatypePalette),
-    ("attr_agent0.provn", Difference::DatatypePalette),
-    ("attr_association0.provn", Difference::DatatypePalette),
-    (
-        "attr_association_one_role_attr29.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_association_one_role_attr30.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_association_one_role_attr31.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_association_one_role_attr33.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_association_one_role_attr34.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_association_one_role_attr35.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_association_one_role_attr36.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_association_one_role_attr37.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_association_one_role_attr38.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_association_one_role_attr39.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_association_one_role_attr40.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_association_one_role_attr41.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_association_one_role_attr42.provn",
-        Difference::DatatypePalette,
-    ),
-    ("attr_attribution0.provn", Difference::DatatypePalette),
-    ("attr_communication0.provn", Difference::DatatypePalette),
-    ("attr_delegation0.provn", Difference::DatatypePalette),
-    ("attr_derivation0.provn", Difference::DatatypePalette),
-    ("attr_end0.provn", Difference::DatatypePalette),
-    ("attr_entity0.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr29.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr30.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr31.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr33.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr34.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr35.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr36.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr37.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr38.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr39.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr40.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr41.provn", Difference::DatatypePalette),
-    ("attr_entity_one_attr42.provn", Difference::DatatypePalette),
-    (
-        "attr_entity_one_location_attr29.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_location_attr30.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_location_attr31.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_location_attr33.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_location_attr34.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_location_attr35.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_location_attr36.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_location_attr37.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_location_attr38.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_location_attr39.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_location_attr40.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_location_attr41.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_location_attr42.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr29.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr30.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr31.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr33.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr34.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr35.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr36.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr37.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr38.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr39.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr40.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr41.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_other_attr42.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr29.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr30.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr31.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr33.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr34.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr35.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr36.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr37.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr38.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr39.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr40.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr41.provn",
-        Difference::DatatypePalette,
-    ),
-    (
-        "attr_entity_one_value_attr42.provn",
-        Difference::DatatypePalette,
-    ),
-    ("attr_generation0.provn", Difference::DatatypePalette),
-    ("attr_influence0.provn", Difference::DatatypePalette),
-    ("attr_invalidation0.provn", Difference::DatatypePalette),
-    ("attr_start0.provn", Difference::DatatypePalette),
-    ("attr_usage0.provn", Difference::DatatypePalette),
-];
+/// The twins not asserted equal, read from `tests/data/known_differences.tsv`
+/// (file name, tab, category). `ProvPy` 3.2.1 keeps the same list.
+fn known_differences() -> Vec<(String, Difference)> {
+    common::tsv(&common::data_path("known_differences.tsv"))
+        .into_iter()
+        .map(|row| match row.as_slice() {
+            [name, category] => {
+                let category = match category.as_str() {
+                    "DynamicTimestamp" => Difference::DynamicTimestamp,
+                    "DatatypePalette" => Difference::DatatypePalette,
+                    other => panic!("unknown category {other} for {name}"),
+                };
+                (name.clone(), category)
+            }
+            other => panic!("expected a name and a category, got {other:?}"),
+        })
+        .collect()
+}
 
 #[test]
 fn writes_all_398() {
     let mut report = Report::default();
     for (name, text) in files(&corpus_dir("json"), "json") {
         report.checked += 1;
-        let document = match provkit::json::read(&text) {
-            Ok(d) => d,
-            Err(e) => {
-                report.fail(&name, format!("read: {e}"));
-                continue;
-            }
+        let Some(document) = report.read_json(&name, &text) else {
+            continue;
         };
         match provkit::provn::to_string(&document) {
             Ok(s) if s.starts_with("document\n") && s.ends_with("endDocument\n") => {}
@@ -520,7 +180,7 @@ fn writes_all_398() {
             Err(e) => report.fail(&name, format!("write: {e}")),
         }
     }
-    report.finish(398);
+    report.finish(JSON_CORPUS_SIZE);
 }
 
 fn reason<'a>(list: &[(&str, &'a str)], name: &str) -> Option<&'a str> {
@@ -587,8 +247,8 @@ fn provtoolbox_files_parse_under_default() {
 #[test]
 fn provtoolbox_corpus_equals_json_twins() {
     let mut report = Report::default();
+    let known_differences = known_differences();
     let mut known = Vec::new();
-    let mut seen_known = 0;
     for (name, text) in files(&corpus_dir("provn/provtoolbox-corpus"), "provn") {
         let outcome = json_twin(&name).and_then(|expected| {
             provkit::provn::read_with(&text, Profile::Default)
@@ -596,8 +256,7 @@ fn provtoolbox_corpus_equals_json_twins() {
                 .map_err(|e| e.to_string())
         });
         report.checked += 1;
-        let known_as = KNOWN_DIFFERENCES.iter().find(|(n, _)| *n == name);
-        seen_known += usize::from(known_as.is_some());
+        let known_as = known_differences.iter().find(|(n, _)| *n == name);
         match (outcome, known_as) {
             // Only equality is waived for a known difference, not reading.
             (Err(e), _) => report.fail(&name, e),
@@ -630,7 +289,9 @@ fn provtoolbox_corpus_equals_json_twins() {
         );
     }
     if std::env::var("PROVKIT_ONLY").is_err() {
-        assert_eq!(seen_known, KNOWN_DIFFERENCES.len());
+        let count = |want| known.iter().filter(|(_, c, _)| *c == want).count();
+        assert_eq!(count(Difference::DynamicTimestamp), 80);
+        assert_eq!(count(Difference::DatatypePalette), 79);
     }
     report.finish(388);
 }
@@ -640,12 +301,8 @@ fn json_corpus_round_trips_through_provn() {
     let mut report = Report::default();
     for (name, text) in files(&corpus_dir("json"), "json") {
         report.checked += 1;
-        let document = match provkit::json::read(&text) {
-            Ok(d) => d,
-            Err(e) => {
-                report.fail(&name, format!("read: {e}"));
-                continue;
-            }
+        let Some(document) = report.read_json(&name, &text) else {
+            continue;
         };
         let provn = match provkit::provn::to_string(&document) {
             Ok(s) => s,
@@ -660,5 +317,26 @@ fn json_corpus_round_trips_through_provn() {
             Err(e) => report.fail(&name, e),
         }
     }
-    report.finish(398);
+    report.finish(JSON_CORPUS_SIZE);
+}
+
+/// The extensibility expressions the reader leaves out of corpus documents.
+#[test]
+fn corpus_extensibility_expressions_are_reported() {
+    for example in ["prov-n-example-63.provn", "prov-n-example-64.provn"] {
+        let text = std::fs::read_to_string(corpus_dir("provn/spec/prov-n").join(example)).unwrap();
+        let (_, ignored) = provkit::provn::read_report(&text, Profile::Strict).unwrap();
+        let names: Vec<&str> = ignored.iter().map(|i| i.name.as_str()).collect();
+        assert_eq!(names, ["dictExt:hadMembers"], "{example}");
+    }
+
+    let text =
+        std::fs::read_to_string(corpus_dir("provn/provtoolbox").join("prov-family.provn")).unwrap();
+    let (_, ignored) = provkit::provn::read_report(&text, Profile::Default).unwrap();
+    assert_eq!(ignored.len(), 12);
+    assert!(
+        ignored
+            .iter()
+            .all(|i| i.name == "prov:derivedByInsertionFrom")
+    );
 }

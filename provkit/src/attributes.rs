@@ -3,7 +3,7 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 
-use indexmap::IndexSet;
+use indexmap::{Equivalent, IndexSet};
 
 use crate::{QName, Value};
 
@@ -34,7 +34,7 @@ impl Attributes {
     /// Remove a pair, keeping the order of the rest. Returns `false` if it
     /// was not present.
     pub fn remove(&mut self, name: &QName, value: &Value) -> bool {
-        let pair = (name.clone(), value.clone());
+        let pair = PairKey(name, value);
         if !self.pairs.contains(&pair) {
             return false;
         }
@@ -86,6 +86,23 @@ impl Attributes {
     }
 }
 
+/// A borrowed pair that looks up an owned pair without cloning it. Its hash
+/// and equality follow the tuple `(QName, Value)`.
+struct PairKey<'a>(&'a QName, &'a Value);
+
+impl Hash for PairKey<'_> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.hash(state);
+        self.1.hash(state);
+    }
+}
+
+impl Equivalent<(QName, Value)> for PairKey<'_> {
+    fn equivalent(&self, key: &(QName, Value)) -> bool {
+        *self.0 == key.0 && *self.1 == key.1
+    }
+}
+
 type PairRef<'a> = (&'a QName, &'a Value);
 
 impl FromIterator<(QName, Value)> for Attributes {
@@ -98,7 +115,11 @@ impl FromIterator<(QName, Value)> for Attributes {
 
 impl Extend<(QName, Value)> for Attributes {
     fn extend<I: IntoIterator<Item = (QName, Value)>>(&mut self, iter: I) {
-        Arc::make_mut(&mut self.pairs).extend(iter);
+        let mut iter = iter.into_iter().peekable();
+        // An empty iterator leaves shared storage shared.
+        if iter.peek().is_some() {
+            Arc::make_mut(&mut self.pairs).extend(iter);
+        }
     }
 }
 
@@ -158,7 +179,7 @@ impl Hash for Attributes {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::hash;
+    use crate::test_util::{ex, hash};
     use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT, XSD_LONG};
 
     #[test]
@@ -183,31 +204,27 @@ mod tests {
         assert_eq!(b.get(&PROV_TYPE).count(), 2);
     }
 
-    fn q(l: &str) -> QName {
-        QName::new("http://example.org/", l).unwrap()
-    }
-
     #[test]
     fn equal_values_are_one_pair_and_the_first_spelling_stays() {
         let int = |text: &str| Value::typed(text, XSD_INT.clone()).unwrap();
         let mut a = Attributes::new();
-        assert!(a.insert(q("v"), int(" 5 ")));
-        assert!(!a.insert(q("v"), int("5")));
-        assert!(!a.insert(q("v"), int("+005")));
-        assert!(a.insert(q("v"), Value::typed("5", XSD_LONG.clone()).unwrap()));
-        assert!(a.insert(q("w"), int("5")));
+        assert!(a.insert(ex("v"), int(" 5 ")));
+        assert!(!a.insert(ex("v"), int("5")));
+        assert!(!a.insert(ex("v"), int("+005")));
+        assert!(a.insert(ex("v"), Value::typed("5", XSD_LONG.clone()).unwrap()));
+        assert!(a.insert(ex("w"), int("5")));
         assert_eq!(a.len(), 3);
         let (_, first) = a.iter().next().unwrap();
         assert!(matches!(first, Value::Typed { lexical, .. } if lexical == " 5 "));
 
         // A set spelled another way is the same set.
         let mut b = Attributes::new();
-        b.insert(q("w"), int("05"));
-        b.insert(q("v"), Value::typed("+5", XSD_LONG.clone()).unwrap());
-        b.insert(q("v"), int("5"));
+        b.insert(ex("w"), int("05"));
+        b.insert(ex("v"), Value::typed("+5", XSD_LONG.clone()).unwrap());
+        b.insert(ex("v"), int("5"));
         assert_eq!(a, b);
         assert_eq!(hash(&a), hash(&b));
-        assert!(a.remove(&q("v"), &int("5")));
+        assert!(a.remove(&ex("v"), &int("5")));
         assert_eq!(a.len(), 2);
     }
 
@@ -233,13 +250,35 @@ mod tests {
     }
 
     #[test]
+    fn writes_to_a_clone_leave_the_original_untouched() {
+        let mut original = Attributes::new();
+        original.insert(PROV_LABEL.clone(), Value::from("x"));
+        original.insert(PROV_TYPE.clone(), Value::from("t"));
+
+        let mut removed = original.clone();
+        assert!(removed.remove(&PROV_LABEL, &Value::from("x")));
+        assert_eq!(removed.len(), 1);
+        assert_eq!(original.len(), 2);
+        assert!(!original.shares_storage_with(&removed));
+
+        let mut extended = original.clone();
+        extended.extend([(ex("n"), Value::from("v"))]);
+        assert_eq!(extended.len(), 3);
+        assert_eq!(original.len(), 2);
+
+        let mut unchanged = original.clone();
+        unchanged.extend(std::iter::empty());
+        assert!(original.shares_storage_with(&unchanged));
+    }
+
+    #[test]
     fn remove_keeps_the_order_of_the_rest() {
         let mut a: Attributes = [("a", "1"), ("b", "2"), ("c", "3")]
             .into_iter()
-            .map(|(n, v)| (q(n), Value::from(v)))
+            .map(|(n, v)| (ex(n), Value::from(v)))
             .collect();
-        assert!(a.remove(&q("b"), &Value::from("2")));
-        assert!(!a.remove(&q("b"), &Value::from("2")));
+        assert!(a.remove(&ex("b"), &Value::from("2")));
+        assert!(!a.remove(&ex("b"), &Value::from("2")));
         let names: Vec<_> = (&a)
             .into_iter()
             .map(|(n, _)| n.local().to_owned())
@@ -250,33 +289,33 @@ mod tests {
     #[test]
     fn extend_and_collect_drop_duplicates_and_keep_first_position() {
         let pairs =
-            [("a", "1"), ("b", "2"), ("a", "1"), ("c", "3")].map(|(n, v)| (q(n), Value::from(v)));
+            [("a", "1"), ("b", "2"), ("a", "1"), ("c", "3")].map(|(n, v)| (ex(n), Value::from(v)));
         let mut a: Attributes = pairs.iter().cloned().collect();
         assert_eq!(a.len(), 3);
-        a.extend([(q("b"), Value::from("2")), (q("d"), Value::from("4"))]);
+        a.extend([(ex("b"), Value::from("2")), (ex("d"), Value::from("4"))]);
         let names: Vec<_> = a.into_iter().map(|(n, _)| n.local().to_owned()).collect();
         assert_eq!(names, ["a", "b", "c", "d"]);
     }
 
     #[test]
     fn into_iter_yields_owned_pairs_from_shared_storage() {
-        let a: Attributes = [(q("a"), Value::from("1")), (q("b"), Value::from("2"))]
+        let a: Attributes = [(ex("a"), Value::from("1")), (ex("b"), Value::from("2"))]
             .into_iter()
             .collect();
         let b = a.clone();
         let owned: Vec<_> = a.into_iter().collect();
         assert_eq!(owned.len(), 2);
-        assert_eq!(owned[0].0, q("a"));
+        assert_eq!(owned[0].0, ex("a"));
         assert_eq!(b.len(), 2);
     }
 
     #[test]
     fn hash_ignores_order_and_separates_sets() {
-        let fwd: Attributes = (0..100).map(|i| (q("k"), Value::from(i))).collect();
-        let rev: Attributes = (0..100).rev().map(|i| (q("k"), Value::from(i))).collect();
+        let fwd: Attributes = (0..100).map(|i| (ex("k"), Value::from(i))).collect();
+        let rev: Attributes = (0..100).rev().map(|i| (ex("k"), Value::from(i))).collect();
         assert_eq!(fwd, rev);
         assert_eq!(hash(&fwd), hash(&rev));
-        let other: Attributes = (1..101).map(|i| (q("k"), Value::from(i))).collect();
+        let other: Attributes = (1..101).map(|i| (ex("k"), Value::from(i))).collect();
         assert_ne!(hash(&fwd), hash(&other));
     }
 

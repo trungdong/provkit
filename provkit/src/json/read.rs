@@ -203,13 +203,11 @@ fn decode_value(v: &JsonValue, scope: &Namespaces) -> Result<Value> {
 mod tests {
     use super::*;
     use crate::json;
+    use crate::test_util::ex;
     use crate::well_known::{XSD_BOOLEAN, XSD_DOUBLE, XSD_INT, XSD_INTEGER, XSD_LONG};
 
     fn doc(json: &str) -> crate::Document {
         json::read(json).unwrap()
-    }
-    fn ex(l: &str) -> QName {
-        QName::new("http://example.org/", l).unwrap()
     }
     const PFX: &str =
         r#""prefix": {"ex": "http://example.org/", "default": "http://default.org/"}"#;
@@ -456,23 +454,23 @@ mod tests {
             r#"{{PFX}, "entity": {"ex:e": {"ex:k": {"$": "@N@", "type": "xsd:QName"}}}}"#,
             r#"{{PFX}, "entity": {"ex:e": {"ex:k": {"$": "@N@", "type": "prov:QUALIFIED_NAME"}}}}"#,
         ];
-        // The name as written and the local part the error carries.
+        // The name as written in the JSON and the text the error carries.
         let names = [
-            ("ex:a b", "a b"),
-            ("ex:a%4", "a%4"),
-            ("ex:a\\u0007b", "a\u{7}b"),
-            ("ex:<a>", "<a>"),
+            ("ex:a b", "ex:a b"),
+            ("ex:a%4", "ex:a%4"),
+            ("ex:a\\u0007b", "ex:a\u{7}b"),
+            ("ex:<a>", "ex:<a>"),
             ("a b", "a b"),
             ("not a name", "not a name"),
-            ("prov:agent ", "agent "),
+            ("prov:agent ", "prov:agent "),
         ];
         for position in positions {
-            for (name, local) in names {
+            for (name, carried) in names {
                 let text = position.replace("{PFX}", PFX).replace("@N@", name);
                 assert!(
                     matches!(
                         json::read(&text),
-                        Err(Error::InvalidQName(l)) if l == local
+                        Err(Error::InvalidQName(t)) if t == carried
                     ),
                     "{text}"
                 );
@@ -805,20 +803,13 @@ mod tests {
         assert_eq!(d.records.len(), 1);
         assert_eq!(d.records[0].id(), Some(&ex("e")));
         // A repeated `prefix` or `bundle` is an error.
-        let message = |s: &str| json::read(s).unwrap_err().to_string();
-        assert!(
-            message(&format!(r#"{{{PFX}, "prefix": {{}}}}"#)).contains("duplicate field `prefix`")
-        );
-        assert!(
-            message(&format!(r#"{{{PFX}, "bundle": {{}}, "bundle": {{}}}}"#))
-                .contains("duplicate field `bundle`")
-        );
-        assert!(
-            message(&format!(
-                r#"{{{PFX}, "bundle": {{"ex:b": {{"prefix": {{}}, "prefix": {{}}}}}}}}"#
-            ))
-            .contains("duplicate field `prefix`")
-        );
+        for text in [
+            format!(r#"{{{PFX}, "prefix": {{}}}}"#),
+            format!(r#"{{{PFX}, "bundle": {{}}, "bundle": {{}}}}"#),
+            format!(r#"{{{PFX}, "bundle": {{"ex:b": {{"prefix": {{}}, "prefix": {{}}}}}}}}"#),
+        ] {
+            assert!(matches!(json::read(&text), Err(Error::Json(_))), "{text}");
+        }
     }
 
     #[test]

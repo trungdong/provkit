@@ -247,7 +247,7 @@ fn value_wire(value: &Value, table: &mut Namespaces) -> JsonValue {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_util::q as ex;
+    use crate::test_util::{Broken, bundle, ex};
     use crate::{
         Attributes, Bundle, Document, Entity, Generation, Kind, LangStr, Namespaces, QName, Record,
         json,
@@ -301,11 +301,7 @@ mod tests {
         let mut d = Document::new();
         d.namespaces.declare("ex", "http://example.org/").unwrap();
         d.records.push(blank());
-        d.bundles.push(Bundle {
-            id: ex("b"),
-            namespaces: Namespaces::new(),
-            records: vec![blank(), blank()],
-        });
+        d.bundles.push(bundle("b", vec![blank(), blank()]));
         let v: serde_json::Value = serde_json::from_str(&json::to_string(&d).unwrap()).unwrap();
         assert!(v["wasGeneratedBy"]["_:id1"].is_object());
         let inner = &v["bundle"]["ex:b"]["wasGeneratedBy"];
@@ -327,15 +323,6 @@ mod tests {
 
     #[test]
     fn failing_writer_reports_io() {
-        struct Broken;
-        impl std::io::Write for Broken {
-            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
-                Err(std::io::Error::other("broken"))
-            }
-            fn flush(&mut self) -> std::io::Result<()> {
-                Ok(())
-            }
-        }
         let mut d = Document::new();
         d.namespaces.declare("ex", "http://example.org/").unwrap();
         d.records.push(entity_in(ex("e")));
@@ -498,11 +485,7 @@ mod tests {
         d.namespaces.declare("ex", "http://example.org/").unwrap();
         let mut other = Namespaces::new();
         other.declare("o", "http://o.org/").unwrap();
-        d.bundles.push(Bundle {
-            id: ex("b"),
-            namespaces: Namespaces::new(),
-            records: vec![entity_in(ex("one"))],
-        });
+        d.bundles.push(bundle("b", vec![entity_in(ex("one"))]));
         d.bundles.push(Bundle {
             id: ex("b"),
             namespaces: other,

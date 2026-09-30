@@ -80,7 +80,8 @@ pub enum Error {
     /// The text is not a `PN_PREFIX`.
     #[error("`{0}` is not a valid prefix")]
     InvalidPrefix(String),
-    /// The text is not a qualified name.
+    /// The text is not a qualified name. The payload is the whole text as
+    /// given, for example `ex:a b`, not the local part alone.
     #[error("`{0}` is not a valid qualified name")]
     InvalidQName(String),
     /// The text is not a language tag.

@@ -67,7 +67,7 @@ pub(crate) enum LocalChar {
 }
 
 /// How PROV-N writes the character `c` at byte `at` of `local`, or `None`
-/// when no `PN_LOCAL` [54] holds it there. A `%` is held only before two hex
+/// when no `PN_LOCAL` [53] holds it there. A `%` is held only before two hex
 /// digits, because the reader keeps `%XX` verbatim.
 pub(crate) fn local_char(local: &str, at: usize, c: char) -> Option<LocalChar> {
     let first = at == 0;

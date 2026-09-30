@@ -24,7 +24,8 @@ pub fn read(text: &str) -> Result<Document> {
     Ok(builder.finish())
 }
 
-/// Read PROV-JSON text, sending events to `sink`.
+/// Read PROV-JSON text, sending events to `sink`. On an error the sink has
+/// already received the events that came before it.
 pub(crate) fn read_into(text: &str, sink: &mut impl Sink) -> Result<()> {
     let wire: wire::JsonDocument = serde_json::from_str(text)?;
     read::emit(&wire, sink)

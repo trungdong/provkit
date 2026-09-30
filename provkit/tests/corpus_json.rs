@@ -2,18 +2,17 @@
 
 mod common;
 
-use common::{Report, corpus_dir, files};
+use common::{JSON_CORPUS_SIZE, Report, corpus_dir, files};
+use provkit::FormalAttr;
 
 #[test]
 fn reads_all_398() {
     let mut report = Report::default();
     for (name, text) in files(&corpus_dir("json"), "json") {
         report.checked += 1;
-        if let Err(e) = provkit::json::read(&text) {
-            report.fail(&name, e);
-        }
+        report.read_json(&name, &text);
     }
-    report.finish(398);
+    report.finish(JSON_CORPUS_SIZE);
 }
 
 #[test]
@@ -21,12 +20,8 @@ fn round_trips_all_398() {
     let mut report = Report::default();
     for (name, text) in files(&corpus_dir("json"), "json") {
         report.checked += 1;
-        let first = match provkit::json::read(&text) {
-            Ok(d) => d,
-            Err(e) => {
-                report.fail(&name, format!("read: {e}"));
-                continue;
-            }
+        let Some(first) = report.read_json(&name, &text) else {
+            continue;
         };
         let written = match provkit::json::to_string(&first) {
             Ok(s) => s,
@@ -41,7 +36,7 @@ fn round_trips_all_398() {
             Err(e) => report.fail(&name, format!("re-read: {e}")),
         }
     }
-    report.finish(398);
+    report.finish(JSON_CORPUS_SIZE);
 }
 
 /// The 28 `scruffy-*` documents (14 pairs) each hold two records under one
@@ -54,22 +49,21 @@ fn unification_over_the_corpus() {
     let (mut on_time, mut on_name) = (0, 0);
     for (name, text) in files(&corpus_dir("json"), "json") {
         report.checked += 1;
-        let d = match provkit::json::read(&text) {
-            Ok(d) => d,
-            Err(e) => {
-                report.fail(&name, format!("read: {e}"));
-                continue;
-            }
+        let Some(d) = report.read_json(&name, &text) else {
+            continue;
         };
         let scruffy = name.starts_with("scruffy-");
         match d.unified() {
             Err(provkit::Error::Unification { reason, .. }) if scruffy => {
-                if reason.starts_with("prov:time ") {
-                    on_time += 1;
-                } else if reason.starts_with("prov:") {
-                    on_name += 1;
-                } else {
-                    report.fail(&name, format!("unexpected conflict: {reason}"));
+                let formal = reason
+                    .strip_prefix("prov:")
+                    .and_then(|rest| rest.split(' ').next());
+                match formal {
+                    Some("time") => on_time += 1,
+                    Some(f) if FormalAttr::from_local_name(f).is_some_and(|a| !a.is_time()) => {
+                        on_name += 1;
+                    }
+                    _ => report.fail(&name, format!("unexpected conflict: {reason}")),
                 }
             }
             Err(e) if scruffy => {
@@ -95,5 +89,5 @@ fn unification_over_the_corpus() {
             format!("{on_time} conflicts on a time and {on_name} on a name, expected 20 and 8"),
         );
     }
-    report.finish(398);
+    report.finish(JSON_CORPUS_SIZE);
 }

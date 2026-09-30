@@ -96,7 +96,8 @@ pub fn read_report(text: &str, profile: Profile) -> Result<(Document, Vec<Ignore
 }
 
 /// Read PROV-N text under `profile`, sending events to `sink` as each
-/// statement is parsed. Returns the extensibility expressions left out.
+/// statement is parsed. Returns the extensibility expressions left out. On an
+/// error the sink has already received the events that came before it.
 pub(crate) fn read_into_with(
     text: &str,
     profile: Profile,

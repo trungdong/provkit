@@ -138,10 +138,9 @@ impl Namespaces {
 
     /// As [`lookup`](Self::lookup), sharing the stored allocation.
     fn lookup_shared(&self, prefix: &str) -> Option<Arc<str>> {
-        match prefix {
-            "prov" => Some(PROV_IRI.clone()),
-            "xsd" => Some(XSD_IRI.clone()),
-            _ => self.prefixes.get(prefix).cloned(),
+        match reserved_shared(prefix) {
+            Some(iri) => Some(iri.clone()),
+            None => self.prefixes.get(prefix).cloned(),
         }
     }
 
@@ -181,7 +180,7 @@ impl Namespaces {
                 .default
                 .clone()
                 .ok_or_else(|| Error::NoDefaultNamespace(local.into()))?;
-            return QName::in_namespace(ns, local);
+            return QName::in_namespace(ns, local).map_err(|e| with_text(e, local));
         }
         if prefix == "_" {
             return Err(Error::InvalidQName(format!("{prefix}:{local}")));
@@ -189,7 +188,7 @@ impl Namespaces {
         let ns = self
             .lookup_shared(prefix)
             .ok_or_else(|| Error::UndeclaredPrefix(prefix.into()))?;
-        QName::in_namespace(ns, local)
+        QName::in_namespace(ns, local).map_err(|e| with_text(e, &format!("{prefix}:{local}")))
     }
 
     /// The prefix bound to `namespace`, if any (`prov` and `xsd` included).
@@ -296,12 +295,25 @@ impl Namespaces {
     }
 }
 
-fn reserved(prefix: &str) -> Option<&'static str> {
+/// Replace the payload of an [`Error::InvalidQName`] with the text as given.
+fn with_text(error: Error, text: &str) -> Error {
+    match error {
+        Error::InvalidQName(_) => Error::InvalidQName(text.into()),
+        other => other,
+    }
+}
+
+/// The shared IRI of a reserved prefix.
+fn reserved_shared(prefix: &str) -> Option<&'static Arc<str>> {
     match prefix {
-        "prov" => Some(PROV),
-        "xsd" => Some(XSD),
+        "prov" => Some(&PROV_IRI),
+        "xsd" => Some(&XSD_IRI),
         _ => None,
     }
+}
+
+fn reserved(prefix: &str) -> Option<&'static str> {
+    reserved_shared(prefix).map(|iri| &**iri)
 }
 
 #[cfg(test)]
@@ -351,15 +363,19 @@ mod tests {
         let mut ns = Namespaces::new();
         ns.declare("ex", "http://example.org/").unwrap();
         ns.set_default("http://default.org/");
-        for (text, local) in [("ex:a b", "a b"), ("a b", "a b"), ("ex:a%4", "a%4")] {
+        for text in ["ex:a b", "a b", "ex:a%4"] {
             assert!(
-                matches!(ns.resolve(text), Err(Error::InvalidQName(l)) if l == local),
+                matches!(ns.resolve(text), Err(Error::InvalidQName(t)) if t == text),
                 "{text:?}"
             );
         }
         assert!(matches!(
             ns.resolve_parts("ex", "a\tb"),
-            Err(Error::InvalidQName(l)) if l == "a\tb"
+            Err(Error::InvalidQName(t)) if t == "ex:a\tb"
+        ));
+        assert!(matches!(
+            ns.resolve_parts("", "a\tb"),
+            Err(Error::InvalidQName(t)) if t == "a\tb"
         ));
         assert_eq!(
             ns.resolve("ex:").unwrap(),
@@ -634,5 +650,54 @@ mod tests {
         b.declare("q", "http://x.org/").unwrap();
         b.declare("p", "http://x.org/").unwrap();
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn equality_ignores_the_reverse_index_after_a_redeclaration() {
+        // `a` ends with `p` and `q` both on x.org, but the reverse index
+        // lists `p` first in `a` and `q` first in `b`.
+        let mut a = Namespaces::new();
+        a.declare("p", "http://x.org/").unwrap();
+        a.declare("q", "http://x.org/").unwrap();
+        a.declare("p", "http://y.org/").unwrap();
+        a.declare("p", "http://x.org/").unwrap();
+        let mut b = Namespaces::new();
+        b.declare("q", "http://x.org/").unwrap();
+        b.declare("p", "http://x.org/").unwrap();
+        assert_eq!(a, b);
+        assert_eq!(a.prefix_for("http://x.org/"), Some("p"));
+        assert_eq!(b.prefix_for("http://x.org/"), Some("q"));
+        // A redeclared prefix is a different binding.
+        b.declare("p", "http://y.org/").unwrap();
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn an_empty_local_part_resolves() {
+        let mut ns = Namespaces::new();
+        ns.declare("ex", "http://example.org/").unwrap();
+        let name = ns.resolve("ex:").unwrap();
+        assert_eq!(name.namespace(), "http://example.org/");
+        assert_eq!(name.local(), "");
+    }
+
+    #[test]
+    fn absorb_keeps_the_first_default_and_the_first_binding() {
+        let mut first = Namespaces::new();
+        first.set_default("http://first.org/");
+        first.declare("p", "http://first.org/p/").unwrap();
+        let mut second = Namespaces::new();
+        second.set_default("http://second.org/");
+        second.declare("p", "http://second.org/p/").unwrap();
+        second.declare("q", "http://second.org/q/").unwrap();
+        first.absorb(&second);
+        assert_eq!(first.default_namespace(), Some("http://first.org/"));
+        assert_eq!(first.lookup("p"), Some("http://first.org/p/"));
+        assert_eq!(first.lookup("q"), Some("http://second.org/q/"));
+        assert_eq!(first.prefix_for("http://second.org/p/"), None);
+
+        let mut empty = Namespaces::new();
+        empty.absorb(&second);
+        assert_eq!(empty.default_namespace(), Some("http://second.org/"));
     }
 }

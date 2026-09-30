@@ -2,7 +2,7 @@
 
 use super::FormalAttr as F;
 use super::*;
-use crate::test_util::{hash, q};
+use crate::test_util::{ex, hash};
 use crate::{Attributes, Value};
 
 fn t() -> DateTime {
@@ -16,7 +16,7 @@ fn formal_for(attr: FormalAttr) -> Formal {
         let minute = u8::try_from(position).unwrap();
         Formal::Time(DateTime::new(2011, 11, 16, 16, minute, 0, 0, Some(0)).unwrap())
     } else {
-        Formal::Name(q(attr.local_name()))
+        Formal::Name(ex(attr.local_name()))
     }
 }
 
@@ -98,18 +98,49 @@ fn table_rows_match_prov_dm() {
     );
 }
 
+/// The storage type of each formal (`@value_type` in the table macro) and
+/// `FormalAttr::is_time` name the same three formals.
+#[test]
+fn stored_formal_types_agree_with_is_time() {
+    for &kind in Kind::ALL {
+        for &attr in kind.formals() {
+            let value = if attr.is_time() {
+                Formal::Time(t())
+            } else {
+                Formal::Name(ex("n"))
+            };
+            let record =
+                Record::from_parts(kind, Some(ex("x")), vec![(attr, value)], Attributes::new())
+                    .unwrap();
+            assert_eq!(
+                matches!(record.formal(attr), Some(FormalRef::Time(_))),
+                attr.is_time(),
+                "{kind:?} {attr:?}"
+            );
+        }
+    }
+}
+
 #[test]
 fn formal_tables_match_the_spec() {
-    let table: Vec<(Kind, &[&str])> = vec![
-        (Kind::Entity, &[]),
-        (Kind::Activity, &["startTime", "endTime"]),
-        (Kind::Agent, &[]),
-        (Kind::Generation, &["entity", "activity", "time"]),
-        (Kind::Usage, &["activity", "entity", "time"]),
-        (Kind::Communication, &["informed", "informant"]),
-        (Kind::Start, &["activity", "trigger", "starter", "time"]),
-        (Kind::End, &["activity", "trigger", "ender", "time"]),
-        (Kind::Invalidation, &["entity", "activity", "time"]),
+    let table: Vec<(Kind, &[&str], &[usize])> = vec![
+        (Kind::Entity, &[], &[0]),
+        (Kind::Activity, &["startTime", "endTime"], &[0, 2]),
+        (Kind::Agent, &[], &[0]),
+        (Kind::Generation, &["entity", "activity", "time"], &[1, 3]),
+        (Kind::Usage, &["activity", "entity", "time"], &[1, 3]),
+        (Kind::Communication, &["informed", "informant"], &[2]),
+        (
+            Kind::Start,
+            &["activity", "trigger", "starter", "time"],
+            &[1, 4],
+        ),
+        (
+            Kind::End,
+            &["activity", "trigger", "ender", "time"],
+            &[1, 4],
+        ),
+        (Kind::Invalidation, &["entity", "activity", "time"], &[1, 3]),
         (
             Kind::Derivation,
             &[
@@ -119,23 +150,40 @@ fn formal_tables_match_the_spec() {
                 "generation",
                 "usage",
             ],
+            &[2, 5],
         ),
-        (Kind::Attribution, &["entity", "agent"]),
-        (Kind::Association, &["activity", "agent", "plan"]),
-        (Kind::Delegation, &["delegate", "responsible", "activity"]),
-        (Kind::Influence, &["influencee", "influencer"]),
-        (Kind::Specialization, &["specificEntity", "generalEntity"]),
-        (Kind::Alternate, &["alternate1", "alternate2"]),
+        (Kind::Attribution, &["entity", "agent"], &[2]),
+        (Kind::Association, &["activity", "agent", "plan"], &[1, 3]),
+        (
+            Kind::Delegation,
+            &["delegate", "responsible", "activity"],
+            &[2, 3],
+        ),
+        (Kind::Influence, &["influencee", "influencer"], &[2]),
+        (
+            Kind::Specialization,
+            &["specificEntity", "generalEntity"],
+            &[2],
+        ),
+        (Kind::Alternate, &["alternate1", "alternate2"], &[2]),
         (
             Kind::Mention,
             &["specificEntity", "generalEntity", "bundle"],
+            &[3],
         ),
-        (Kind::Membership, &["collection", "entity"]),
+        (Kind::Membership, &["collection", "entity"], &[2]),
     ];
-    assert_eq!(table.iter().map(|(k, _)| *k).collect::<Vec<_>>(), Kind::ALL);
-    for (kind, names) in table {
+    assert_eq!(
+        table.iter().map(|(k, ..)| *k).collect::<Vec<_>>(),
+        Kind::ALL
+    );
+    for (kind, names, arities) in table {
         let got: Vec<_> = kind.formals().iter().map(|f| f.local_name()).collect();
         assert_eq!(got, names, "{kind:?}");
+        #[cfg(feature = "provn")]
+        assert_eq!(kind.arities(), arities, "{kind:?}");
+        #[cfg(not(feature = "provn"))]
+        let _ = arities;
     }
 }
 
@@ -143,24 +191,24 @@ fn formal_tables_match_the_spec() {
 fn from_parts_builds_a_generation() {
     let r = Record::from_parts(
         Kind::Generation,
-        Some(q("g1")),
+        Some(ex("g1")),
         vec![
-            (FormalAttr::Entity, Formal::Name(q("e1"))),
+            (FormalAttr::Entity, Formal::Name(ex("e1"))),
             (FormalAttr::Time, Formal::Time(t())),
         ],
         Attributes::new(),
     )
     .unwrap();
     assert_eq!(r.kind(), Kind::Generation);
-    assert_eq!(r.id(), Some(&q("g1")));
+    assert_eq!(r.id(), Some(&ex("g1")));
     let Record::Generation(g) = &r else { panic!() };
-    assert_eq!(g.entity, Some(q("e1")));
+    assert_eq!(g.entity, Some(ex("e1")));
     assert_eq!(g.activity, None);
     assert_eq!(g.time, Some(t()));
     assert_eq!(
         r.formals(),
         vec![
-            (FormalAttr::Entity, FormalRef::Name(&q("e1"))),
+            (FormalAttr::Entity, FormalRef::Name(&ex("e1"))),
             (FormalAttr::Time, FormalRef::Time(&t())),
         ]
     );
@@ -169,7 +217,7 @@ fn from_parts_builds_a_generation() {
 #[test]
 fn from_parts_builds_every_kind_empty() {
     for &kind in Kind::ALL {
-        let id = kind.is_element().then(|| q("x"));
+        let id = kind.is_element().then(|| ex("x"));
         let r = Record::from_parts(kind, id.clone(), vec![], Attributes::new()).unwrap();
         assert_eq!(r.kind(), kind);
         assert_eq!(r.id(), id.as_ref());
@@ -189,10 +237,10 @@ fn formals_round_trip_through_from_parts_for_every_kind() {
             .map(|&a| (a, formal_for(a)))
             .collect();
         let mut attributes = Attributes::new();
-        attributes.insert(q("label"), Value::from("x"));
-        let r = Record::from_parts(kind, Some(q("r")), parts, attributes.clone()).unwrap();
+        attributes.insert(ex("label"), Value::from("x"));
+        let r = Record::from_parts(kind, Some(ex("r")), parts, attributes.clone()).unwrap();
         assert_eq!(r.kind(), kind);
-        assert_eq!(r.id(), Some(&q("r")));
+        assert_eq!(r.id(), Some(&ex("r")));
         assert_eq!(r.attributes(), &attributes);
 
         let formals = r.formals();
@@ -232,12 +280,12 @@ fn from_parts_rejects_bad_parts() {
     assert!(bad(
         Kind::Generation,
         None,
-        vec![(FormalAttr::Plan, Formal::Name(q("p")))]
+        vec![(FormalAttr::Plan, Formal::Name(ex("p")))]
     ));
     assert!(bad(
         Kind::Entity,
-        Some(q("e")),
-        vec![(FormalAttr::Entity, Formal::Name(q("e")))]
+        Some(ex("e")),
+        vec![(FormalAttr::Entity, Formal::Name(ex("e")))]
     ));
     assert!(bad(
         Kind::Generation,
@@ -247,14 +295,31 @@ fn from_parts_rejects_bad_parts() {
     assert!(bad(
         Kind::Generation,
         None,
-        vec![(FormalAttr::Time, Formal::Name(q("t")))]
+        vec![(FormalAttr::Time, Formal::Name(ex("t")))]
     ));
     assert!(bad(
         Kind::Generation,
         None,
         vec![
-            (FormalAttr::Entity, Formal::Name(q("a"))),
-            (FormalAttr::Entity, Formal::Name(q("b"))),
+            (FormalAttr::Entity, Formal::Name(ex("a"))),
+            (FormalAttr::Entity, Formal::Name(ex("b"))),
+        ]
+    ));
+    // A repeated time formal is rejected as a repeated name is.
+    assert!(bad(
+        Kind::Generation,
+        None,
+        vec![
+            (FormalAttr::Time, Formal::Time(t())),
+            (FormalAttr::Time, Formal::Time(t())),
+        ]
+    ));
+    assert!(bad(
+        Kind::Activity,
+        Some(ex("a")),
+        vec![
+            (FormalAttr::StartTime, Formal::Time(t())),
+            (FormalAttr::StartTime, Formal::Time(t())),
         ]
     ));
 }
@@ -263,7 +328,7 @@ fn from_parts_rejects_bad_parts() {
 fn attribute_named_after_an_own_formal_is_rejected() {
     let prov = |l: &str| QName::new(PROV, l).unwrap();
     let mut clash = Attributes::new();
-    clash.insert(prov("activity"), Value::QName(q("a2")));
+    clash.insert(prov("activity"), Value::QName(ex("a2")));
     let e = Record::from_parts(Kind::Generation, None, vec![], clash).unwrap_err();
     assert!(
         matches!(
@@ -283,11 +348,11 @@ fn attribute_named_after_an_own_formal_is_rejected() {
     );
     // A formal of another kind, and prov:type and prov:label, are plain attributes.
     let mut fine = Attributes::new();
-    fine.insert(prov("plan"), Value::QName(q("p")));
+    fine.insert(prov("plan"), Value::QName(ex("p")));
     fine.insert(prov("type"), Value::from("t"));
     fine.insert(prov("label"), Value::from("l"));
     for kind in [Kind::Generation, Kind::Usage, Kind::Entity] {
-        let r = Record::from_parts(kind, Some(q("x")), vec![], fine.clone()).unwrap();
+        let r = Record::from_parts(kind, Some(ex("x")), vec![], fine.clone()).unwrap();
         assert_eq!(r.attributes().len(), 3);
     }
 }
@@ -297,8 +362,8 @@ fn records_compare_and_hash_by_value() {
     let build = |id: &str| {
         Record::from_parts(
             Kind::Usage,
-            Some(q(id)),
-            vec![(FormalAttr::Activity, Formal::Name(q("a")))],
+            Some(ex(id)),
+            vec![(FormalAttr::Activity, Formal::Name(ex("a")))],
             Attributes::new(),
         )
         .unwrap()
@@ -323,8 +388,8 @@ fn records_compare_and_hash_by_value() {
 #[test]
 fn attributes_mut_edits_every_variant() {
     for &kind in Kind::ALL {
-        let mut r = Record::from_parts(kind, Some(q("x")), vec![], Attributes::new()).unwrap();
-        assert!(r.attributes_mut().insert(q("label"), Value::from("x")));
+        let mut r = Record::from_parts(kind, Some(ex("x")), vec![], Attributes::new()).unwrap();
+        assert!(r.attributes_mut().insert(ex("label"), Value::from("x")));
         assert_eq!(r.attributes().iter().count(), 1, "{kind:?}");
     }
 }
@@ -335,7 +400,7 @@ fn formal_reads_one_value() {
         Kind::Generation,
         None,
         vec![
-            (FormalAttr::Entity, Formal::Name(q("e1"))),
+            (FormalAttr::Entity, Formal::Name(ex("e1"))),
             (FormalAttr::Time, Formal::Time(t())),
         ],
         Attributes::new(),
@@ -343,7 +408,7 @@ fn formal_reads_one_value() {
     .unwrap();
     assert_eq!(
         r.formal(FormalAttr::Entity),
-        Some(FormalRef::Name(&q("e1")))
+        Some(FormalRef::Name(&ex("e1")))
     );
     assert_eq!(r.formal(FormalAttr::Time), Some(FormalRef::Time(&t())));
     // A formal of the kind that is absent, and a formal of another kind.
@@ -356,8 +421,8 @@ fn formal_reads_one_value() {
 
 #[test]
 fn formal_ref_to_owned_copies_the_value() {
-    let (name, time) = (q("e1"), t());
-    assert_eq!(FormalRef::Name(&name).to_owned(), Formal::Name(q("e1")));
+    let (name, time) = (ex("e1"), t());
+    assert_eq!(FormalRef::Name(&name).to_owned(), Formal::Name(ex("e1")));
     assert_eq!(FormalRef::Time(&time).to_owned(), Formal::Time(t()));
 }
 
@@ -367,10 +432,10 @@ fn check_attributes_rejects_a_hand_built_own_formal() {
     let prov = |l: &str| QName::new(PROV, l).unwrap();
     let usage = |name: QName| {
         let mut attributes = Attributes::new();
-        attributes.insert(name, Value::QName(q("x")));
+        attributes.insert(name, Value::QName(ex("x")));
         Record::Usage(Usage {
             id: None,
-            activity: Some(q("a")),
+            activity: Some(ex("a")),
             entity: None,
             time: None,
             attributes,

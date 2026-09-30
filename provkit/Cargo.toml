@@ -11,7 +11,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 # These tests read the corpus submodule, which the published crate lacks.
-exclude = ["tests/corpus_*.rs", "tests/common/"]
+exclude = ["tests/corpus_*.rs", "tests/common/", "tests/data/"]
 
 [[test]]
 name = "corpus_json"

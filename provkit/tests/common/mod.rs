@@ -3,6 +3,31 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Number of PROV-JSON documents in the corpus.
+pub const JSON_CORPUS_SIZE: usize = 398;
+
+/// A name in `http://example.org/`.
+pub fn ex(local: &str) -> provkit::QName {
+    provkit::QName::new("http://example.org/", local).unwrap()
+}
+
+/// Path of a file in `tests/data`.
+pub fn data_path(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/data")
+        .join(name)
+}
+
+/// The tab-separated rows of a file, skipping blank lines.
+pub fn tsv(path: &Path) -> Vec<Vec<String>> {
+    fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()))
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.split('\t').map(str::to_owned).collect())
+        .collect()
+}
+
 /// Path of a corpus subdirectory (`json`, `provn/spec/prov-n`, ...).
 pub fn corpus_dir(sub: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -41,6 +66,17 @@ pub struct Report {
 impl Report {
     pub fn fail(&mut self, name: &str, why: impl std::fmt::Display) {
         self.failures.push(format!("{name}: {why}"));
+    }
+
+    /// Read `text` as PROV-JSON, recording a failure under `name` on error.
+    pub fn read_json(&mut self, name: &str, text: &str) -> Option<provkit::Document> {
+        match provkit::json::read(text) {
+            Ok(document) => Some(document),
+            Err(e) => {
+                self.fail(name, format!("read: {e}"));
+                None
+            }
+        }
     }
 
     pub fn finish(self, expected: usize) {

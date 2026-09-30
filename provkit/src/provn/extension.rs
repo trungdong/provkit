@@ -297,6 +297,10 @@ mod tests {
             syntax_position(report(&nested(65), Profile::Strict)),
             (4, 70)
         );
+        match report(&nested(65), Profile::Strict) {
+            Err(Error::Syntax { message, .. }) => assert!(message.contains("64"), "{message}"),
+            other => panic!("expected a syntax error, got {other:?}"),
+        }
         let expressions = |n: usize| format!("ex:f({}ex:e{})", "ex:g(".repeat(n), ")".repeat(n));
         assert!(report(&expressions(64), Profile::Strict).is_ok());
         assert_eq!(
@@ -336,6 +340,8 @@ mod tests {
             ("ex:f(<http://x>)", 6),
             ("ex:f(ex:e, [ex:k=ex:v])", 18),
             ("ex:f(ex:e, [ex:k])", 17),
+            ("ex:f([ex:k=1])", 6),
+            ("ex:f(ex:e;)", 11),
             ("ex:f(ex:e, {1)", 14),
             ("ex:f(ex:e, (1})", 14),
             ("ex:f(ex:e) ex:g)", 16),
@@ -350,6 +356,15 @@ mod tests {
                 (4, column),
                 "{body}"
             );
+        }
+    }
+
+    #[test]
+    fn an_identifier_then_a_semicolon_needs_an_argument() {
+        for profile in [Profile::Strict, Profile::Default] {
+            let (doc, ignored) = report("ex:f(ex:e; ex:g)", profile).unwrap();
+            assert!(doc.records.is_empty());
+            assert_eq!(ignored.len(), 1);
         }
     }
 

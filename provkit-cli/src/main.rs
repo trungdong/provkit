@@ -40,7 +40,10 @@ enum Command {
     ///
     /// Formats come from the file extension (.json, .provn), else from the
     /// content. Names the output cannot write with a declared prefix get an
-    /// `nsN` prefix, declared after the records of their scope. Exit codes: 0 when the documents are equal (nothing is printed), 1
+    /// `nsN` prefix. A `prefix` line, printed after the records of its scope,
+    /// applies to the whole scope.
+    ///
+    /// Exit codes: 0 when the documents are equal (nothing is printed), 1
     /// when they differ, 2 on a read error or, with --unified, a unification
     /// failure.
     Compare(CompareArgs),
