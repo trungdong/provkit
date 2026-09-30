@@ -1,46 +1,72 @@
 //! The crate's error type.
 
-use crate::QName;
+use crate::{Kind, QName};
 
 /// Every failure the crate can report.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
-    /// The input text does not follow the format's grammar.
-    #[error("{format} syntax error at line {line}, column {column}: {message}")]
+    /// PROV-N text the grammar rejects.
+    #[error("PROV-N syntax error at line {line}, column {column}: {message}")]
     Syntax {
-        /// Always `"PROV-N"`. Malformed JSON is [`Error::Json`].
-        format: &'static str,
         /// 1-based line.
         line: usize,
-        /// 1-based column.
+        /// 1-based column, in characters.
         column: usize,
-        /// "expected X, found Y".
+        /// What the reader expected and what it found.
         message: String,
     },
-    /// The input is well-formed but not a PROV document (unknown record kind,
-    /// an element without an identifier, ...).
-    #[error("{format}: {message}")]
-    Structure {
-        /// Where the error arose:
-        ///
-        /// - `"PROV-JSON"`: the PROV-JSON reader.
-        /// - `"PROV-N"`: the PROV-N writer, for text PROV-N cannot carry.
-        ///   The PROV-N reader reports structure errors as [`Error::Syntax`]
-        ///   with a position.
-        /// - `"record"`: [`Record::from_parts`](crate::Record::from_parts),
-        ///   whatever the input format, and both writers for an attribute
-        ///   that spells one of the record's own formals.
-        /// - `"document"`: [`DocumentBuilder`](crate::DocumentBuilder), for
-        ///   events out of order.
-        format: &'static str,
+    /// An error at a position in PROV-N text: a name, literal or record the
+    /// reader could parse but not accept.
+    #[error("line {line}, column {column}: {source}")]
+    At {
+        /// 1-based line.
+        line: usize,
+        /// 1-based column, in characters.
+        column: usize,
+        /// The error at that position.
+        #[source]
+        source: Box<Error>,
+    },
+    /// PROV-JSON that is valid JSON but not a PROV document.
+    #[cfg(feature = "json")]
+    #[error("PROV-JSON: {message}")]
+    JsonStructure {
         /// What was wrong.
         message: String,
     },
-    /// A prefix was used without a declaration. The empty string means a bare
-    /// name with no default namespace.
+    /// Parts that do not make a record of their kind.
+    #[error("{}: {message}", .kind.json_key())]
+    InvalidRecord {
+        /// The kind being built.
+        kind: Kind,
+        /// What was wrong.
+        message: String,
+    },
+    /// A name PROV-N cannot write.
+    #[error("PROV-N cannot write the name {name}: {reason}")]
+    Unwritable {
+        /// The name, which displays as its IRI.
+        name: QName,
+        /// The character or rule that prevents it.
+        reason: String,
+    },
+    /// A namespace declaration PROV-N cannot write.
+    #[error("PROV-N cannot declare prefix `{prefix}` for <{iri}>: {reason}")]
+    UnwritableNamespace {
+        /// The prefix. The empty string stands for the default namespace.
+        prefix: String,
+        /// The namespace IRI.
+        iri: String,
+        /// The character or rule that prevents it.
+        reason: String,
+    },
+    /// A prefix was used without a declaration.
     #[error("undeclared prefix `{0}`")]
     UndeclaredPrefix(String),
+    /// A name without a prefix was used and no default namespace is declared.
+    #[error("`{0}` has no prefix and no default namespace is declared")]
+    NoDefaultNamespace(String),
     /// `prov` or `xsd` was declared to a different IRI.
     #[error("prefix `{prefix}` is reserved for <{expected}> and cannot be declared as <{found}>")]
     ReservedPrefix {
@@ -51,9 +77,15 @@ pub enum Error {
         /// The IRI the input tried to bind.
         found: String,
     },
-    /// The text is not a qualified name, or a prefix is not a `PN_PREFIX`.
+    /// The text is not a `PN_PREFIX`.
+    #[error("`{0}` is not a valid prefix")]
+    InvalidPrefix(String),
+    /// The text is not a qualified name.
     #[error("`{0}` is not a valid qualified name")]
     InvalidQName(String),
+    /// The text is not a language tag.
+    #[error("`{0}` is not a language tag")]
+    InvalidLanguageTag(String),
     /// A literal's text is not valid for its datatype.
     #[error("invalid {datatype} literal `{lexical}`: {reason}")]
     InvalidLiteral {

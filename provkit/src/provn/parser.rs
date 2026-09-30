@@ -2,13 +2,17 @@
 //!
 //! One method per production. Names resolve through [`Scope`], records are
 //! built by [`Record::from_parts`], and every event goes to a [`Sink`].
+//!
+//! Every error carries a position. A grammar error is [`Error::Syntax`], and
+//! an error from the name, value or record layer is wrapped by [`at`].
 
 use super::Profile;
 use super::lexer::{Token, TokenKind};
 use crate::qname::well_known::XSD_INT;
+use crate::sink::Sink;
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
-    Result, Scope, Sink, Value,
+    Result, Scope, Value,
 };
 
 /// The statement keyword `prefix:local` as a kind and its allowed argument
@@ -37,8 +41,21 @@ fn classify(prefix: &str, local: &str, profile: Profile) -> Option<(Kind, &'stat
     })
 }
 
+/// Attach `token`'s position to an error that has none.
+fn at(token: &Token, error: Error) -> Error {
+    match error {
+        Error::Syntax { .. } | Error::At { .. } => error,
+        other => Error::At {
+            line: token.line,
+            column: token.column,
+            source: Box::new(other),
+        },
+    }
+}
+
 /// A name token split into its parts, before resolution.
-struct NameParts {
+struct NameParts<'t> {
+    token: &'t Token,
     prefix: String,
     local: String,
 }
@@ -87,7 +104,6 @@ impl<'t> Parser<'t> {
 
     fn error_at(token: &Token, message: String) -> Error {
         Error::Syntax {
-            format: "PROV-N",
             line: token.line,
             column: token.column,
             message,
@@ -129,16 +145,21 @@ impl<'t> Parser<'t> {
         Scope::new(&self.document_ns, self.bundle_ns.as_ref())
     }
 
+    /// The name in the current scope. An error is placed at the name token.
     fn resolve(&self, name: &NameParts) -> Result<QName> {
-        self.scope().resolve_parts(&name.prefix, &name.local)
+        self.scope()
+            .resolve_parts(&name.prefix, &name.local)
+            .map_err(|e| at(name.token, e))
     }
 
     /// A name token.
-    fn name(&mut self, what: &str) -> Result<NameParts> {
-        let TokenKind::Name { prefix, local } = &self.peek().kind else {
+    fn name(&mut self, what: &str) -> Result<NameParts<'t>> {
+        let token = self.peek();
+        let TokenKind::Name { prefix, local } = &token.kind else {
             return Err(self.expected(what));
         };
         let parts = NameParts {
+            token,
             prefix: prefix.clone(),
             local: local.clone(),
         };
@@ -149,11 +170,13 @@ impl<'t> Parser<'t> {
     /// A name token in an identifier or attribute-name position, where an
     /// unsigned integer is a bare local name made of digits. The lexer
     /// cannot tell that apart from `INT_LITERAL`.
-    fn identifier(&mut self, what: &str) -> Result<NameParts> {
-        if let TokenKind::Int(digits) = &self.peek().kind
+    fn identifier(&mut self, what: &str) -> Result<NameParts<'t>> {
+        let token = self.peek();
+        if let TokenKind::Int(digits) = &token.kind
             && !digits.starts_with('-')
         {
             let parts = NameParts {
+                token,
                 prefix: String::new(),
                 local: digits.clone(),
             };
@@ -218,17 +241,16 @@ impl<'t> Parser<'t> {
                 ns.set_default(iri);
             } else if self.is_keyword("prefix") {
                 self.bump();
-                let token = self.peek();
                 let name = self.name("a prefix")?;
                 if !name.prefix.is_empty() {
                     return Err(Self::error_at(
-                        token,
-                        format!("expected a prefix, found {}", describe(&token.kind)),
+                        name.token,
+                        format!("expected a prefix, found {}", describe(&name.token.kind)),
                     ));
                 }
                 if seen.contains(&name.local) {
                     return Err(Self::error_at(
-                        token,
+                        name.token,
                         format!(
                             "expected a new prefix, found '{}' declared twice in one scope",
                             name.local
@@ -236,7 +258,8 @@ impl<'t> Parser<'t> {
                     ));
                 }
                 let iri = self.iri()?;
-                ns.declare(&name.local, &iri)?;
+                ns.declare(&name.local, &iri)
+                    .map_err(|e| at(name.token, e))?;
                 seen.push(name.local);
             } else {
                 return Ok(ns);
@@ -252,8 +275,8 @@ impl<'t> Parser<'t> {
         let ns = self.namespace_declarations()?;
         // The bundle's own name resolves in the bundle scope (PROV-N 3.7.4).
         self.bundle_ns = Some(ns.clone());
-        let id = self.resolve(&id)?;
-        sink.start_bundle(id, ns)?;
+        let name = self.resolve(&id)?;
+        sink.start_bundle(name, ns).map_err(|e| at(id.token, e))?;
         while !self.is_keyword("endBundle") {
             if self.peek().kind == TokenKind::Eof
                 || self.is_keyword("bundle")
@@ -356,8 +379,7 @@ impl<'t> Parser<'t> {
             ));
         }
         let formals = self.formals(kind, arities, args)?;
-        Record::from_parts(kind, id, formals, attributes)
-            .map_err(|e| Self::error_at(start, e.to_string()))
+        Record::from_parts(kind, id, formals, attributes).map_err(|e| at(start, e))
     }
 
     /// Match positional arguments to the kind's formals; `-` is absent.
@@ -418,7 +440,7 @@ impl<'t> Parser<'t> {
             }
             TokenKind::DateTime(text) => {
                 self.bump();
-                Arg::Time(DateTime::parse(text)?)
+                Arg::Time(DateTime::parse(text).map_err(|e| at(token, e))?)
             }
             TokenKind::Name { .. } | TokenKind::Int(_) => {
                 let name = self.identifier("an identifier, a dateTime or '-'")?;
@@ -460,35 +482,37 @@ impl<'t> Parser<'t> {
 
     // literal ::= STRING_LITERAL ("@" LANGTAG | "%%" datatype)? | INT_LITERAL | QUALIFIED_NAME_LITERAL
 
+    /// A literal. A value error is placed at the literal's first token.
     fn literal(&mut self) -> Result<Value> {
-        let value = match &self.peek().kind {
+        let start = self.peek();
+        let value = match &start.kind {
             TokenKind::Str(s) => {
                 self.bump();
                 match &self.peek().kind {
                     TokenKind::LangTag(tag) => {
                         self.bump();
-                        Value::LangStr(LangStr::new(s.as_str(), tag.as_str())?)
+                        LangStr::new(s.as_str(), tag.as_str()).map(Value::LangStr)
                     }
                     TokenKind::Typed => {
                         self.bump();
                         let datatype = self.name("a datatype")?;
                         let datatype = self.resolve(&datatype)?;
-                        Value::typed_in(&self.scope(), s, datatype)?
+                        Value::typed_in(&self.scope(), s, datatype)
                     }
-                    _ => Value::Str(s.clone()),
+                    _ => Ok(Value::Str(s.clone())),
                 }
             }
             TokenKind::Int(i) => {
                 self.bump();
-                Value::typed(i.as_str(), XSD_INT.clone())?
+                Value::typed(i.as_str(), XSD_INT.clone())
             }
             TokenKind::QNameLiteral { prefix, local } => {
                 self.bump();
-                Value::QName(self.scope().resolve_parts(prefix, local)?)
+                self.scope().resolve_parts(prefix, local).map(Value::QName)
             }
             _ => return Err(self.expected("a literal")),
         };
-        Ok(value)
+        value.map_err(|e| at(start, e))
     }
 }
 
@@ -554,14 +578,41 @@ mod tests {
         }
     }
 
+    /// The position and the inner error of an [`Error::At`].
+    fn located(e: Error) -> ((usize, usize), Error) {
+        match e {
+            Error::At {
+                line,
+                column,
+                source,
+            } => ((line, column), *source),
+            other => panic!("expected Error::At, got {other:?}"),
+        }
+    }
+
     #[test]
     fn attribute_named_after_an_own_formal_is_rejected() {
-        let e = err(
-            "wasGeneratedBy(ex:e, ex:a, -, [prov:activity='ex:a2'])",
-            Profile::Default,
+        let text = "document\nprefix ex <http://example.org/>\n\
+                    wasGeneratedBy(ex:e, ex:a, -, [prov:activity='ex:b'])\nendDocument\n";
+        let e = provn::read(text).unwrap_err();
+        // The message names the position and the kind, once each.
+        assert_eq!(
+            e.to_string(),
+            "line 3, column 1: wasGeneratedBy: prov:activity is given as an attribute; \
+             its value belongs in the positional argument"
         );
-        let message = syntax_message(e);
-        assert!(message.contains("prov:activity"), "{message}");
+        let (position, source) = located(e);
+        assert_eq!(position, (3, 1));
+        assert!(
+            matches!(
+                source,
+                Error::InvalidRecord {
+                    kind: Kind::Generation,
+                    ..
+                }
+            ),
+            "{source:?}"
+        );
         // prov:type and prov:label on a relation stay attributes.
         let d = doc(
             "wasGeneratedBy(ex:e, ex:a, -, [prov:type='ex:T', prov:label=\"l\"])",
@@ -693,12 +744,17 @@ mod tests {
             Error::Syntax { .. }
         ));
         assert!(matches!(
-            err("entity(zz:e)", Profile::Default),
-            Error::UndeclaredPrefix(p) if p == "zz"
+            located(err("entity(zz:e)", Profile::Default)),
+            (_, Error::UndeclaredPrefix(p)) if p == "zz"
         ));
-        assert!(
-            matches!(provn::read("entity(ex:e)"), Err(Error::Syntax { line: 1, column: 1, message, .. }) if message.starts_with("expected 'document'"))
-        );
+        assert!(matches!(
+            provn::read("entity(ex:e)"),
+            Err(Error::Syntax {
+                line: 1,
+                column: 1,
+                ..
+            })
+        ));
         // A time where a name belongs, and a name where a time belongs.
         assert!(matches!(
             err(
@@ -715,22 +771,97 @@ mod tests {
 
     #[test]
     fn errors_carry_positions() {
-        match err("entity(ex:e]", Profile::Default) {
+        assert!(matches!(
+            err("entity(ex:e]", Profile::Default),
             Error::Syntax {
-                line,
-                column,
-                message,
+                line: 4,
+                column: 12,
                 ..
-            } => {
-                assert_eq!((line, column), (4, 12));
-                assert_eq!(message, "expected ',' or ')', found ']'");
             }
-            other => panic!("unexpected {other:?}"),
+        ));
+        assert!(matches!(
+            provn::read("document\nprefix ex <http://e/>\nentity(ex:e)\n"),
+            Err(Error::Syntax {
+                line: 4,
+                column: 1,
+                ..
+            })
+        ));
+        // A name the grammar accepts and the namespace table does not.
+        let text = "document\nprefix ex <http://example.org/>\nentity(zz:e)\nendDocument\n";
+        assert!(matches!(
+            located(provn::read(text).unwrap_err()),
+            ((3, 8), Error::UndeclaredPrefix(p)) if p == "zz"
+        ));
+    }
+
+    #[test]
+    fn each_layer_error_sits_at_its_token() {
+        let read = |body: &str| {
+            let text = format!("document\nprefix ex <http://example.org/>\n{body}\nendDocument\n");
+            located(provn::read(&text).unwrap_err())
+        };
+        // An undeclared prefix, at the token that carries it: an attribute
+        // name, a datatype, a name argument, a bundle identifier, and a
+        // literal's first token for a qualified-name value.
+        for (body, position) in [
+            ("entity(ex:e, [zz:k=1])", (3, 15)),
+            ("entity(ex:e, [ex:k=\"1\" %% zz:t])", (3, 27)),
+            ("used(ex:a, zz:e, -)", (3, 12)),
+            ("bundle zz:b\nendBundle", (3, 8)),
+            ("entity(ex:e, [ex:k=\"zz:v\" %% xsd:QName])", (3, 20)),
+        ] {
+            let (found, source) = read(body);
+            assert_eq!(found, position, "{body}");
+            assert!(
+                matches!(&source, Error::UndeclaredPrefix(p) if p == "zz"),
+                "{body}: {source:?}"
+            );
         }
-        let message = syntax_message(
-            provn::read("document\nprefix ex <http://e/>\nentity(ex:e)\n").unwrap_err(),
-        );
-        assert_eq!(message, "expected 'endDocument', found end of input");
+        assert!(matches!(
+            read("entity(e)"),
+            ((3, 8), Error::NoDefaultNamespace(l)) if l == "e"
+        ));
+        // A literal's value, at the literal's first token.
+        assert!(matches!(
+            read("entity(ex:e, [ex:k=\"x\" %% xsd:dateTime])"),
+            ((3, 20), Error::InvalidLiteral { .. })
+        ));
+        assert!(matches!(
+            read("entity(ex:e, [ex:k=\"x\"@abcdefghi])"),
+            ((3, 20), Error::InvalidLanguageTag(tag)) if tag == "abcdefghi"
+        ));
+        // A reserved prefix, at the prefix token.
+        let text = "document\nprefix prov <http://example.org/>\nendDocument\n";
+        assert!(matches!(
+            located(provn::read(text).unwrap_err()),
+            ((2, 8), Error::ReservedPrefix { .. })
+        ));
+    }
+
+    #[test]
+    fn every_reader_error_has_a_position() {
+        let cases = [
+            ("entity(zz:e)", 3, 8),                            // undeclared prefix
+            ("entity(e)", 3, 8),                               // no default namespace
+            ("entity(ex:e, [ex:k='zz:v'])", 3, 20),            // undeclared prefix in a value
+            ("activity(ex:a, 2012-13-01T00:00:00, -)", 3, 16), // bad dateTime argument
+            (
+                "wasGeneratedBy(ex:e, ex:a, -, [prov:activity='ex:b'])",
+                3,
+                1,
+            ),
+            ("bundle ex:b\nendBundle\nbundle ex:b\nendBundle", 5, 8), // duplicate bundle
+        ];
+        for (body, line, column) in cases {
+            let text = format!("document\nprefix ex <http://example.org/>\n{body}\nendDocument\n");
+            match provn::read(&text) {
+                Err(Error::At {
+                    line: l, column: c, ..
+                }) => assert_eq!((l, c), (line, column), "{body}"),
+                other => panic!("{body}: expected Error::At, got {other:?}"),
+            }
+        }
     }
 
     #[test]
@@ -807,8 +938,8 @@ mod tests {
         let values: Vec<&Value> = d.records[0].attributes().iter().map(|(_, v)| v).collect();
         assert_eq!(values, [&Value::QName(ex("v")), &Value::QName(ex("v"))]);
         assert!(matches!(
-            err(r#"entity(ex:e, [ex:a="zz:v" %% prov:QUALIFIED_NAME])"#, Profile::Default),
-            Error::UndeclaredPrefix(p) if p == "zz"
+            located(err(r#"entity(ex:e, [ex:a="zz:v" %% prov:QUALIFIED_NAME])"#, Profile::Default)),
+            (_, Error::UndeclaredPrefix(p)) if p == "zz"
         ));
     }
 

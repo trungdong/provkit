@@ -252,11 +252,13 @@ pub(crate) fn formal_named(kind: Kind, name: &QName) -> Option<FormalAttr> {
 
 /// The error for an attribute that spells one of the record's own formals.
 pub(crate) fn formal_attribute_error(kind: Kind, attr: FormalAttr) -> Error {
-    structure(format!(
-        "{} has an attribute prov:{}; its value belongs in the positional argument",
-        kind.json_key(),
-        attr.local_name()
-    ))
+    invalid(
+        kind,
+        format!(
+            "prov:{} is given as an attribute; its value belongs in the positional argument",
+            attr.local_name()
+        ),
+    )
 }
 
 const ALL_FORMALS: [FormalAttr; 26] = [
@@ -609,22 +611,27 @@ impl Formals {
         let allowed = kind.formals();
         for (i, (attr, value)) in items.iter().enumerate() {
             if !allowed.contains(attr) {
-                return Err(structure(format!(
-                    "{} has no formal attribute prov:{}",
-                    kind.json_key(),
-                    attr.local_name()
-                )));
+                return Err(invalid(
+                    kind,
+                    format!("no formal attribute prov:{}", attr.local_name()),
+                ));
             }
             let time_expected = attr.is_time();
             if time_expected != matches!(value, Formal::Time(_)) {
-                return Err(structure(format!(
-                    "prov:{} needs a {}",
-                    attr.local_name(),
-                    if time_expected { "dateTime" } else { "name" }
-                )));
+                return Err(invalid(
+                    kind,
+                    format!(
+                        "prov:{} needs a {}",
+                        attr.local_name(),
+                        if time_expected { "dateTime" } else { "name" }
+                    ),
+                ));
             }
             if items[..i].iter().any(|(a, _)| a == attr) {
-                return Err(structure(format!("prov:{} given twice", attr.local_name())));
+                return Err(invalid(
+                    kind,
+                    format!("prov:{} given twice", attr.local_name()),
+                ));
             }
         }
         Ok(Formals { items })
@@ -647,11 +654,8 @@ impl Formals {
     }
 }
 
-fn structure(message: String) -> Error {
-    Error::Structure {
-        format: "record",
-        message,
-    }
+fn invalid(kind: Kind, message: String) -> Error {
+    Error::InvalidRecord { kind, message }
 }
 
 /// Collects present formals for [`Record::formals`].
@@ -676,6 +680,11 @@ impl Record {
     /// formals must belong to the kind, have the right value type, and appear
     /// at most once. No attribute may be named `prov:` plus the local name of
     /// one of the kind's formals (`prov:activity` on `wasGeneratedBy`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidRecord`] naming `kind` when the parts break
+    /// one of these rules.
     // One arm per kind; splitting it would scatter the table.
     #[allow(clippy::too_many_lines)]
     pub fn from_parts(
@@ -688,9 +697,8 @@ impl Record {
         if let Some(attr) = attributes.iter().find_map(|(n, _)| formal_named(kind, n)) {
             return Err(formal_attribute_error(kind, attr));
         }
-        let element_id = |id: Option<QName>| {
-            id.ok_or_else(|| structure(format!("{} needs an identifier", kind.json_key())))
-        };
+        let element_id =
+            |id: Option<QName>| id.ok_or_else(|| invalid(kind, "needs an identifier".to_owned()));
         Ok(match kind {
             Kind::Entity => Record::Entity(Entity {
                 id: element_id(id)?,
@@ -1178,10 +1186,10 @@ mod tests {
 
     #[test]
     fn from_parts_rejects_bad_parts() {
-        let bad = |kind, id, formals| {
+        let bad = |kind: Kind, id, formals| {
             matches!(
                 Record::from_parts(kind, id, formals, Attributes::new()),
-                Err(Error::Structure { .. })
+                Err(Error::InvalidRecord { kind: k, .. }) if k == kind
             )
         };
         assert!(bad(Kind::Entity, None, vec![]));
@@ -1222,14 +1230,23 @@ mod tests {
         let prov = |l: &str| QName::new(PROV, l);
         let mut clash = Attributes::new();
         clash.insert(prov("activity"), Value::QName(q("a2")));
-        match Record::from_parts(Kind::Generation, None, vec![], clash) {
-            Err(Error::Structure { format, message }) => {
-                assert_eq!(format, "record");
-                assert!(message.contains("prov:activity"), "{message}");
-                assert!(message.contains("positional argument"), "{message}");
-            }
-            other => panic!("expected a structure error, got {other:?}"),
-        }
+        let e = Record::from_parts(Kind::Generation, None, vec![], clash).unwrap_err();
+        assert!(
+            matches!(
+                e,
+                Error::InvalidRecord {
+                    kind: Kind::Generation,
+                    ..
+                }
+            ),
+            "{e:?}"
+        );
+        // The message names the kind, the attribute and where its value goes.
+        assert_eq!(
+            e.to_string(),
+            "wasGeneratedBy: prov:activity is given as an attribute; \
+             its value belongs in the positional argument"
+        );
         // A formal of another kind, and prov:type and prov:label, are plain attributes.
         let mut fine = Attributes::new();
         fine.insert(prov("plan"), Value::QName(q("p")));

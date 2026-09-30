@@ -19,7 +19,10 @@ follows [Semantic Versioning](https://semver.org/).
   - Set-based `Document` equality.
   - `Document::unified()`, which merges records by identifier and kind and
     reports conflicts as `Error::Unification`.
-  - `Sink` and `DocumentBuilder` as the single construction path.
+  - `Error`, with one variant and a typed payload per kind of failure. Every
+    error from the PROV-N reader carries a line and column: `Error::Syntax`
+    for text the grammar rejects, and `Error::At` around the error for a
+    name, literal or record.
   - Cargo features `json` and `provn`, both on by default.
 - `provkit` binary (crate `provkit-cli`):
   - `provkit convert` between PROV-JSON and PROV-N, with pandoc-style format

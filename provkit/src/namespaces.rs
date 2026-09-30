@@ -42,14 +42,14 @@ impl Namespaces {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidQName`] if `prefix` is not a `PN_PREFIX`: empty,
+    /// [`Error::InvalidPrefix`] if `prefix` is not a `PN_PREFIX`: empty,
     /// containing `:` or whitespace, not starting with a letter, or ending
     /// in `.`. `_`, which introduces blank nodes, is never a prefix.
     /// [`Error::ReservedPrefix`] if `prefix` is `prov` or `xsd` and `iri` is
     /// not its fixed IRI.
     pub fn declare(&mut self, prefix: &str, iri: &str) -> Result<()> {
         if !pn::is_pn_prefix(prefix) {
-            return Err(Error::InvalidQName(prefix.into()));
+            return Err(Error::InvalidPrefix(prefix.into()));
         }
         if let Some(expected) = reserved(prefix) {
             if expected == iri {
@@ -99,6 +99,14 @@ impl Namespaces {
     }
 
     /// Resolve `prefix:local` or a bare `local` to a name.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::UndeclaredPrefix`] if the prefix has no binding.
+    /// - [`Error::NoDefaultNamespace`] if the name is bare and no default
+    ///   namespace is set.
+    /// - [`Error::InvalidQName`] if the text is empty, starts with `:` or
+    ///   uses the blank-node prefix `_`.
     pub fn resolve(&self, text: &str) -> Result<QName> {
         resolve_with(text, |prefix| self.lookup(prefix), self.default.clone())
     }
@@ -232,7 +240,7 @@ fn resolve_with(
         if text.is_empty() {
             return Err(Error::InvalidQName(text.into()));
         }
-        let ns = default.ok_or_else(|| Error::UndeclaredPrefix(String::new()))?;
+        let ns = default.ok_or_else(|| Error::NoDefaultNamespace(text.into()))?;
         Ok(QName::new(ns, text))
     }
 }
@@ -250,6 +258,10 @@ impl<'a> Scope<'a> {
     }
 
     /// Resolve as [`Namespaces::resolve`], with the fallback.
+    ///
+    /// # Errors
+    ///
+    /// As [`Namespaces::resolve`].
     pub fn resolve(&self, text: &str) -> Result<QName> {
         resolve_with(text, |prefix| self.lookup(prefix), self.default_namespace())
     }
@@ -265,7 +277,7 @@ impl<'a> Scope<'a> {
             }
             let ns = self
                 .default_namespace()
-                .ok_or_else(|| Error::UndeclaredPrefix(String::new()))?;
+                .ok_or_else(|| Error::NoDefaultNamespace(local.into()))?;
             return Ok(QName::new(ns, local));
         }
         if prefix == "_" {
@@ -315,7 +327,7 @@ mod tests {
     fn undeclared_prefix_and_bare_without_default_fail() {
         let ns = Namespaces::new();
         assert!(matches!(ns.resolve("ex:e1"), Err(Error::UndeclaredPrefix(p)) if p == "ex"));
-        assert!(matches!(ns.resolve("e1"), Err(Error::UndeclaredPrefix(p)) if p.is_empty()));
+        assert!(matches!(ns.resolve("e1"), Err(Error::NoDefaultNamespace(l)) if l == "e1"));
     }
 
     #[test]
@@ -331,7 +343,7 @@ mod tests {
         let mut ns = Namespaces::new();
         assert!(matches!(
             ns.declare("_", "http://example.org/"),
-            Err(Error::InvalidQName(_))
+            Err(Error::InvalidPrefix(p)) if p == "_"
         ));
         assert_eq!(ns.iter().count(), 0);
         // With no binding, `_:x` is still rejected rather than reported
@@ -351,7 +363,7 @@ mod tests {
             "", "a:b", "a b", " a", "a\t", "1a", "-a", ".a", "a.", "é:", "_", "_a",
         ] {
             assert!(
-                matches!(ns.declare(bad, "http://x/"), Err(Error::InvalidQName(p)) if p == bad),
+                matches!(ns.declare(bad, "http://x/"), Err(Error::InvalidPrefix(p)) if p == bad),
                 "{bad:?}"
             );
         }
@@ -477,7 +489,7 @@ mod tests {
         let bare = Namespaces::new();
         assert!(matches!(
             Scope::new(&bare, None).resolve_parts("", "b"),
-            Err(Error::UndeclaredPrefix(p)) if p.is_empty()
+            Err(Error::NoDefaultNamespace(l)) if l == "b"
         ));
     }
 

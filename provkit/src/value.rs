@@ -22,7 +22,7 @@ impl LangStr {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::InvalidLiteral`] if the tag is empty or malformed.
+    /// Returns [`Error::InvalidLanguageTag`] if the tag is empty or malformed.
     pub fn new(value: impl Into<String>, lang: impl Into<String>) -> Result<Self> {
         let lang = lang.into();
         let well_formed = !lang.is_empty()
@@ -34,11 +34,7 @@ impl LangStr {
                 .next()
                 .is_some_and(|p| p.bytes().all(|b| b.is_ascii_alphabetic()));
         if !well_formed {
-            return Err(Error::InvalidLiteral {
-                datatype: "language tag".into(),
-                lexical: lang,
-                reason: "not a well-formed BCP 47 tag".into(),
-            });
+            return Err(Error::InvalidLanguageTag(lang));
         }
         Ok(LangStr {
             value: value.into(),
@@ -368,9 +364,12 @@ mod tests {
         assert_ne!(a, LangStr::new("bye", "en-GB").unwrap());
         assert!(matches!(
             LangStr::new("hi", "en_US"),
-            Err(Error::InvalidLiteral { .. })
+            Err(Error::InvalidLanguageTag(tag)) if tag == "en_US"
         ));
-        assert!(LangStr::new("hi", "").is_err());
+        assert!(matches!(
+            LangStr::new("hi", ""),
+            Err(Error::InvalidLanguageTag(tag)) if tag.is_empty()
+        ));
         assert_eq!(a.value(), "hi");
         assert_eq!(b.lang(), "EN-gb");
     }

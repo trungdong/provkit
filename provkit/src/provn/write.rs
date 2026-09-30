@@ -33,7 +33,7 @@ pub fn write(document: &Document, out: &mut impl io::Write) -> Result<()> {
 ///
 /// # Errors
 ///
-/// [`Error::Structure`] with format `"PROV-N"` for text PROV-N cannot carry:
+/// [`Error::Unwritable`] for a name PROV-N cannot carry:
 ///
 /// - a local part with whitespace, a control character, one of
 ///   `{ } < > " | ^ \`, a `%` not followed by two hex digits, or a first
@@ -41,8 +41,11 @@ pub fn write(document: &Document, out: &mut impl io::Write) -> Result<()> {
 /// - a prefix that is not a `PN_PREFIX`;
 /// - a namespace IRI with a character `IRI_REF` forbids.
 ///
-/// [`Error::Structure`] with format `"record"` for an attribute that spells
-/// one of the record's own formals.
+/// [`Error::UnwritableNamespace`] for a `prefix` or `default` declaration
+/// with such a prefix or namespace IRI.
+///
+/// [`Error::InvalidRecord`] for an attribute that spells one of the record's
+/// own formals.
 pub fn to_string(document: &Document) -> Result<String> {
     // Names are rendered before the declarations are printed, so that every
     // prefix minted along the way is declared.
@@ -106,10 +109,10 @@ pub fn statement_name(name: &QName, namespaces: &Namespaces) -> Result<String> {
     self::name(name, &mut names)
 }
 
-fn unwritable(message: String) -> Error {
-    Error::Structure {
-        format: "PROV-N",
-        message,
+fn unwritable(name: &QName, reason: String) -> Error {
+    Error::Unwritable {
+        name: name.clone(),
+        reason,
     }
 }
 
@@ -118,23 +121,25 @@ fn show(c: char) -> String {
     format!("{c:?} (U+{:04X})", u32::from(c))
 }
 
-fn check_iri(iri: &str) -> Result<()> {
-    match pn::iri_forbidden(iri) {
-        Some(c) => Err(unwritable(format!(
-            "cannot write the namespace <{iri}>: PROV-N cannot carry {} in an IRI",
-            show(c)
-        ))),
-        None => Ok(()),
-    }
+/// Why PROV-N cannot write the namespace IRI `iri`, if it cannot.
+fn iri_problem(iri: &str) -> Option<String> {
+    pn::iri_forbidden(iri).map(|c| format!("the namespace IRI contains {}", show(c)))
 }
 
-fn check_prefix(prefix: &str, iri: &str) -> Result<()> {
-    if pn::is_pn_prefix(prefix) {
-        Ok(())
-    } else {
-        Err(unwritable(format!(
-            "cannot write the prefix `{prefix}` for <{iri}>: it is not a PROV-N PN_PREFIX"
-        )))
+/// Check that PROV-N can write a declaration of `iri`: under `prefix`, or as
+/// the default namespace when `prefix` is `None`.
+fn check_declaration(prefix: Option<&str>, iri: &str) -> Result<()> {
+    let reason = match prefix {
+        Some(p) if !pn::is_pn_prefix(p) => Some("the prefix is not a PN_PREFIX".to_owned()),
+        _ => iri_problem(iri),
+    };
+    match reason {
+        Some(reason) => Err(Error::UnwritableNamespace {
+            prefix: prefix.unwrap_or_default().to_owned(),
+            iri: iri.to_owned(),
+            reason,
+        }),
+        None => Ok(()),
     }
 }
 
@@ -150,7 +155,7 @@ fn declarations(
     if let Some(default) = names.default_namespace()
         && inherited.and_then(Namespaces::default_namespace) != Some(default)
     {
-        check_iri(default)?;
+        check_declaration(None, default)?;
         let _ = writeln!(s, "{indent}default <{default}>");
         any = true;
     }
@@ -158,8 +163,7 @@ fn declarations(
         if inherited.is_some_and(|o| o.lookup(prefix).is_some_and(|i| i == *iri)) {
             continue;
         }
-        check_prefix(prefix, iri)?;
-        check_iri(iri)?;
+        check_declaration(Some(prefix), iri)?;
         let _ = writeln!(s, "{indent}prefix {prefix} <{iri}>");
         any = true;
     }
@@ -252,7 +256,9 @@ fn formal(
 /// `prefix:local`, or a bare `local` in the default namespace, with the local
 /// part escaped.
 fn name(q: &QName, names: &mut Namespaces) -> Result<String> {
-    check_iri(q.namespace())?;
+    if let Some(reason) = iri_problem(q.namespace()) {
+        return Err(unwritable(q, reason));
+    }
     let local = escape_local(q)?;
     let prefix = match names.render_parts(q) {
         None if !lexes_as_bare_name(&local, q.local()) => Some(names.ensure_prefix(q.namespace())),
@@ -260,7 +266,10 @@ fn name(q: &QName, names: &mut Namespaces) -> Result<String> {
     };
     Ok(match prefix {
         Some(prefix) => {
-            check_prefix(&prefix, q.namespace())?;
+            if !pn::is_pn_prefix(&prefix) {
+                let reason = format!("its prefix `{prefix}` is not a PN_PREFIX");
+                return Err(unwritable(q, reason));
+            }
             format!("{prefix}:{local}")
         }
         None => local,
@@ -305,10 +314,10 @@ fn escape_local(q: &QName) -> Result<String> {
         } else if c == '%' {
             let hex = local.as_bytes().get(i + 1..i + 3);
             if !hex.is_some_and(|h| h.iter().all(u8::is_ascii_hexdigit)) {
-                return Err(unwritable(format!(
-                    "cannot write the name {q}: PROV-N cannot carry a '%' that is not \
-                     followed by two hex digits"
-                )));
+                return Err(unwritable(
+                    q,
+                    "a '%' in a local part must be followed by two hex digits".to_owned(),
+                ));
             }
         } else if !bare && pn::PN_CHARS_ESC.contains(c) {
             out.push('\\');
@@ -318,10 +327,7 @@ fn escape_local(q: &QName) -> Result<String> {
             } else {
                 "in a local part"
             };
-            return Err(unwritable(format!(
-                "cannot write the name {q}: PROV-N cannot carry {} {place}",
-                show(c)
-            )));
+            return Err(unwritable(q, format!("{} cannot appear {place}", show(c))));
         }
         out.push(c);
     }
@@ -710,9 +716,7 @@ endDocument
                 assert_eq!(back, *d, "{text}");
                 true
             }
-            Err(Error::Structure {
-                format: "PROV-N", ..
-            }) => false,
+            Err(Error::Unwritable { .. } | Error::UnwritableNamespace { .. }) => false,
             Err(e) => panic!("unexpected error {e:?} for {d:?}"),
         }
     }
@@ -908,13 +912,11 @@ endDocument
         }
     }
 
-    fn unwritable_message(d: &Document) -> String {
+    /// The name and reason of the `Unwritable` error from writing `d`.
+    fn unwritable(d: &Document) -> (QName, String) {
         match provn::to_string(d) {
-            Err(Error::Structure { format, message }) => {
-                assert_eq!(format, "PROV-N");
-                message
-            }
-            other => panic!("expected a PROV-N structure error, got {other:?}"),
+            Err(Error::Unwritable { name, reason }) => (name, reason),
+            other => panic!("expected Error::Unwritable, got {other:?}"),
         }
     }
 
@@ -941,9 +943,10 @@ endDocument
         ];
         for (local, needle) in cases {
             let d = document(vec![element(Kind::Entity, ex(local), Attributes::new())]);
-            let message = unwritable_message(&d);
-            assert!(message.contains(needle), "{local:?}: {message}");
-            assert!(message.contains("http://example.org/"), "{message}");
+            let (name, reason) = unwritable(&d);
+            assert_eq!(name, ex(local));
+            // The reason names the character, with its code point.
+            assert!(reason.contains(needle), "{local:?}: {reason}");
         }
         // The same local parts work in the middle where the grammar allows them.
         let d = document(vec![element(
@@ -959,38 +962,52 @@ endDocument
         // `Namespaces::declare` already refuses such prefixes, so the
         // writer's check is a guard and is exercised directly.
         for bad in ["", "a b", "1a", "a."] {
-            let e = super::check_prefix(bad, "http://x/").unwrap_err();
+            let e = super::check_declaration(Some(bad), "http://x/").unwrap_err();
             assert!(
-                matches!(&e, Error::Structure { format: "PROV-N", message } if message.contains("PN_PREFIX")),
+                matches!(&e, Error::UnwritableNamespace { prefix, iri, .. } if prefix == bad && iri == "http://x/"),
                 "{bad:?}: {e:?}"
             );
         }
-        assert!(super::check_prefix("a.b", "http://x/").is_ok());
+        assert!(super::check_declaration(Some("a.b"), "http://x/").is_ok());
     }
 
     #[test]
     fn unrepresentable_iris_are_errors() {
         let name_in = |iri: &str| element(Kind::Entity, QName::new(iri, "e"), Attributes::new());
+        // Met while rendering a name.
         let mut minted = Document::new();
         minted.records.push(name_in("http://x.org/a b/"));
-        assert!(unwritable_message(&minted).contains("' ' (U+0020) in an IRI"));
+        let (name, reason) = unwritable(&minted);
+        assert_eq!(name, QName::new("http://x.org/a b/", "e"));
+        assert!(reason.contains("' ' (U+0020)"), "{reason}");
 
+        // Met while writing a declaration. The default namespace has an
+        // empty prefix.
         let mut default = Document::new();
         default.namespaces.set_default("http://x.org/>");
-        assert!(unwritable_message(&default).contains("<http://x.org/>>"));
+        assert!(matches!(
+            provn::to_string(&default),
+            Err(Error::UnwritableNamespace { prefix, iri, .. })
+                if prefix.is_empty() && iri == "http://x.org/>"
+        ));
 
         let mut declared = Document::new();
         declared.namespaces.declare("q", "http://x.org/\"").unwrap();
-        assert!(unwritable_message(&declared).contains("'\"'"));
+        assert!(matches!(
+            provn::to_string(&declared),
+            Err(Error::UnwritableNamespace { prefix, iri, reason })
+                if prefix == "q" && iri == "http://x.org/\"" && reason.contains("'\"'")
+        ));
 
         let names = Namespaces::new();
+        let bad = QName::new("http://x.org/{", "e");
         assert!(matches!(
-            provn::statement_name(&QName::new("http://x.org/{", "e"), &names),
-            Err(Error::Structure { .. })
+            provn::statement_name(&bad, &names),
+            Err(Error::Unwritable { name, .. }) if name == bad
         ));
         assert!(matches!(
             provn::statement(&name_in("http://x.org/|"), &names),
-            Err(Error::Structure { .. })
+            Err(Error::Unwritable { .. })
         ));
     }
 
@@ -1006,9 +1023,9 @@ endDocument
             panic!()
         };
         assert_eq!(a.agent, None);
-        let message = unwritable_message(&d);
-        assert!(message.contains("prov#agent "), "{message}");
-        assert!(message.contains("' ' (U+0020)"), "{message}");
+        let (name, reason) = unwritable(&d);
+        assert_eq!(name, QName::new(crate::namespaces::PROV, "agent "));
+        assert!(reason.contains("' ' (U+0020)"), "{reason}");
     }
 
     #[test]
@@ -1076,8 +1093,8 @@ endDocument
         let d = document(vec![r]);
         assert!(matches!(
             provn::to_string(&d),
-            Err(Error::Structure {
-                format: "record",
+            Err(Error::InvalidRecord {
+                kind: Kind::Usage,
                 ..
             })
         ));

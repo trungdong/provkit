@@ -17,7 +17,9 @@ use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record,
 ///
 /// # Errors
 ///
-/// Returns [`Error::Io`](crate::Error::Io) if `out` fails.
+/// - [`Error::Io`](crate::Error::Io) if `out` fails.
+/// - [`Error::InvalidRecord`](crate::Error::InvalidRecord) for an attribute
+///   that spells one of its record's own formals.
 pub fn write(document: &Document, out: &mut impl Write) -> Result<()> {
     let wire = to_wire(document)?;
     serde_json::to_writer_pretty(&mut *out, &wire).map_err(|e| {
@@ -456,13 +458,13 @@ mod tests {
             time: None,
             attributes,
         }));
-        match json::to_string(&d) {
-            Err(crate::Error::Structure { format, message }) => {
-                assert_eq!(format, "record");
-                assert!(message.contains("prov:activity"), "{message}");
-            }
-            other => panic!("expected a structure error, got {other:?}"),
-        }
+        assert!(matches!(
+            json::to_string(&d),
+            Err(crate::Error::InvalidRecord {
+                kind: Kind::Generation,
+                ..
+            })
+        ));
     }
 
     #[test]

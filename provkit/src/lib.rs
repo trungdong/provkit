@@ -46,7 +46,8 @@ mod pn;
 pub mod provn;
 pub mod qname;
 pub mod record;
-pub mod sink;
+#[cfg(any(feature = "json", feature = "provn"))]
+mod sink;
 mod unify;
 pub mod value;
 
@@ -66,5 +67,4 @@ pub use record::{
     End, Entity, Formal, FormalAttr, FormalRef, Generation, Influence, Invalidation, Kind,
     Membership, Mention, Record, Specialization, Start, Usage,
 };
-pub use sink::{DocumentBuilder, Sink};
 pub use value::{LangStr, Value};

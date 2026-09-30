@@ -4,16 +4,14 @@ use indexmap::IndexMap;
 
 use super::wire::{JsonDocument, JsonRecord, JsonSection, JsonValue};
 use crate::qname::well_known::{XSD_INT, XSD_INTEGER, XSD_LONG};
+use crate::sink::Sink;
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
-    Result, Scope, Sink, Value,
+    Result, Scope, Value,
 };
 
-const FORMAT: &str = "PROV-JSON";
-
 fn structure(message: impl Into<String>) -> Error {
-    Error::Structure {
-        format: FORMAT,
+    Error::JsonStructure {
         message: message.into(),
     }
 }
@@ -343,11 +341,11 @@ mod tests {
         let read = |s: &str| crate::json::read(s);
         assert!(matches!(
             read(&format!(r#"{{{PFX}, "entity": {{"_:e": {{}}}}}}"#)),
-            Err(Error::Structure { .. })
+            Err(Error::JsonStructure { .. })
         ));
         assert!(matches!(
             read(&format!(r#"{{{PFX}, "foo": {{"ex:e": {{}}}}}}"#)),
-            Err(Error::Structure { .. })
+            Err(Error::JsonStructure { .. })
         ));
         assert!(
             matches!(read(r#"{"entity": {"zz:e": {}}}"#), Err(Error::UndeclaredPrefix(p)) if p == "zz")
@@ -469,17 +467,17 @@ mod tests {
         ));
         assert!(matches!(
             read(&ent(r#""ex:a": [["x"]]"#)),
-            Err(Error::Structure { .. })
+            Err(Error::JsonStructure { .. })
         ));
         assert!(matches!(
             read(&format!(
                 r#"{{{PFX}, "used": {{"_:u": {{"prov:entity": 5}}}}}}"#
             )),
-            Err(Error::Structure { .. })
+            Err(Error::JsonStructure { .. })
         ));
         assert!(matches!(
             read(r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"_:b": {}}}"#),
-            Err(Error::Structure { .. })
+            Err(Error::JsonStructure { .. })
         ));
     }
 

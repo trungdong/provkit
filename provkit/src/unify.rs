@@ -32,7 +32,7 @@ impl Document {
     /// # Errors
     ///
     /// - [`Error::Unification`] when two records conflict.
-    /// - [`Error::Structure`] from [`Record::from_parts`] when a merged
+    /// - [`Error::InvalidRecord`] from [`Record::from_parts`] when a merged
     ///   record carries an attribute that spells one of its own formals
     ///   (`prov:activity` on a generation). Readers never produce such a
     ///   record, but a hand-built one can.
@@ -514,7 +514,7 @@ mod tests {
     }
 
     #[test]
-    fn merging_a_hand_built_formal_named_attribute_is_a_structure_error() {
+    fn merging_a_hand_built_formal_named_attribute_is_an_invalid_record() {
         let mut a = Attributes::new();
         a.insert(
             crate::QName::new(crate::namespaces::PROV, "activity"),
@@ -532,12 +532,12 @@ mod tests {
         let mut d = Document::new();
         d.records.push(generation(a));
         d.records.push(generation(Attributes::new()));
-        match d.unified() {
-            Err(Error::Structure { format, message }) => {
-                assert_eq!(format, "record");
-                assert!(message.contains("prov:activity"), "{message}");
-            }
-            other => panic!("expected a structure error, got {other:?}"),
-        }
+        assert!(matches!(
+            d.unified(),
+            Err(Error::InvalidRecord {
+                kind: Kind::Generation,
+                ..
+            })
+        ));
     }
 }

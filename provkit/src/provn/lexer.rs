@@ -121,7 +121,6 @@ impl<'a> Lexer<'a> {
         let (mut line, mut line_start) = (self.line, self.line_start);
         track_breaks(self.text, self.pos, offset, &mut line, &mut line_start);
         Error::Syntax {
-            format: "PROV-N",
             line,
             column: self.text[line_start..offset].chars().count() + 1,
             message: message.into(),

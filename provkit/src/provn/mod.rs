@@ -4,7 +4,8 @@ mod lexer;
 mod parser;
 mod write;
 
-use crate::{Document, DocumentBuilder, Result, Sink};
+use crate::sink::{DocumentBuilder, Sink};
+use crate::{Document, Result};
 
 pub use write::{statement, statement_name, to_string, write};
 
@@ -24,9 +25,13 @@ pub enum Profile {
 ///
 /// # Errors
 ///
-/// Returns [`Error::Syntax`](crate::Error::Syntax) for text the grammar
-/// rejects, and the other [`Error`](crate::Error) variants for names,
-/// literals or structure that PROV does not allow.
+/// Every error carries a line and column:
+///
+/// - [`Error::Syntax`](crate::Error::Syntax) for text the grammar rejects.
+/// - [`Error::At`](crate::Error::At) for a name, literal or record that
+///   parses but that PROV does not allow. Its `source` is the error at that
+///   position, such as [`Error::UndeclaredPrefix`](crate::Error::UndeclaredPrefix)
+///   or [`Error::InvalidRecord`](crate::Error::InvalidRecord).
 pub fn read(text: &str) -> Result<Document> {
     read_with(text, Profile::Default)
 }
@@ -39,26 +44,12 @@ pub fn read(text: &str) -> Result<Document> {
 pub fn read_with(text: &str, profile: Profile) -> Result<Document> {
     let mut builder = DocumentBuilder::new();
     read_into_with(text, profile, &mut builder)?;
-    builder.finish()
-}
-
-/// Read PROV-N text under [`Profile::Default`], sending events to `sink` as
-/// each statement is parsed.
-///
-/// # Errors
-///
-/// As [`read`], plus any error the sink returns.
-pub fn read_into(text: &str, sink: &mut impl Sink) -> Result<()> {
-    read_into_with(text, Profile::Default, sink)
+    Ok(builder.finish())
 }
 
 /// Read PROV-N text under `profile`, sending events to `sink` as each
 /// statement is parsed.
-///
-/// # Errors
-///
-/// As [`read`], plus any error the sink returns.
-pub fn read_into_with(text: &str, profile: Profile, sink: &mut impl Sink) -> Result<()> {
+pub(crate) fn read_into_with(text: &str, profile: Profile, sink: &mut impl Sink) -> Result<()> {
     let tokens = lexer::tokenize(text)?;
     parser::Parser::new(&tokens, profile).document(sink)
 }
