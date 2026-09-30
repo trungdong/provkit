@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use indexmap::IndexMap;
 
-use crate::{Error, QName, Result};
+use crate::{Error, QName, Result, pn};
 
 /// The PROV namespace IRI.
 pub const PROV: &str = "http://www.w3.org/ns/prov#";
@@ -39,9 +39,16 @@ impl Namespaces {
     }
 
     /// Bind `prefix` to `iri`, replacing an earlier binding of the same prefix.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidQName`] if `prefix` is not a `PN_PREFIX`: empty,
+    /// containing `:` or whitespace, not starting with a letter, or ending
+    /// in `.`. `_`, which introduces blank nodes, is never a prefix.
+    /// [`Error::ReservedPrefix`] if `prefix` is `prov` or `xsd` and `iri` is
+    /// not its fixed IRI.
     pub fn declare(&mut self, prefix: &str, iri: &str) -> Result<()> {
-        // `_` introduces blank nodes and is never a prefix.
-        if prefix == "_" {
+        if !pn::is_pn_prefix(prefix) {
             return Err(Error::InvalidQName(prefix.into()));
         }
         if let Some(expected) = reserved(prefix) {
@@ -69,6 +76,13 @@ impl Namespaces {
                 .entry(prefix.clone())
                 .or_insert_with(|| iri.clone());
         }
+    }
+
+    /// Remove the binding of `prefix`, keeping the order of the rest.
+    // Only the JSON writer calls this, and it is feature-gated.
+    #[cfg_attr(not(feature = "json"), allow(dead_code))]
+    pub(crate) fn forget(&mut self, prefix: &str) {
+        self.prefixes.shift_remove(prefix);
     }
 
     /// Declared prefixes in declaration order, without `prov` and `xsd`.
@@ -153,8 +167,8 @@ impl Namespaces {
     /// A declared prefix wins, then the default namespace for a bare name,
     /// then a freshly minted `nsN` prefix, which is added to this table.
     /// Callers that must not change a document pass a clone.
-    // Only the writers call this, and both are feature-gated.
-    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
+    // Only the JSON writer calls this, and it is feature-gated.
+    #[cfg_attr(not(feature = "json"), allow(dead_code))]
     pub(crate) fn render(&mut self, name: &QName) -> String {
         match self.render_parts(name) {
             Some(prefix) => format!("{prefix}:{}", name.local()),
@@ -322,6 +336,23 @@ mod tests {
         bundle.set_default("http://default.org/");
         let scope = Scope::new(&doc, Some(&bundle));
         assert!(matches!(scope.resolve("_:x"), Err(Error::InvalidQName(_))));
+    }
+
+    #[test]
+    fn prefixes_must_be_pn_prefixes() {
+        let mut ns = Namespaces::new();
+        for bad in [
+            "", "a:b", "a b", " a", "a\t", "1a", "-a", ".a", "a.", "é:", "_", "_a",
+        ] {
+            assert!(
+                matches!(ns.declare(bad, "http://x/"), Err(Error::InvalidQName(p)) if p == bad),
+                "{bad:?}"
+            );
+        }
+        for good in ["a", "a1", "a.b", "a-b", "a_b", "é", "default", "ns1"] {
+            ns.declare(good, "http://x/").unwrap();
+        }
+        assert_eq!(ns.iter().count(), 8);
     }
 
     #[test]

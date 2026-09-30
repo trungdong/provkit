@@ -87,6 +87,13 @@ pub enum Value {
     /// An `xsd:dateTime`.
     DateTime(DateTime),
     /// Any other typed literal, kept as written.
+    ///
+    /// Build it through [`Value::typed`], which folds `xsd:string` to
+    /// [`Value::Str`] and parses `xsd:dateTime` to [`Value::DateTime`], as
+    /// the readers do. A hand-built `Typed` with either datatype is not equal
+    /// to the value a reader produces. `xsd:QName` does not fold here either,
+    /// because resolving the lexical form needs the document's namespaces, so
+    /// a `Typed` with `xsd:QName` never equals a read [`Value::QName`].
     Typed {
         /// The text as written.
         lexical: String,
@@ -98,6 +105,10 @@ pub enum Value {
 impl Value {
     /// A literal with a datatype. `xsd:string` folds to [`Value::Str`],
     /// `xsd:dateTime` is parsed, and anything else is kept verbatim.
+    ///
+    /// `xsd:QName` stays [`Value::Typed`], because resolving `ex:name` needs
+    /// namespaces. Build a [`Value::QName`] directly instead; the readers
+    /// resolve `xsd:QName` literals to that variant.
     ///
     /// # Errors
     ///

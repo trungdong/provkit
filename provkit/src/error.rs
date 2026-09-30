@@ -9,7 +9,7 @@ pub enum Error {
     /// The input text does not follow the format's grammar.
     #[error("{format} syntax error at line {line}, column {column}: {message}")]
     Syntax {
-        /// `"PROV-N"` or `"PROV-JSON"`.
+        /// Always `"PROV-N"`. Malformed JSON is [`Error::Json`].
         format: &'static str,
         /// 1-based line.
         line: usize,
@@ -22,10 +22,17 @@ pub enum Error {
     /// an element without an identifier, ...).
     #[error("{format}: {message}")]
     Structure {
-        /// `"PROV-N"`, `"PROV-JSON"` or `"record"`. `"record"` is raised by
-        /// [`Record::from_parts`](crate::Record::from_parts) regardless of the
-        /// input format. `"document"` is raised by
-        /// [`DocumentBuilder`](crate::DocumentBuilder) for events out of order.
+        /// Where the error arose:
+        ///
+        /// - `"PROV-JSON"`: the PROV-JSON reader.
+        /// - `"PROV-N"`: the PROV-N writer, for text PROV-N cannot carry.
+        ///   The PROV-N reader reports structure errors as [`Error::Syntax`]
+        ///   with a position.
+        /// - `"record"`: [`Record::from_parts`](crate::Record::from_parts),
+        ///   whatever the input format, and both writers for an attribute
+        ///   that spells one of the record's own formals.
+        /// - `"document"`: [`DocumentBuilder`](crate::DocumentBuilder), for
+        ///   events out of order.
         format: &'static str,
         /// What was wrong.
         message: String,
@@ -44,7 +51,7 @@ pub enum Error {
         /// The IRI the input tried to bind.
         found: String,
     },
-    /// The text is not a qualified name.
+    /// The text is not a qualified name, or a prefix is not a `PN_PREFIX`.
     #[error("`{0}` is not a valid qualified name")]
     InvalidQName(String),
     /// A literal's text is not valid for its datatype.

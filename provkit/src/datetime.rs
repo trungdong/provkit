@@ -12,6 +12,9 @@ use crate::{Error, Result};
 /// instant, a time without one denotes local wall-clock time, and the two
 /// never compare equal. The text a value was parsed from is kept and printed
 /// back; a value built from components prints in canonical form.
+///
+/// Fractional seconds are held to nanoseconds. Digits beyond the ninth are
+/// truncated for equality, ordering and hashing, and kept in the source text.
 #[derive(Clone, Debug)]
 pub struct DateTime {
     year: i64,
@@ -340,6 +343,19 @@ mod tests {
             let d = DateTime::parse(text).unwrap();
             assert_eq!(d.to_string(), text);
         }
+    }
+
+    #[test]
+    fn fractions_beyond_nine_digits_truncate() {
+        let long = DateTime::parse("2011-11-16T16:05:33.1234567899Z").unwrap();
+        let nine = DateTime::parse("2011-11-16T16:05:33.123456789Z").unwrap();
+        assert_eq!(long, nine);
+        assert_eq!(hash(&long), hash(&nine));
+        assert_eq!(long.to_string(), "2011-11-16T16:05:33.1234567899Z");
+        assert_ne!(
+            nine,
+            DateTime::parse("2011-11-16T16:05:33.123456788Z").unwrap()
+        );
     }
 
     #[test]

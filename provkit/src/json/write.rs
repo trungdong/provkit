@@ -43,10 +43,16 @@ pub fn to_string(document: &Document) -> Result<String> {
     Ok(String::from_utf8(buf).expect("serde_json writes UTF-8"))
 }
 
+/// The `prefix` key that holds the default namespace.
+const DEFAULT: &str = "default";
+
 fn to_wire(document: &Document) -> Result<JsonDocument> {
     // A copy of the document's table, so minting a prefix never touches the
     // caller's document. It is written last, after every name has been seen.
     let mut table = document.namespaces.clone();
+    // `default` is the default-namespace key in PROV-JSON, so a prefix of that
+    // name is dropped and its names get a minted `nsN`.
+    table.forget(DEFAULT);
     let mut next_blank = 0;
     let sections = sections(&document.records, &mut table, &mut next_blank)?;
     let mut bundles = IndexMap::new();
@@ -69,7 +75,7 @@ fn bundle_wire(
     next_blank: &mut usize,
 ) -> Result<(String, JsonBundle)> {
     let mut table = outer.clone();
-    for (prefix, iri) in bundle.namespaces.iter() {
+    for (prefix, iri) in bundle.namespaces.iter().filter(|(p, _)| *p != DEFAULT) {
         table.declare(prefix, iri)?;
     }
     if let Some(default) = bundle.namespaces.default_namespace() {
@@ -100,7 +106,7 @@ fn prefix_table(
         }
     }
     if let Some(default) = default {
-        out.insert("default".to_owned(), default.to_string());
+        out.insert(DEFAULT.to_owned(), default.to_string());
     }
     out
 }
@@ -441,6 +447,33 @@ mod tests {
             }
             other => panic!("expected a structure error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_prefix_named_default_is_minted_afresh() {
+        let mut d = Document::new();
+        d.namespaces.declare("default", "http://d.org/").unwrap();
+        d.namespaces.set_default("http://example.org/");
+        d.records.push(entity_in(QName::new("http://d.org/", "e")));
+        let mut inner = Namespaces::new();
+        inner.declare("default", "http://b.org/").unwrap();
+        d.bundles.push(Bundle {
+            id: ex("b"),
+            namespaces: inner,
+            records: vec![entity_in(QName::new("http://b.org/", "f"))],
+        });
+        let text = json::to_string(&d).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(
+            v["prefix"],
+            serde_json::json!({"ns1": "http://d.org/", "default": "http://example.org/"})
+        );
+        assert!(v["entity"]["ns1:e"].is_object());
+        assert_eq!(
+            v["bundle"]["b"]["prefix"],
+            serde_json::json!({"ns2": "http://b.org/"})
+        );
+        assert_eq!(json::read(&text).unwrap(), d);
     }
 
     #[test]

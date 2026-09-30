@@ -2,11 +2,9 @@
 //! 3.8, with `PN_PREFIX`, `PN_CHARS_BASE`, `PN_CHARS_U` and `PN_CHARS` from
 //! SPARQL).
 
-// Only the PROV-N lexer and writer use these.
-#![cfg_attr(not(feature = "provn"), allow(dead_code))]
-
 /// Characters that may follow `\` in a local part: `PN_CHARS_ESC` [55] plus
 /// the SPARQL escapes `_ ~ ! $ & * + / ? # @ %`.
+#[cfg_attr(not(feature = "provn"), allow(dead_code))]
 pub(crate) const PN_CHARS_ESC: &str = "_~.-!$&'()*+,;=/?#@%:[]";
 
 /// `PN_CHARS_BASE`.
@@ -19,6 +17,7 @@ pub(crate) fn is_pn_chars_base(c: char) -> bool {
 }
 
 /// `PN_CHARS_U`.
+#[cfg_attr(not(feature = "provn"), allow(dead_code))]
 pub(crate) fn is_pn_chars_u(c: char) -> bool {
     is_pn_chars_base(c) || c == '_'
 }
@@ -34,6 +33,7 @@ pub(crate) fn is_pn_chars(c: char) -> bool {
 
 /// The plain characters of `PN_CHARS_OTHERS` [54]; `%` and `\` escapes are
 /// handled separately.
+#[cfg_attr(not(feature = "provn"), allow(dead_code))]
 pub(crate) fn is_pn_local_other(c: char) -> bool {
     matches!(c, '/' | '@' | '~' | '&' | '+' | '*' | '?' | '#' | '$' | '!')
 }
@@ -63,6 +63,7 @@ pub(crate) fn is_pn_prefix(s: &str) -> bool {
 
 /// The first character `IRI_REF` forbids between its angle brackets: a
 /// control character, a space, or one of `< > " { } | ^ ` \`.
+#[cfg_attr(not(feature = "provn"), allow(dead_code))]
 pub(crate) fn iri_forbidden(iri: &str) -> Option<char> {
     iri.chars()
         .find(|&c| c <= ' ' || matches!(c, '<' | '>' | '"' | '{' | '}' | '|' | '^' | '`' | '\\'))

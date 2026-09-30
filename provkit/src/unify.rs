@@ -23,7 +23,8 @@ impl Document {
     /// Kinds that PROV-CONSTRAINTS forbids under one identifier (an entity
     /// and an activity, two relation kinds, an element and a relation) are
     /// an error. An agent may overlap with an entity or an activity and
-    /// stays a separate record. Records without an identifier never merge.
+    /// stays a separate record. Records without an identifier never merge,
+    /// and neither do `hadMember` records, which PROV-DM gives no identifier.
     ///
     /// Bundles unify independently. Bundles that share an identifier are
     /// combined first, as document equality treats them.
@@ -48,10 +49,12 @@ impl Document {
 }
 
 fn unify_records(records: &[Record]) -> Result<Vec<Record>> {
-    // Positions per identifier, groups in first-seen order.
+    // Positions per identifier, groups in first-seen order. PROV-DM gives
+    // `hadMember` no identifier, so a Membership id is only a PROV-JSON
+    // grouping key and never merges.
     let mut groups: IndexMap<&QName, Vec<usize>> = IndexMap::new();
     for (i, r) in records.iter().enumerate() {
-        if let Some(id) = r.id() {
+        if let Some(id) = r.id().filter(|_| r.kind() != Kind::Membership) {
             groups.entry(id).or_default().push(i);
         }
     }
@@ -379,6 +382,27 @@ mod tests {
         let u = d.unified().unwrap();
         assert_eq!(u.records.len(), 4);
         assert_eq!(u.records, d.records);
+    }
+
+    #[test]
+    fn identified_memberships_survive_unchanged() {
+        // `hadMember` with an identifier and two members, as PROV-JSON fans it out.
+        let member = |e: &str| {
+            rec(
+                Kind::Membership,
+                "m",
+                vec![(F::Collection, name("c")), (F::Entity, name(e))],
+                None,
+            )
+        };
+        let mut d = Document::new();
+        d.records.push(member("a"));
+        d.records.push(member("b"));
+        let u = d.unified().unwrap();
+        assert_eq!(u.records, d.records);
+        // Sharing an identifier with another kind is not a conflict either.
+        d.records.push(rec(Kind::Entity, "m", vec![], None));
+        assert_eq!(d.unified().unwrap().records, d.records);
     }
 
     #[test]

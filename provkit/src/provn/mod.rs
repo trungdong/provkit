@@ -10,6 +10,7 @@ pub use write::{statement, statement_name, to_string, write};
 
 /// How closely the reader follows the Recommendation's grammar.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Profile {
     /// The formal grammar only.
     Strict,
