@@ -180,6 +180,58 @@ fn sample_values() -> Vec<Value> {
 }
 
 #[test]
+fn other_escapable_characters_are_written_bare_and_read_back() {
+    let local = "_a~b!c$d&e*f+g/h?i#j@k%41";
+    let d = document(vec![element(Kind::Entity, ex(local), Attributes::new())]);
+    let mut names = d.namespaces.clone();
+    assert_eq!(
+        provn::statement(&d.records[0], &mut names).unwrap(),
+        format!("entity(ex:{local})")
+    );
+    assert!(written_reads_back(&d));
+}
+
+#[test]
+fn bare_names_that_would_misread_take_a_prefix() {
+    let mut d = Document::new();
+    d.namespaces.set_default("http://default.org/");
+    for local in ["12", "", "@a", "//x", "/*y"] {
+        d.records.push(element(
+            Kind::Entity,
+            QName::new("http://default.org/", local).unwrap(),
+            Attributes::new(),
+        ));
+    }
+    let text = provn::to_string(&d).unwrap();
+    for expected in [
+        "entity(ns1:12)",
+        "entity(ns1:)",
+        "entity(ns1:@a)",
+        "entity(ns1://x)",
+        "entity(ns1:/*y)",
+    ] {
+        assert!(text.contains(expected), "{text}");
+    }
+    assert!(written_reads_back(&d));
+
+    // Names that lex back as themselves stay bare.
+    for local in ["\u{1680}a", "a/b", "a@b"] {
+        let mut d = Document::new();
+        d.namespaces.set_default("http://default.org/");
+        d.records.push(element(
+            Kind::Entity,
+            QName::new("http://default.org/", local).unwrap(),
+            Attributes::new(),
+        ));
+        let text = provn::to_string(&d).unwrap();
+        assert!(text.contains(&format!("entity({local})")), "{text}");
+        assert!(!text.contains("ns1"), "{text}");
+        assert!(written_reads_back(&d));
+    }
+    assert!(written_reads_back(&d));
+}
+
+#[test]
 fn a_qualified_name_literal_resolves_exactly_when_a_name_can_be_built() {
     let (mut resolved, mut rejected) = (0, 0);
     for local in sample_texts() {

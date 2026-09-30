@@ -373,6 +373,8 @@ mod tests {
         d.unified()
     }
 
+    /// Constraint 53 spelt out independently of `DISJOINT_RELATIONS`, so
+    /// a change to the production list fails here.
     const CONSTRAINT_53: [Kind; 9] = [
         Kind::Usage,
         Kind::Generation,

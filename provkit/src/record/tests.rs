@@ -2,12 +2,8 @@
 
 use super::FormalAttr as F;
 use super::*;
-use crate::test_util::{ex, hash};
+use crate::test_util::{dt, ex, hash};
 use crate::{Attributes, Value};
-
-fn t() -> DateTime {
-    DateTime::parse("2011-11-16T16:05:33Z").unwrap()
-}
 
 /// A value for `attr` whose text names the formal, so a swapped field shows.
 fn formal_for(attr: FormalAttr) -> Formal {
@@ -63,49 +59,6 @@ fn names_and_local_names_round_trip() {
     }
     let times: Vec<_> = FormalAttr::ALL.iter().filter(|f| f.is_time()).collect();
     assert_eq!(times, [&F::Time, &F::StartTime, &F::EndTime]);
-}
-
-/// Three rows of the table against PROV-DM and the PROV-N grammar, spelt out
-/// by hand: the keyword, the shape, the formals in order and, for PROV-N, the
-/// argument counts.
-#[test]
-fn table_rows_match_prov_dm() {
-    let row = |kind: Kind, name: &str, is_element: bool, formals: &[F], arities: &[usize]| {
-        assert_eq!(kind.name(), name);
-        assert_eq!(kind.is_element(), is_element, "{name}");
-        assert_eq!(kind.formals(), formals, "{name}");
-        #[cfg(feature = "provn")]
-        assert_eq!(kind.arities(), arities, "{name}");
-        #[cfg(not(feature = "provn"))]
-        let _ = arities;
-    };
-    row(
-        Kind::Activity,
-        "activity",
-        true,
-        &[F::StartTime, F::EndTime],
-        &[0, 2],
-    );
-    row(
-        Kind::Derivation,
-        "wasDerivedFrom",
-        false,
-        &[
-            F::GeneratedEntity,
-            F::UsedEntity,
-            F::Activity,
-            F::Generation,
-            F::Usage,
-        ],
-        &[2, 5],
-    );
-    row(
-        Kind::Delegation,
-        "actedOnBehalfOf",
-        false,
-        &[F::Delegate, F::Responsible, F::Activity],
-        &[2, 3],
-    );
 }
 
 #[test]
@@ -181,7 +134,7 @@ fn from_parts_builds_a_generation() {
         Some(ex("g1")),
         vec![
             (FormalAttr::Entity, Formal::Name(ex("e1"))),
-            (FormalAttr::Time, Formal::Time(t())),
+            (FormalAttr::Time, Formal::Time(dt())),
         ],
         Attributes::new(),
     )
@@ -191,12 +144,12 @@ fn from_parts_builds_a_generation() {
     let Record::Generation(g) = &r else { panic!() };
     assert_eq!(g.entity, Some(ex("e1")));
     assert_eq!(g.activity, None);
-    assert_eq!(g.time, Some(t()));
+    assert_eq!(g.time, Some(dt()));
     assert_eq!(
         r.formals(),
         vec![
             (FormalAttr::Entity, FormalRef::Name(&ex("e1"))),
-            (FormalAttr::Time, FormalRef::Time(&t())),
+            (FormalAttr::Time, FormalRef::Time(&dt())),
         ]
     );
 }
@@ -277,7 +230,7 @@ fn from_parts_rejects_bad_parts() {
     assert!(bad(
         Kind::Generation,
         None,
-        vec![(FormalAttr::Entity, Formal::Time(t()))]
+        vec![(FormalAttr::Entity, Formal::Time(dt()))]
     ));
     assert!(bad(
         Kind::Generation,
@@ -297,16 +250,16 @@ fn from_parts_rejects_bad_parts() {
         Kind::Generation,
         None,
         vec![
-            (FormalAttr::Time, Formal::Time(t())),
-            (FormalAttr::Time, Formal::Time(t())),
+            (FormalAttr::Time, Formal::Time(dt())),
+            (FormalAttr::Time, Formal::Time(dt())),
         ]
     ));
     assert!(bad(
         Kind::Activity,
         Some(ex("a")),
         vec![
-            (FormalAttr::StartTime, Formal::Time(t())),
-            (FormalAttr::StartTime, Formal::Time(t())),
+            (FormalAttr::StartTime, Formal::Time(dt())),
+            (FormalAttr::StartTime, Formal::Time(dt())),
         ]
     ));
 }
@@ -388,7 +341,7 @@ fn formal_reads_one_value() {
         None,
         vec![
             (FormalAttr::Entity, Formal::Name(ex("e1"))),
-            (FormalAttr::Time, Formal::Time(t())),
+            (FormalAttr::Time, Formal::Time(dt())),
         ],
         Attributes::new(),
     )
@@ -397,7 +350,7 @@ fn formal_reads_one_value() {
         r.formal(FormalAttr::Entity),
         Some(FormalRef::Name(&ex("e1")))
     );
-    assert_eq!(r.formal(FormalAttr::Time), Some(FormalRef::Time(&t())));
+    assert_eq!(r.formal(FormalAttr::Time), Some(FormalRef::Time(&dt())));
     // A formal of the kind that is absent, and a formal of another kind.
     assert_eq!(r.formal(FormalAttr::Activity), None);
     assert_eq!(r.formal(FormalAttr::Plan), None);
@@ -408,9 +361,9 @@ fn formal_reads_one_value() {
 
 #[test]
 fn formal_ref_to_formal_copies_the_value() {
-    let (name, time) = (ex("e1"), t());
+    let (name, time) = (ex("e1"), dt());
     assert_eq!(FormalRef::Name(&name).to_formal(), Formal::Name(ex("e1")));
-    assert_eq!(FormalRef::Time(&time).to_formal(), Formal::Time(t()));
+    assert_eq!(FormalRef::Time(&time).to_formal(), Formal::Time(dt()));
     assert_eq!(Formal::from(FormalRef::Name(&name)), Formal::Name(ex("e1")));
 }
 

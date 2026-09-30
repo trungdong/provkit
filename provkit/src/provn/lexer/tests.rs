@@ -255,6 +255,10 @@ fn escapes_are_the_eleven_of_production_55() {
 #[test]
 fn a_block_comment_needs_both_delimiters() {
     assert_eq!(syntax_at("/*/"), (1, 1));
+    match tokenize("/*/") {
+        Err(Error::Syntax { message, .. }) => assert_eq!(message, "unterminated comment"),
+        other => panic!("unexpected {other:?}"),
+    }
     assert_eq!(syntax_at("x /*/ y"), (1, 3));
     assert_eq!(kinds("/**/ x"), [name("", "x"), TokenKind::Eof]);
     assert_eq!(kinds("/***/ x"), [name("", "x"), TokenKind::Eof]);

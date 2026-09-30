@@ -357,7 +357,7 @@ mod tests {
     }
 
     #[test]
-    fn an_identifier_then_a_semicolon_needs_an_argument() {
+    fn an_identifier_and_a_semicolon_precede_the_first_argument() {
         for profile in [Profile::Strict, Profile::Default] {
             let (doc, ignored) = report("ex:f(ex:e; ex:g)", profile).unwrap();
             assert!(doc.records.is_empty());

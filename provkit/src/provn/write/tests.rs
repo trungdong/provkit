@@ -1,29 +1,9 @@
-use crate::test_util::{Broken, bundle, ex};
+use crate::test_util::{Broken, bundle, document, dt, element, ex, relation};
 use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT, XSD_INTEGER, XSD_LONG};
 use crate::{
-    Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, LangStr,
-    Namespaces, QName, Record, Value, provn,
+    Attributes, Bundle, Document, Error, Formal, FormalAttr as F, Kind, LangStr, Namespaces, QName,
+    Record, Value, provn,
 };
-
-fn dt() -> DateTime {
-    DateTime::parse("2011-11-16T16:05:33Z").unwrap()
-}
-
-fn element(kind: Kind, id: QName, attrs: Attributes) -> Record {
-    Record::from_parts(kind, Some(id), vec![], attrs).unwrap()
-}
-
-fn relation(kind: Kind, id: Option<QName>, formals: Vec<(F, Formal)>) -> Record {
-    Record::from_parts(kind, id, formals, Attributes::new()).unwrap()
-}
-
-/// A document in `http://example.org/` under `ex`, holding `records`.
-fn document(records: Vec<Record>) -> Document {
-    let mut d = Document::new();
-    d.namespaces.declare("ex", "http://example.org/").unwrap();
-    d.records = records;
-    d
-}
 
 /// The single statement line of a one-record document.
 fn line(record: Record) -> String {
@@ -356,37 +336,6 @@ fn bundle_inherits_and_does_not_repeat_document_declarations() {
     );
 }
 
-#[test]
-fn bundle_scope_prefers_the_bundle() {
-    let mut outer = Namespaces::new();
-    outer.declare("ex", "http://example.org/").unwrap();
-    outer.declare("o", "http://o.org/").unwrap();
-    let mut inner = Namespaces::new();
-    inner.declare("ex", "http://bundle.org/").unwrap();
-    let bundle = Bundle {
-        id: ex("b"),
-        namespaces: inner,
-        records: vec![],
-    };
-    let table = bundle.namespaces.with_fallback(&outer);
-    assert_eq!(table.lookup("ex").unwrap(), "http://bundle.org/");
-    assert_eq!(table.lookup("o").unwrap(), "http://o.org/");
-}
-
-/// Write `d`; when the writer accepts it, it must read back equal.
-/// Returns whether the writer accepted it.
-fn written_reads_back(d: &Document) -> bool {
-    match provn::to_string(d) {
-        Ok(text) => {
-            let back = provn::read(&text).unwrap_or_else(|e| panic!("{e}\n{text}"));
-            assert_eq!(back, *d, "{text}");
-            true
-        }
-        Err(Error::Unwritable { .. } | Error::UnwritableNamespace { .. }) => false,
-        Err(e) => panic!("unexpected error {e:?} for {d:?}"),
-    }
-}
-
 /// The name and reason of the `Unwritable` error from writing `d`.
 fn unwritable(d: &Document) -> (QName, String) {
     match provn::to_string(d) {
@@ -439,54 +388,6 @@ fn unrepresentable_iris_are_errors() {
         provn::statement(&name_in("http://x.org/|"), &mut names),
         Err(Error::Unwritable { .. })
     ));
-}
-
-#[test]
-fn other_escapable_characters_are_written_bare_and_read_back() {
-    let local = "_a~b!c$d&e*f+g/h?i#j@k%41";
-    let d = document(vec![element(Kind::Entity, ex(local), Attributes::new())]);
-    assert_eq!(line(d.records[0].clone()), format!("entity(ex:{local})"));
-    assert!(written_reads_back(&d));
-}
-
-#[test]
-fn bare_names_that_would_misread_take_a_prefix() {
-    let mut d = Document::new();
-    d.namespaces.set_default("http://default.org/");
-    for local in ["12", "", "@a", "//x", "/*y"] {
-        d.records.push(element(
-            Kind::Entity,
-            QName::new("http://default.org/", local).unwrap(),
-            Attributes::new(),
-        ));
-    }
-    let text = provn::to_string(&d).unwrap();
-    for expected in [
-        "entity(ns1:12)",
-        "entity(ns1:)",
-        "entity(ns1:@a)",
-        "entity(ns1://x)",
-        "entity(ns1:/*y)",
-    ] {
-        assert!(text.contains(expected), "{text}");
-    }
-    assert!(written_reads_back(&d));
-
-    // Names that lex back as themselves stay bare.
-    for local in ["\u{1680}a", "a/b", "a@b"] {
-        let mut d = Document::new();
-        d.namespaces.set_default("http://default.org/");
-        d.records.push(element(
-            Kind::Entity,
-            QName::new("http://default.org/", local).unwrap(),
-            Attributes::new(),
-        ));
-        let text = provn::to_string(&d).unwrap();
-        assert!(text.contains(&format!("entity({local})")), "{text}");
-        assert!(!text.contains("ns1"), "{text}");
-        assert!(written_reads_back(&d));
-    }
-    assert!(written_reads_back(&d));
 }
 
 #[test]

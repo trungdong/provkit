@@ -1,6 +1,7 @@
 //! Attribute values.
 
 use std::hash::{Hash, Hasher};
+use std::sync::LazyLock;
 
 use crate::well_known::{
     PROV_QUALIFIED_NAME, XSD_BOOLEAN, XSD_BYTE, XSD_DATETIME, XSD_DECIMAL, XSD_DOUBLE, XSD_FLOAT,
@@ -125,6 +126,23 @@ pub enum Value {
         datatype: QName,
     },
 }
+
+/// The XSD integer datatypes, whose literals compare by integer value.
+static INTEGER_TYPES: [&LazyLock<QName>; 13] = [
+    &XSD_INT,
+    &XSD_LONG,
+    &XSD_INTEGER,
+    &XSD_SHORT,
+    &XSD_BYTE,
+    &XSD_NON_NEGATIVE_INTEGER,
+    &XSD_POSITIVE_INTEGER,
+    &XSD_NON_POSITIVE_INTEGER,
+    &XSD_NEGATIVE_INTEGER,
+    &XSD_UNSIGNED_LONG,
+    &XSD_UNSIGNED_INT,
+    &XSD_UNSIGNED_SHORT,
+    &XSD_UNSIGNED_BYTE,
+];
 
 /// The reason [`Value::typed`] gives for a qualified-name datatype.
 const QNAME_REASON: &str =
@@ -314,22 +332,7 @@ impl<'a> Key<'a> {
     /// and LF around a number or boolean before reading it.
     fn of(lexical: &'a str, datatype: &QName) -> Self {
         let text = trim_xsd_space(lexical);
-        let integers: [&QName; 13] = [
-            &XSD_INT,
-            &XSD_LONG,
-            &XSD_INTEGER,
-            &XSD_SHORT,
-            &XSD_BYTE,
-            &XSD_NON_NEGATIVE_INTEGER,
-            &XSD_POSITIVE_INTEGER,
-            &XSD_NON_POSITIVE_INTEGER,
-            &XSD_NEGATIVE_INTEGER,
-            &XSD_UNSIGNED_LONG,
-            &XSD_UNSIGNED_INT,
-            &XSD_UNSIGNED_SHORT,
-            &XSD_UNSIGNED_BYTE,
-        ];
-        let key = if integers.contains(&datatype) {
+        let key = if INTEGER_TYPES.iter().any(|&t| **t == *datatype) {
             Key::integer(text)
         } else if *datatype == *XSD_DECIMAL {
             Key::decimal(text)

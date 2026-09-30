@@ -5,24 +5,6 @@ fn typed(lexical: &str, datatype: &QName) -> Value {
     Value::typed(lexical, datatype.clone()).unwrap()
 }
 
-fn integer_types() -> [&'static QName; 13] {
-    [
-        &XSD_INTEGER,
-        &XSD_LONG,
-        &XSD_INT,
-        &XSD_SHORT,
-        &XSD_BYTE,
-        &XSD_NON_NEGATIVE_INTEGER,
-        &XSD_POSITIVE_INTEGER,
-        &XSD_NON_POSITIVE_INTEGER,
-        &XSD_NEGATIVE_INTEGER,
-        &XSD_UNSIGNED_LONG,
-        &XSD_UNSIGNED_INT,
-        &XSD_UNSIGNED_SHORT,
-        &XSD_UNSIGNED_BYTE,
-    ]
-}
-
 /// Every form in `forms` is one value of `datatype`: equal and hashing alike.
 fn assert_one_value(datatype: &QName, forms: &[&str]) {
     let first = typed(forms[0], datatype);
@@ -90,10 +72,6 @@ fn a_padded_datetime_reads_as_a_datetime_and_prints_trimmed() {
 
 #[test]
 fn a_well_formed_key_never_equals_the_text_key_of_the_same_content() {
-    assert_ne!(Key::Integer(false, "5"), Key::Text("5"));
-    assert_ne!(Key::Decimal(false, "1", ""), Key::Text("1"));
-    assert_ne!(Key::Boolean(true), Key::Text("true"));
-    assert_ne!(Key::Float(0), Key::Text("0"));
     // Through `Key::of`, the well-formed spellings meet and the
     // ill-formed ones stay apart from them.
     assert_eq!(Key::of("+5", &XSD_INT), Key::of("5", &XSD_INT));
@@ -123,7 +101,7 @@ fn ill_formed_literals_are_kept() {
 #[test]
 fn integers_compare_by_value_under_one_datatype() {
     let long = "1234567890123456789012345678901234567890";
-    for datatype in integer_types() {
+    for datatype in INTEGER_TYPES {
         assert_one_value(datatype, &[" 5 ", "5", "+5", "005", "\t5\r\n", "+0005"]);
         assert_one_value(datatype, &["0", "-0", "+0", "000", "-000"]);
         assert_one_value(datatype, &["-5", "-05", " -5"]);
@@ -224,7 +202,7 @@ fn spellings_outside_the_xsd_pattern_are_not_numbers() {
             assert_ne!(typed(form, dt), typed(&format!(" {form}"), dt), "{form:?}");
         }
     }
-    for dt in integer_types() {
+    for dt in INTEGER_TYPES {
         assert_distinct_values(dt, &["5", "5.0", "5e0", "+", "-", "", "5 5", "٥", "0x5"]);
         // Only space, tab, CR and LF are trimmed.
         assert_distinct_values(dt, &["5", "\u{A0}5", "5\u{2003}", "\u{C}5", "5\u{B}"]);

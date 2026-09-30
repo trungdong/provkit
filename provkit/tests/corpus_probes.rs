@@ -3,7 +3,7 @@
 
 mod common;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use common::{Report, corpus_dir, files, tsv};
 use provkit::provn::{self, Profile};
@@ -56,7 +56,8 @@ fn expected(report: &mut Report) -> BTreeMap<String, Expected> {
         // ProvPy agrees.
         let ([name, strict, default, rule] | [name, strict, default, rule, _]) = row.as_slice()
         else {
-            report.fail(&row[0], format!("expected 5 columns, got {}", row.len()));
+            let name = row.first().map_or("", String::as_str);
+            report.fail(name, format!("expected 5 columns, got {}", row.len()));
             continue;
         };
         let (Some(strict), Some(default)) = (Outcome::parse(strict), Outcome::parse(default))
@@ -82,7 +83,11 @@ fn probes_read_as_the_grammar_requires() {
     let mut report = Report::default();
     let expected = expected(&mut report);
     let probes = files(&corpus_dir("provn/probes"), "provn");
-    for (file, text) in probes {
+    let names: BTreeSet<&str> = probes
+        .iter()
+        .map(|(file, _)| file.trim_end_matches(".provn"))
+        .collect();
+    for (file, text) in &probes {
         let name = file.trim_end_matches(".provn");
         report.checked += 1;
         let Some(row) = expected.get(name) else {
@@ -93,7 +98,7 @@ fn probes_read_as_the_grammar_requires() {
             ("strict", Profile::Strict, row.strict),
             ("default", Profile::Default, row.default),
         ] {
-            let got = Outcome::of(&provn::read_with(&text, profile));
+            let got = Outcome::of(&provn::read_with(text, profile));
             if got != want {
                 report.fail(name, format!("{label}: expected {want:?}, got {got:?}"));
             }
@@ -101,10 +106,7 @@ fn probes_read_as_the_grammar_requires() {
     }
     if std::env::var("PROVKIT_ONLY").is_err() {
         for name in expected.keys() {
-            if !corpus_dir("provn/probes")
-                .join(format!("{name}.provn"))
-                .exists()
-            {
+            if !names.contains(name.as_str()) {
                 report.fail(name, "row has no probe file");
             }
         }

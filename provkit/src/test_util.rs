@@ -3,7 +3,9 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use crate::{Agent, Attributes, Bundle, Entity, Namespaces, QName, Record};
+use crate::{Agent, Attributes, Bundle, DateTime, Entity, Namespaces, QName, Record};
+#[cfg(feature = "provn")]
+use crate::{Document, Formal, FormalAttr, Kind};
 
 /// Hash a value with the default hasher.
 pub(crate) fn hash<T: Hash>(value: &T) -> u64 {
@@ -40,6 +42,38 @@ pub(crate) fn bundle(id: &str, records: Vec<Record>) -> Bundle {
         namespaces: Namespaces::new(),
         records,
     }
+}
+
+/// The dateTime `2011-11-16T16:05:33Z`.
+pub(crate) fn dt() -> DateTime {
+    DateTime::parse("2011-11-16T16:05:33Z").unwrap()
+}
+
+// Only the PROV-N writer tests build records this way.
+
+/// An element of `kind` with `attrs` and no formals.
+#[cfg(feature = "provn")]
+pub(crate) fn element(kind: Kind, id: QName, attrs: Attributes) -> Record {
+    Record::from_parts(kind, Some(id), vec![], attrs).unwrap()
+}
+
+/// A relation of `kind` with `formals` and no attributes.
+#[cfg(feature = "provn")]
+pub(crate) fn relation(
+    kind: Kind,
+    id: Option<QName>,
+    formals: Vec<(FormalAttr, Formal)>,
+) -> Record {
+    Record::from_parts(kind, id, formals, Attributes::new()).unwrap()
+}
+
+/// A document in `http://example.org/` under `ex`, holding `records`.
+#[cfg(feature = "provn")]
+pub(crate) fn document(records: Vec<Record>) -> Document {
+    let mut d = Document::new();
+    d.namespaces.declare("ex", "http://example.org/").unwrap();
+    d.records = records;
+    d
 }
 
 /// A writer whose every write fails.

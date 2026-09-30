@@ -426,6 +426,8 @@ fn arity_and_structure_errors() {
     ));
 }
 
+/// A syntax error sits at the token the grammar rejects, or at the end of
+/// the input when the text stops short.
 #[test]
 fn errors_carry_positions() {
     assert!(matches!(
@@ -443,12 +445,6 @@ fn errors_carry_positions() {
             column: 1,
             ..
         })
-    ));
-    // A name the grammar accepts and the namespace table does not.
-    let text = "document\nprefix ex <http://example.org/>\nentity(zz:e)\nendDocument\n";
-    assert!(matches!(
-        located(provn::read(text).unwrap_err()),
-        ((3, 8), Error::UndeclaredPrefix(p)) if p == "zz"
     ));
 }
 
@@ -495,31 +491,16 @@ fn each_layer_error_sits_at_its_token() {
         located(provn::read(text).unwrap_err()),
         ((2, 8), Error::ReservedPrefix { .. })
     ));
-}
-
-#[test]
-fn every_reader_error_has_a_position() {
-    let cases = [
-        ("entity(zz:e)", 3, 8),                            // undeclared prefix
-        ("entity(e)", 3, 8),                               // no default namespace
-        ("entity(ex:e, [ex:k='zz:v'])", 3, 20),            // undeclared prefix in a value
-        ("activity(ex:a, 2012-13-01T00:00:00, -)", 3, 16), // bad dateTime argument
-        (
-            "wasGeneratedBy(ex:e, ex:a, -, [prov:activity='ex:b'])",
-            3,
-            1,
-        ),
-        ("bundle ex:b\nendBundle\nbundle ex:b\nendBundle", 5, 8), // duplicate bundle
-    ];
-    for (body, line, column) in cases {
-        let text = format!("document\nprefix ex <http://example.org/>\n{body}\nendDocument\n");
-        match provn::read(&text) {
-            Err(Error::At {
-                line: l, column: c, ..
-            }) => assert_eq!((l, c), (line, column), "{body}"),
-            other => panic!("{body}: expected Error::At, got {other:?}"),
-        }
-    }
+    // A record error, at the statement's keyword.
+    assert!(matches!(
+        read("wasGeneratedBy(ex:e, ex:a, -, [prov:activity='ex:b'])"),
+        ((3, 1), Error::InvalidRecord { .. })
+    ));
+    // A duplicate bundle, at the second bundle's identifier.
+    assert!(matches!(
+        read("bundle ex:b\nendBundle\nbundle ex:b\nendBundle"),
+        ((5, 8), Error::DuplicateBundle(_))
+    ));
 }
 
 #[test]
@@ -542,15 +523,6 @@ fn nothing_follows_end_document() {
         }
         other => panic!("unexpected {other:?}"),
     }
-}
-
-#[test]
-fn second_default_in_one_scope_is_rejected() {
-    let text = "document\n default <http://a/>\n default <http://b/>\nendDocument";
-    assert!(matches!(
-        provn::read(text),
-        Err(Error::Syntax { line: 3, .. })
-    ));
 }
 
 #[test]

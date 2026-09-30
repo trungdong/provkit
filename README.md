@@ -42,9 +42,10 @@ standard input or output.
 
 `compare` declares the `nsN` prefixes it mints for names with no declared
 prefix, with a `prefix nsN <IRI>` line after the records of each scope. Such a
-line applies to the whole scope, including the records printed before it. A PROV-N
-file with extensibility expressions prints one warning on standard error and
-the exit code does not change. A closed output pipe ends the program quietly.
+line applies to the whole scope, including the records printed before it. A
+PROV-N file with extensibility expressions prints one warning on standard
+error and the exit code does not change. A closed output pipe ends the program
+quietly.
 
 | Exit code | Meaning |
 |---|---|
