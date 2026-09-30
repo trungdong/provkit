@@ -337,6 +337,27 @@ mod tests {
     }
 
     #[test]
+    fn member_fan_out_shares_one_attribute_allocation() {
+        let n = 3_000;
+        let members: Vec<String> = (0..n).map(|i| format!(r#""ex:m{i}""#)).collect();
+        let attrs: Vec<String> = (0..n).map(|i| format!(r#""ex:k{i}""#)).collect();
+        let d = doc(&format!(
+            r#"{{{PFX}, "hadMember": {{"ex:c": {{"prov:collection": "ex:c",
+                "prov:entity": [{}], "ex:tag": [{}]}}}}}}"#,
+            members.join(","),
+            attrs.join(",")
+        ));
+        assert_eq!(d.records.len(), n);
+        let first = d.records[0].attributes();
+        assert_eq!(first.len(), n);
+        assert!(
+            d.records
+                .iter()
+                .all(|r| r.attributes().shares_storage_with(first))
+        );
+    }
+
+    #[test]
     fn errors() {
         let read = |s: &str| crate::json::read(s);
         assert!(matches!(

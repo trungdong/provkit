@@ -19,6 +19,10 @@ follows [Semantic Versioning](https://semver.org/).
     `FormalAttr::ALL` lists every formal attribute.
   - `Kind` and `Record` are `#[non_exhaustive]`, so a `match` on either in
     another crate needs a wildcard arm.
+  - `Attributes` clones share one allocation and copy it on the first write.
+    Its `Hash` sorts the per-pair hashes, `Attributes::remove` keeps the order
+    of the rest, and it implements `FromIterator`, `Extend` and `IntoIterator`
+    (owned and by reference).
   - Strict name resolution with `QName` and `Namespaces`.
   - `Value` with plain, language-tagged, name, `dateTime` and typed literals.
   - PROV-JSON read and write (`json` module).
