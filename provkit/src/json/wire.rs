@@ -206,6 +206,16 @@ pub(super) enum JsonValue {
     Many(Vec<JsonValue>),
 }
 
+impl JsonValue {
+    /// An array is several values; anything else is one.
+    pub(super) fn items(&self) -> &[JsonValue] {
+        match self {
+            JsonValue::Many(items) => items,
+            other => std::slice::from_ref(other),
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for JsonValue {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         struct V;

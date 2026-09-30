@@ -4,6 +4,7 @@ use indexmap::IndexMap;
 
 use super::wire::{JsonDocument, JsonRecord, JsonSection, JsonValue};
 use crate::sink::Sink;
+use crate::well_known::{PROV_QUALIFIED_NAME, XSD_DATETIME, XSD_QNAME};
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
     Result, Value,
@@ -96,15 +97,15 @@ fn records_from(
         match formal {
             Some(FormalAttr::Entity) if kind == Kind::Membership => {
                 for v in value.items() {
-                    members.push(scope.resolve(v.expect_str(key)?)?);
+                    members.push(scope.resolve(formal_text(v, key, false, scope)?)?);
                 }
             }
             Some(f) if f.is_time() => {
-                let text = value.expect_str(key)?;
+                let text = formal_text(value, key, true, scope)?;
                 formals.push((f, Formal::Time(DateTime::parse(text)?)));
             }
             Some(f) => {
-                let text = value.expect_str(key)?;
+                let text = formal_text(value, key, false, scope)?;
                 formals.push((f, Formal::Name(scope.resolve(text)?)));
             }
             None => {
@@ -132,21 +133,40 @@ fn records_from(
     )?])
 }
 
-impl JsonValue {
-    /// A formal attribute value must be a plain string (a name or a dateTime).
-    fn expect_str(&self, key: &str) -> Result<&str> {
-        match self {
-            JsonValue::Str(s) | JsonValue::Typed { value: s, .. } => Ok(s),
-            _ => Err(structure(format!("`{key}` must be a string"))),
+/// The text of the formal under `key`. A plain string is the text. A value
+/// object gives its `$` when it has no `lang` and its `type` resolves to
+/// `xsd:dateTime` for a time, or to `xsd:QName` or `prov:QUALIFIED_NAME`
+/// for a name. Anything else is not a formal value.
+fn formal_text<'a>(
+    value: &'a JsonValue,
+    key: &str,
+    time: bool,
+    scope: &Namespaces,
+) -> Result<&'a str> {
+    let expected = if time { "a dateTime" } else { "a name" };
+    let wrong = |found: &str| structure(format!("`{key}` must be {expected}, not {found}"));
+    match value {
+        JsonValue::Str(s) => Ok(s),
+        JsonValue::Typed { lang: Some(_), .. } => Err(wrong("a language-tagged string")),
+        JsonValue::Typed { datatype: None, .. } => Err(wrong("an untyped value object")),
+        JsonValue::Typed {
+            value,
+            datatype: Some(datatype),
+            ..
+        } => {
+            let datatype = scope.resolve(datatype)?;
+            let fits = if time {
+                datatype == *XSD_DATETIME
+            } else {
+                datatype == *XSD_QNAME || datatype == *PROV_QUALIFIED_NAME
+            };
+            if fits {
+                Ok(value)
+            } else {
+                Err(wrong(&format!("a value typed <{datatype}>")))
+            }
         }
-    }
-
-    /// An array is several values; anything else is one.
-    fn items(&self) -> &[JsonValue] {
-        match self {
-            JsonValue::Many(items) => items,
-            other => std::slice::from_ref(other),
-        }
+        _ => Err(wrong("a number, boolean or array")),
     }
 }
 
@@ -182,11 +202,11 @@ fn decode_value(v: &JsonValue, scope: &Namespaces) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::json;
     use crate::well_known::{XSD_BOOLEAN, XSD_DOUBLE, XSD_INT, XSD_INTEGER, XSD_LONG};
-    use crate::{Error, Record, Value};
 
     fn doc(json: &str) -> crate::Document {
-        crate::json::read(json).unwrap()
+        json::read(json).unwrap()
     }
     fn ex(l: &str) -> QName {
         QName::new("http://example.org/", l)
@@ -264,7 +284,13 @@ mod tests {
             Some(Value::Typed { lexical, .. }) if &**lexical == "9223372036854775808"
         ));
         assert_eq!(dt("neg"), *XSD_LONG);
+        // Beyond `u64`, serde_json gives a double, and its text is the
+        // double's shortest decimal, not the digits written.
         assert_eq!(dt("huge"), *XSD_DOUBLE);
+        assert!(matches!(
+            e.attributes.get(&ex("huge")).next(),
+            Some(Value::Typed { lexical, .. }) if &**lexical == "12345678901234568000000"
+        ));
         assert_eq!(dt("exp"), *XSD_DOUBLE);
     }
 
@@ -345,7 +371,7 @@ mod tests {
 
     #[test]
     fn errors() {
-        let read = |s: &str| crate::json::read(s);
+        let read = |s: &str| json::read(s);
         assert!(matches!(
             read(&format!(r#"{{{PFX}, "entity": {{"_:e": {{}}}}}}"#)),
             Err(Error::JsonStructure { .. })
@@ -408,7 +434,7 @@ mod tests {
             );
         }
         // Each literal is written with the text and datatype it was read with.
-        let written = crate::json::to_string(&d).unwrap();
+        let written = json::to_string(&d).unwrap();
         let v: serde_json::Value = serde_json::from_str(&written).unwrap();
         for (i, (text, datatype)) in literals.iter().enumerate() {
             assert_eq!(
@@ -429,7 +455,7 @@ mod tests {
         assert!(matches!(
             &values(&d, "k")[0],
             Value::Typed { lexical, datatype }
-                if lexical == "not a name" && *datatype == *crate::well_known::PROV_QUALIFIED_NAME
+                if lexical == "not a name" && *datatype == *PROV_QUALIFIED_NAME
         ));
         #[cfg(feature = "provn")]
         {
@@ -442,9 +468,93 @@ mod tests {
         }
         // Text that is a qualified name must resolve.
         assert!(matches!(
-            crate::json::read(&entity(r#""ex:k": {"$": "zz:foo", "type": "prov:QUALIFIED_NAME"}"#)),
+            json::read(&entity(r#""ex:k": {"$": "zz:foo", "type": "prov:QUALIFIED_NAME"}"#)),
             Err(Error::UndeclaredPrefix(p)) if p == "zz"
         ));
+    }
+
+    #[test]
+    fn a_formal_written_as_an_object_is_checked() {
+        let doc = |formal: &str| {
+            format!(
+                r#"{{"prefix": {{"ex": "http://example.org/"}}, "wasGeneratedBy": {{"ex:g": {{"prov:entity": "ex:e", "prov:activity": {formal}}}}}}}"#
+            )
+        };
+        assert!(json::read(&doc(r#"{"$": "ex:a", "type": "prov:QUALIFIED_NAME"}"#)).is_ok());
+        assert!(json::read(&doc(r#"{"$": "ex:a", "type": "xsd:QName"}"#)).is_ok());
+        for bad in [
+            r#"{"$": "ex:a", "type": "zz:undeclared"}"#,
+            r#"{"$": "ex:a", "type": "xsd:string"}"#,
+            r#"{"$": "ex:a", "lang": "en"}"#,
+            r#"{"$": "ex:a", "type": "prov:QUALIFIED_NAME", "lang": "en"}"#,
+        ] {
+            assert!(json::read(&doc(bad)).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_formal_object_of_the_wrong_shape_names_the_formal() {
+        let generation = |formal: &str| {
+            format!(
+                r#"{{{PFX}, "wasGeneratedBy": {{"ex:g": {{"prov:entity": "ex:e", "prov:time": {formal}}}}}}}"#
+            )
+        };
+        let d = doc(&generation(
+            r#"{"$": "2011-11-16T16:05:33Z", "type": "xsd:dateTime"}"#,
+        ));
+        assert!(matches!(&d.records[0], Record::Generation(g) if g.time.is_some()));
+        let names_the_formal = |text: &str, formal: &str| match json::read(text) {
+            Err(Error::JsonStructure { message }) => {
+                assert!(message.contains(formal), "{text}\n{message}");
+            }
+            other => panic!("{text}: {other:?}"),
+        };
+        for bad in [
+            r#"{"$": "2011-11-16T16:05:33Z", "type": "xsd:string"}"#,
+            r#"{"$": "2011-11-16T16:05:33Z", "type": "xsd:QName"}"#,
+            r#"{"$": "2011-11-16T16:05:33Z", "type": "xsd:dateTime", "lang": "en"}"#,
+            r#"{"$": "2011-11-16T16:05:33Z"}"#,
+        ] {
+            names_the_formal(&generation(bad), "prov:time");
+        }
+        for bad in [
+            r#"{"$": "ex:a", "type": "xsd:dateTime"}"#,
+            r#"{"$": "ex:a", "type": "xsd:string"}"#,
+            r#"{"$": "ex:a", "lang": "en"}"#,
+            r#"{"$": "ex:a"}"#,
+        ] {
+            names_the_formal(
+                &format!(
+                    r#"{{{PFX}, "wasGeneratedBy": {{"ex:g": {{"prov:entity": "ex:e", "prov:activity": {bad}}}}}}}"#
+                ),
+                "prov:activity",
+            );
+            names_the_formal(
+                &format!(
+                    r#"{{{PFX}, "hadMember": {{"ex:m": {{"prov:collection": "ex:c", "prov:entity": ["ex:a", {bad}]}}}}}}"#
+                ),
+                "prov:entity",
+            );
+        }
+        // An undeclared prefix in the `type` is reported as such.
+        assert!(matches!(
+            json::read(&generation(r#"{"$": "x", "type": "zz:t"}"#)),
+            Err(Error::UndeclaredPrefix(p)) if p == "zz"
+        ));
+    }
+
+    #[test]
+    fn an_empty_member_array_reads_as_one_membership_with_no_entity() {
+        let d = doc(&format!(
+            r#"{{{PFX}, "hadMember": {{"ex:m": {{"prov:collection": "ex:c", "prov:entity": []}}}}}}"#
+        ));
+        assert_eq!(d.records.len(), 1);
+        let Record::Membership(m) = &d.records[0] else {
+            panic!("{:?}", d.records[0])
+        };
+        assert_eq!(m.id, Some(ex("m")));
+        assert_eq!(m.collection, Some(ex("c")));
+        assert_eq!(m.entity, None);
     }
 
     #[test]
@@ -457,7 +567,7 @@ mod tests {
             let text = format!(r#"{{{PFX}, "{section}": {{"ex:x": {{"{key}": "nope"}}}}}}"#);
             assert!(
                 matches!(
-                    crate::json::read(&text),
+                    json::read(&text),
                     Err(Error::InvalidLiteral { datatype, .. }) if datatype == "xsd:dateTime"
                 ),
                 "{key}"
@@ -485,7 +595,7 @@ mod tests {
         assert_ne!(d, other);
         // A raw number or boolean and a `$` object are both written as a `$`
         // object, each with its own text.
-        let written = crate::json::to_string(&d).unwrap();
+        let written = json::to_string(&d).unwrap();
         let v: serde_json::Value = serde_json::from_str(&written).unwrap();
         let body = &v["entity"]["ex:e"];
         assert_eq!(
@@ -526,7 +636,7 @@ mod tests {
     #[test]
     fn an_ill_formed_language_tag_is_an_error() {
         assert!(matches!(
-            crate::json::read(&entity(r#""ex:k": {"$": "x", "lang": "en_US"}"#)),
+            json::read(&entity(r#""ex:k": {"$": "x", "lang": "en_US"}"#)),
             Err(Error::InvalidLanguageTag(tag)) if tag == "en_US"
         ));
         let d = doc(&entity(
@@ -539,7 +649,7 @@ mod tests {
 
     #[test]
     fn json_errors_name_the_problem() {
-        let message = |s: &str| crate::json::read(s).unwrap_err().to_string();
+        let message = |s: &str| json::read(s).unwrap_err().to_string();
         let ent = |body: &str| format!(r#"{{{PFX}, "entity": {{"ex:e": {{{body}}}}}}}"#);
         let cases = [
             (
@@ -570,6 +680,16 @@ mod tests {
             (
                 format!(r#"{{{PFX}, "entity": {{"ex:e": [{{"ex:a": {{"$": 1}}}}]}}}}"#),
                 "expected a string as the `$` of a value object",
+            ),
+            (
+                format!(r#"{{{PFX}, "entity": {{"ex:e": [3]}}}}"#),
+                "invalid type: integer `3`, expected a map",
+            ),
+            (
+                format!(
+                    r#"{{{PFX}, "used": {{"_:u": {{"prov:entity": {{"$": "ex:e", "lang": "en"}}}}}}}}"#
+                ),
+                "`prov:entity` must be a name, not a language-tagged string",
             ),
             (
                 "[]".to_owned(),
@@ -629,7 +749,7 @@ mod tests {
 
     #[test]
     fn strict_rules_and_shapes() {
-        let read = |s: &str| crate::json::read(s);
+        let read = |s: &str| json::read(s);
         let ent = |body: &str| format!(r#"{{{PFX}, "entity": {{"ex:e": {{{body}}}}}}}"#);
         assert!(matches!(
             read(&ent(r#""ex:a": {"$": "1", "type": "zz:t"}"#)),
@@ -664,7 +784,7 @@ mod tests {
         assert_eq!(d.records.len(), 1);
         assert_eq!(d.records[0].id(), Some(&ex("e")));
         // A repeated `prefix` or `bundle` is an error.
-        let message = |s: &str| crate::json::read(s).unwrap_err().to_string();
+        let message = |s: &str| json::read(s).unwrap_err().to_string();
         assert!(
             message(&format!(r#"{{{PFX}, "prefix": {{}}}}"#)).contains("duplicate field `prefix`")
         );
