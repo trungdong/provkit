@@ -31,7 +31,11 @@ impl Document {
     ///
     /// # Errors
     ///
-    /// [`Error::Unification`] when two records conflict.
+    /// - [`Error::Unification`] when two records conflict.
+    /// - [`Error::Structure`] from [`Record::from_parts`] when a merged
+    ///   record carries an attribute that spells one of its own formals
+    ///   (`prov:activity` on a generation). Readers never produce such a
+    ///   record, but a hand-built one can.
     pub fn unified(&self) -> Result<Document> {
         let mut bundles = Vec::new();
         for bundle in merged_bundles(&self.bundles) {
@@ -507,5 +511,33 @@ mod tests {
         let u = d.unified().unwrap();
         assert_eq!(u.records.len(), 1);
         assert_eq!(u.records[0].attributes().len(), 2);
+    }
+
+    #[test]
+    fn merging_a_hand_built_formal_named_attribute_is_a_structure_error() {
+        let mut a = Attributes::new();
+        a.insert(
+            crate::QName::new(crate::namespaces::PROV, "activity"),
+            q("x").into(),
+        );
+        let generation = |attributes: Attributes| {
+            Record::Generation(crate::Generation {
+                id: Some(q("g")),
+                entity: Some(q("e")),
+                activity: None,
+                time: None,
+                attributes,
+            })
+        };
+        let mut d = Document::new();
+        d.records.push(generation(a));
+        d.records.push(generation(Attributes::new()));
+        match d.unified() {
+            Err(Error::Structure { format, message }) => {
+                assert_eq!(format, "record");
+                assert!(message.contains("prov:activity"), "{message}");
+            }
+            other => panic!("expected a structure error, got {other:?}"),
+        }
     }
 }
