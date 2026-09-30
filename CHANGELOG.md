@@ -11,7 +11,7 @@ follows [Semantic Versioning](https://semver.org/).
 - `provkit` library:
   - PROV-DM model with a `Record` enum and a struct per PROV-DM type.
   - Every relation formal attribute is optional.
-  - Strict name resolution with `QName`, `Namespaces` and `Scope`.
+  - Strict name resolution with `QName` and `Namespaces`.
   - `Value` with plain, language-tagged, name, `dateTime` and typed literals.
   - PROV-JSON read and write (`json` module).
   - PROV-N read and write (`provn` module), with the `Strict` and `Default`
@@ -23,6 +23,11 @@ follows [Semantic Versioning](https://semver.org/).
     error from the PROV-N reader carries a line and column: `Error::Syntax`
     for text the grammar rejects, and `Error::At` around the error for a
     name, literal or record.
+  - Public modules `json`, `provn` and `well_known`. Every other public item
+    has one path, at the crate root, and `provn::Profile` lives under `provn`.
+    `well_known` holds the `QName` statics and the `PROV` and `XSD`
+    namespace IRIs.
+  - Signatures take and return `&str` for namespaces, never `Arc<str>`.
   - Cargo features `json` and `provn`, both on by default.
 - `provkit` binary (crate `provkit-cli`):
   - `provkit convert` between PROV-JSON and PROV-N, with pandoc-style format

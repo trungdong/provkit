@@ -179,8 +179,8 @@ fn show(formal: &Formal) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::qname::well_known::PROV_LABEL;
     use crate::test_util::q;
+    use crate::well_known::PROV_LABEL;
     use crate::{
         Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, Namespaces,
         Record,
@@ -457,10 +457,7 @@ mod tests {
         let u = d.unified().unwrap();
         assert_eq!(u.bundles.len(), 1);
         assert_eq!(u.bundles[0].records.len(), 1);
-        assert_eq!(
-            u.bundles[0].namespaces.lookup("o").as_deref(),
-            Some("http://one.org/")
-        );
+        assert_eq!(u.bundles[0].namespaces.lookup("o"), Some("http://one.org/"));
     }
 
     #[test]
@@ -517,7 +514,7 @@ mod tests {
     fn merging_a_hand_built_formal_named_attribute_is_an_invalid_record() {
         let mut a = Attributes::new();
         a.insert(
-            crate::QName::new(crate::namespaces::PROV, "activity"),
+            crate::QName::new(crate::well_known::PROV, "activity"),
             q("x").into(),
         );
         let generation = |attributes: Attributes| {

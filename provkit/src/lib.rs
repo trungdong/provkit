@@ -34,22 +34,22 @@
 //! - `json` (default): the [`json`] module, with `serde` and `serde_json`.
 //! - `provn` (default): the [`provn`] module.
 
-pub mod attributes;
-pub mod datetime;
-pub mod document;
-pub mod error;
+mod attributes;
+mod datetime;
+mod document;
+mod error;
 #[cfg(feature = "json")]
 pub mod json;
-pub mod namespaces;
+mod namespaces;
 mod pn;
 #[cfg(feature = "provn")]
 pub mod provn;
-pub mod qname;
-pub mod record;
+mod qname;
+mod record;
 #[cfg(any(feature = "json", feature = "provn"))]
 mod sink;
 mod unify;
-pub mod value;
+mod value;
 
 #[cfg(test)]
 pub(crate) mod test_util;
@@ -58,10 +58,8 @@ pub use attributes::Attributes;
 pub use datetime::DateTime;
 pub use document::{Bundle, Document};
 pub use error::{Error, Result};
-pub use namespaces::{Namespaces, Scope};
-#[cfg(feature = "provn")]
-pub use provn::Profile;
-pub use qname::QName;
+pub use namespaces::Namespaces;
+pub use qname::{QName, well_known};
 pub use record::{
     Activity, Agent, Alternate, Association, Attribution, Communication, Delegation, Derivation,
     End, Entity, Formal, FormalAttr, FormalRef, Generation, Influence, Invalidation, Kind,

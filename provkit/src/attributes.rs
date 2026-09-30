@@ -87,8 +87,8 @@ impl Hash for Attributes {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::qname::well_known::{PROV_LABEL, PROV_TYPE};
     use crate::test_util::hash;
+    use crate::well_known::{PROV_LABEL, PROV_TYPE};
 
     #[test]
     fn ordered_deduplicated_set_equal() {

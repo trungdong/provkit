@@ -1,6 +1,6 @@
 //! Records: the eighteen PROV-DM types and the enum that holds them.
 
-use crate::namespaces::PROV;
+use crate::well_known::PROV;
 use crate::{Attributes, DateTime, Error, QName, Result};
 
 /// The PROV-DM type of a record.

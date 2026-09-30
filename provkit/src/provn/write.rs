@@ -6,8 +6,8 @@ use std::io;
 use super::lexer::{Token, TokenKind, tokenize};
 use crate::document::merged_bundles;
 use crate::pn;
-use crate::qname::well_known::{XSD_DATETIME, XSD_INT};
 use crate::record::{formal_attribute_error, formal_named};
+use crate::well_known::{XSD_DATETIME, XSD_INT};
 use crate::{
     Bundle, Document, Error, FormalAttr, FormalRef, Kind, Namespaces, QName, Record, Result, Value,
 };
@@ -160,7 +160,7 @@ fn declarations(
         any = true;
     }
     for (prefix, iri) in names.iter() {
-        if inherited.is_some_and(|o| o.lookup(prefix).is_some_and(|i| i == *iri)) {
+        if inherited.is_some_and(|o| o.lookup(prefix) == Some(iri)) {
             continue;
         }
         check_declaration(Some(prefix), iri)?;
@@ -378,7 +378,7 @@ fn value(v: &Value, names: &mut Namespaces) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::qname::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT};
+    use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT};
     use crate::{
         Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, LangStr,
         Namespaces, QName, Record, Value, provn,
@@ -703,8 +703,8 @@ endDocument
             records: vec![],
         };
         let table = bundle.namespaces.with_fallback(&outer);
-        assert_eq!(&*table.lookup("ex").unwrap(), "http://bundle.org/");
-        assert_eq!(&*table.lookup("o").unwrap(), "http://o.org/");
+        assert_eq!(table.lookup("ex").unwrap(), "http://bundle.org/");
+        assert_eq!(table.lookup("o").unwrap(), "http://o.org/");
     }
 
     /// Write `d`; when the writer accepts it, it must read back equal.
@@ -835,9 +835,9 @@ endDocument
         ];
         let datatypes = [
             XSD_INT.clone(),
-            crate::qname::well_known::XSD_LONG.clone(),
-            crate::qname::well_known::XSD_STRING.clone(),
-            QName::new(crate::namespaces::XSD, "anyURI"),
+            crate::well_known::XSD_LONG.clone(),
+            crate::well_known::XSD_STRING.clone(),
+            QName::new(crate::well_known::XSD, "anyURI"),
             ex("dt"),
         ];
         for lexical in sample_texts() {
@@ -846,9 +846,7 @@ endDocument
             }
         }
         for lexical in ["2011-11-16T16:05:33Z", "2011-11-16T16:05:33.25+01:00"] {
-            values.push(
-                Value::typed(lexical, crate::qname::well_known::XSD_DATETIME.clone()).unwrap(),
-            );
+            values.push(Value::typed(lexical, crate::well_known::XSD_DATETIME.clone()).unwrap());
         }
         values
     }
@@ -1024,7 +1022,7 @@ endDocument
         };
         assert_eq!(a.agent, None);
         let (name, reason) = unwritable(&d);
-        assert_eq!(name, QName::new(crate::namespaces::PROV, "agent "));
+        assert_eq!(name, QName::new(crate::well_known::PROV, "agent "));
         assert!(reason.contains("' ' (U+0020)"), "{reason}");
     }
 
@@ -1080,7 +1078,7 @@ endDocument
     fn an_attribute_spelling_an_own_formal_cannot_be_written() {
         let mut a = Attributes::new();
         a.insert(
-            QName::new(crate::namespaces::PROV, "entity"),
+            QName::new(crate::well_known::PROV, "entity"),
             ex("x").into(),
         );
         let r = Record::Usage(crate::Usage {

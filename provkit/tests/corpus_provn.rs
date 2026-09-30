@@ -6,7 +6,8 @@
 mod common;
 
 use common::{Report, corpus_dir, files};
-use provkit::{Document, Profile};
+use provkit::Document;
+use provkit::provn::Profile;
 
 /// Recommendation examples that the formal grammar rejects or that are not
 /// complete PROV-N. Names and reasons follow `corpus/provn/README.md`.

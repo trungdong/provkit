@@ -6,6 +6,8 @@ use crate::{Bundle, Document, Error, Namespaces, QName, Record, Result};
 
 /// Receives a document as a sequence of events: `start_document`, then
 /// records and bundles, then `end_document`. Bundles do not nest.
+///
+/// Every method returns an error if the sink rejects the event.
 pub(crate) trait Sink {
     /// The document begins, with its top-level namespace table.
     fn start_document(&mut self, namespaces: Namespaces) -> Result<()>;
@@ -23,12 +25,13 @@ pub(crate) trait Sink {
     fn end_document(&mut self) -> Result<()>;
 }
 
-/// Where the builder is in the event sequence.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Where the builder is in the event sequence. `InBundle` holds the open
+/// bundle.
+#[derive(Debug)]
 enum State {
-    Idle,
+    Start,
     InDocument,
-    InBundle,
+    InBundle(Bundle),
     Done,
 }
 
@@ -41,7 +44,6 @@ enum State {
 #[derive(Debug)]
 pub(crate) struct DocumentBuilder {
     document: Document,
-    open: Option<Bundle>,
     /// Identifiers of the bundles started so far.
     bundle_ids: HashSet<QName>,
     state: State,
@@ -52,74 +54,68 @@ impl DocumentBuilder {
     pub(crate) fn new() -> Self {
         DocumentBuilder {
             document: Document::new(),
-            open: None,
             bundle_ids: HashSet::new(),
-            state: State::Idle,
+            state: State::Start,
         }
     }
 
     /// The finished document, once `end_document` has been received.
     pub(crate) fn finish(self) -> Document {
-        debug_assert_eq!(self.state, State::Done, "document not finished");
+        debug_assert!(matches!(self.state, State::Done), "document not finished");
         self.document
     }
 }
 
 impl Sink for DocumentBuilder {
     fn start_document(&mut self, namespaces: Namespaces) -> Result<()> {
-        debug_assert_eq!(self.state, State::Idle, "document already started");
+        debug_assert!(
+            matches!(self.state, State::Start),
+            "document already started"
+        );
         self.document.namespaces = namespaces;
         self.state = State::InDocument;
         Ok(())
     }
 
     fn record(&mut self, record: Record) -> Result<()> {
-        debug_assert!(
-            matches!(self.state, State::InDocument | State::InBundle),
-            "record outside a document"
-        );
-        match self.open.as_mut() {
-            Some(bundle) => bundle.records.push(record),
-            None => self.document.records.push(record),
+        match &mut self.state {
+            State::InBundle(bundle) => bundle.records.push(record),
+            State::InDocument => self.document.records.push(record),
+            State::Start | State::Done => debug_assert!(false, "record outside a document"),
         }
         Ok(())
     }
 
     fn start_bundle(&mut self, id: QName, namespaces: Namespaces) -> Result<()> {
-        debug_assert_eq!(
-            self.state,
-            State::InDocument,
+        debug_assert!(
+            matches!(self.state, State::InDocument),
             "bundle outside the document body"
         );
         if !self.bundle_ids.insert(id.clone()) {
             return Err(Error::DuplicateBundle(id));
         }
-        self.open = Some(Bundle {
+        self.state = State::InBundle(Bundle {
             id,
             namespaces,
             records: Vec::new(),
         });
-        self.state = State::InBundle;
         Ok(())
     }
 
     fn end_bundle(&mut self) -> Result<()> {
-        debug_assert_eq!(
-            self.state,
-            State::InBundle,
-            "endBundle without an open bundle"
-        );
-        if let Some(bundle) = self.open.take() {
-            self.document.bundles.push(bundle);
+        match std::mem::replace(&mut self.state, State::InDocument) {
+            State::InBundle(bundle) => self.document.bundles.push(bundle),
+            other => {
+                debug_assert!(false, "endBundle without an open bundle");
+                self.state = other;
+            }
         }
-        self.state = State::InDocument;
         Ok(())
     }
 
     fn end_document(&mut self) -> Result<()> {
-        debug_assert_eq!(
-            self.state,
-            State::InDocument,
+        debug_assert!(
+            matches!(self.state, State::InDocument),
             "endDocument with an open bundle or no document"
         );
         self.state = State::Done;

@@ -1,6 +1,6 @@
 //! Recursive-descent parser for PROV-N (Recommendation section 3).
 //!
-//! One method per production. Names resolve through [`Scope`], records are
+//! One method per production. Names resolve through [`Namespaces`], records are
 //! built by [`Record::from_parts`], and every event goes to a [`Sink`].
 //!
 //! Every error carries a position. A grammar error is [`Error::Syntax`], and
@@ -8,11 +8,11 @@
 
 use super::Profile;
 use super::lexer::{Token, TokenKind};
-use crate::qname::well_known::XSD_INT;
 use crate::sink::Sink;
+use crate::well_known::XSD_INT;
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
-    Result, Scope, Value,
+    Result, Value,
 };
 
 /// The statement keyword `prefix:local` as a kind and its allowed argument
@@ -72,7 +72,8 @@ pub(super) struct Parser<'t> {
     pos: usize,
     profile: Profile,
     document_ns: Namespaces,
-    bundle_ns: Option<Namespaces>,
+    /// Inside a bundle, its table with the document's behind it.
+    bundle_names: Option<Namespaces>,
 }
 
 impl<'t> Parser<'t> {
@@ -83,7 +84,7 @@ impl<'t> Parser<'t> {
             pos: 0,
             profile,
             document_ns: Namespaces::new(),
-            bundle_ns: None,
+            bundle_names: None,
         }
     }
 
@@ -141,13 +142,14 @@ impl<'t> Parser<'t> {
         }
     }
 
-    fn scope(&self) -> Scope<'_> {
-        Scope::new(&self.document_ns, self.bundle_ns.as_ref())
+    /// The table names resolve against.
+    fn names(&self) -> &Namespaces {
+        self.bundle_names.as_ref().unwrap_or(&self.document_ns)
     }
 
     /// The name in the current scope. An error is placed at the name token.
     fn resolve(&self, name: &NameParts) -> Result<QName> {
-        self.scope()
+        self.names()
             .resolve_parts(&name.prefix, &name.local)
             .map_err(|e| at(name.token, e))
     }
@@ -238,7 +240,7 @@ impl<'t> Parser<'t> {
                 has_default = true;
                 self.bump();
                 let iri = self.iri()?;
-                ns.set_default(iri);
+                ns.set_default(&iri);
             } else if self.is_keyword("prefix") {
                 self.bump();
                 let name = self.name("a prefix")?;
@@ -274,7 +276,7 @@ impl<'t> Parser<'t> {
         let id = self.identifier("a bundle identifier")?;
         let ns = self.namespace_declarations()?;
         // The bundle's own name resolves in the bundle scope (PROV-N 3.7.4).
-        self.bundle_ns = Some(ns.clone());
+        self.bundle_names = Some(ns.with_fallback(&self.document_ns));
         let name = self.resolve(&id)?;
         sink.start_bundle(name, ns).map_err(|e| at(id.token, e))?;
         while !self.is_keyword("endBundle") {
@@ -288,7 +290,7 @@ impl<'t> Parser<'t> {
             sink.record(record)?;
         }
         self.bump();
-        self.bundle_ns = None;
+        self.bundle_names = None;
         sink.end_bundle()
     }
 
@@ -497,7 +499,7 @@ impl<'t> Parser<'t> {
                         self.bump();
                         let datatype = self.name("a datatype")?;
                         let datatype = self.resolve(&datatype)?;
-                        Value::typed_in(&self.scope(), s, datatype)
+                        Value::typed_in(self.names(), s, datatype)
                     }
                     _ => Ok(Value::Str(s.clone())),
                 }
@@ -508,7 +510,7 @@ impl<'t> Parser<'t> {
             }
             TokenKind::QNameLiteral { prefix, local } => {
                 self.bump();
-                self.scope().resolve_parts(prefix, local).map(Value::QName)
+                self.names().resolve_parts(prefix, local).map(Value::QName)
             }
             _ => return Err(self.expected("a literal")),
         };
@@ -550,7 +552,8 @@ fn describe(kind: &TokenKind) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Document, Error, Kind, Profile, QName, Record, Value, provn};
+    use crate::provn::Profile;
+    use crate::{Document, Error, Kind, QName, Record, Value, provn};
 
     const HEAD: &str =
         "document\n  default <http://default.org/>\n  prefix ex <http://example.org/>\n";

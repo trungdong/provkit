@@ -6,8 +6,8 @@ use indexmap::IndexMap;
 
 use super::wire::{JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany};
 use crate::document::merged_bundles;
-use crate::qname::well_known::{PROV_INTERNATIONALIZED_STRING, XSD_DATETIME, XSD_QNAME};
 use crate::record::{formal_attribute_error, formal_named};
+use crate::well_known::{PROV_INTERNATIONALIZED_STRING, XSD_DATETIME, XSD_QNAME};
 use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
 
 /// Write `document` as PROV-JSON, pretty-printed with two-space indentation.
@@ -86,7 +86,7 @@ fn bundle_wire(
         table.declare(prefix, iri)?;
     }
     if let Some(default) = bundle.namespaces.default_namespace() {
-        table.set_default(default.clone());
+        table.set_default(default);
     }
     let mut key = table.render(&bundle.id);
     if written.contains_key(&key) {
@@ -98,7 +98,7 @@ fn bundle_wire(
     }
     let sections = sections(&bundle.records, &mut table, next_blank)?;
     // Entries the document already declares are inherited, not repeated.
-    let inherited = |prefix: &str, iri: &str| outer.lookup(prefix).is_some_and(|o| *o == *iri);
+    let inherited = |prefix: &str, iri: &str| outer.lookup(prefix) == Some(iri);
     let prefix = prefix_table(
         &table,
         |(p, iri)| !inherited(p, iri),
@@ -111,7 +111,7 @@ fn bundle_wire(
 fn prefix_table(
     table: &Namespaces,
     keep: impl Fn((&str, &str)) -> bool,
-    default: Option<&std::sync::Arc<str>>,
+    default: Option<&str>,
 ) -> IndexMap<String, String> {
     let mut out = IndexMap::new();
     for (prefix, iri) in table.iter() {
@@ -446,7 +446,7 @@ mod tests {
     fn attribute_spelling_an_own_formal_fails_to_write() {
         let mut attributes = Attributes::new();
         attributes.insert(
-            QName::new(crate::namespaces::PROV, "activity"),
+            QName::new(crate::well_known::PROV, "activity"),
             ex("a2").into(),
         );
         let mut d = Document::new();

@@ -26,16 +26,22 @@ pub struct QName {
 }
 
 impl QName {
-    /// Build a name from a namespace IRI and a local part.
-    pub fn new(namespace: impl Into<Arc<str>>, local: impl Into<Box<str>>) -> Self {
+    /// A name in `namespace` with local part `local`.
+    pub fn new(namespace: &str, local: &str) -> Self {
+        Self::in_namespace(Arc::from(namespace), local)
+    }
+
+    /// A name that shares `namespace` with the other names built from the
+    /// same table.
+    pub(crate) fn in_namespace(namespace: Arc<str>, local: &str) -> Self {
         QName {
-            namespace: namespace.into(),
+            namespace,
             local: local.into(),
         }
     }
 
     /// The namespace IRI.
-    pub fn namespace(&self) -> &Arc<str> {
+    pub fn namespace(&self) -> &str {
         &self.namespace
     }
 
@@ -44,7 +50,7 @@ impl QName {
         &self.local
     }
 
-    /// The full IRI, namespace followed by local part.
+    /// The full IRI.
     pub fn iri(&self) -> String {
         format!("{}{}", self.namespace, self.local)
     }
@@ -118,8 +124,12 @@ impl fmt::Display for QName {
 /// Well-known names in the `prov:` and `xsd:` namespaces.
 pub mod well_known {
     use super::QName;
-    use crate::namespaces::{PROV, XSD};
     use std::sync::LazyLock;
+
+    /// The PROV namespace IRI.
+    pub const PROV: &str = "http://www.w3.org/ns/prov#";
+    /// The XML Schema datatypes namespace IRI.
+    pub const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
 
     macro_rules! names {
         ($($name:ident = $prefix:literal $ns:ident : $local:literal;)*) => {
@@ -165,7 +175,7 @@ mod tests {
         let b = ns.resolve("b:x").unwrap();
         assert_eq!(a, b);
         assert_eq!(hash(&a), hash(&b));
-        assert_eq!(a, QName::new(Arc::from("http://example.org/"), "x"));
+        assert_eq!(a, QName::new("http://example.org/", "x"));
     }
 
     #[test]
@@ -180,8 +190,8 @@ mod tests {
 
         // Past the hash buffer, where the split falls in a later block.
         let long = "x".repeat(150);
-        let long_ns = QName::new(format!("http://example.org/{long}"), "tail");
-        let long_local = QName::new("http://example.org/", format!("{long}tail"));
+        let long_ns = QName::new(&format!("http://example.org/{long}"), "tail");
+        let long_local = QName::new("http://example.org/", &format!("{long}tail"));
         assert_eq!(long_ns, long_local);
         assert_eq!(hash(&long_ns), hash(&long_local));
 

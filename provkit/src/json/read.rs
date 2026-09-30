@@ -3,11 +3,11 @@
 use indexmap::IndexMap;
 
 use super::wire::{JsonDocument, JsonRecord, JsonSection, JsonValue};
-use crate::qname::well_known::{XSD_INT, XSD_INTEGER, XSD_LONG};
 use crate::sink::Sink;
+use crate::well_known::{XSD_INT, XSD_INTEGER, XSD_LONG};
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
-    Result, Scope, Value,
+    Result, Value,
 };
 
 fn structure(message: impl Into<String>) -> Error {
@@ -31,10 +31,10 @@ fn namespaces(prefix: &IndexMap<String, String>) -> Result<Namespaces> {
 pub(super) fn emit(wire: &JsonDocument, sink: &mut impl Sink) -> Result<()> {
     let doc_ns = namespaces(&wire.prefix)?;
     sink.start_document(doc_ns.clone())?;
-    emit_sections(&wire.sections, &Scope::new(&doc_ns, None), sink)?;
+    emit_sections(&wire.sections, &doc_ns, sink)?;
     for (key, bundle) in &wire.bundle {
         let bundle_ns = namespaces(&bundle.prefix)?;
-        let scope = Scope::new(&doc_ns, Some(&bundle_ns));
+        let scope = bundle_ns.with_fallback(&doc_ns);
         if key.starts_with("_:") {
             return Err(structure(format!("bundle `{key}` needs a real identifier")));
         }
@@ -49,7 +49,7 @@ pub(super) fn emit(wire: &JsonDocument, sink: &mut impl Sink) -> Result<()> {
 
 fn emit_sections(
     sections: &IndexMap<String, JsonSection>,
-    scope: &Scope<'_>,
+    scope: &Namespaces,
     sink: &mut impl Sink,
 ) -> Result<()> {
     for (section, records) in sections {
@@ -68,7 +68,7 @@ fn emit_sections(
 }
 
 /// `_:x` keys mean "no identifier" and are never resolved; elements must have one.
-fn record_id(kind: Kind, key: &str, scope: &Scope<'_>) -> Result<Option<QName>> {
+fn record_id(kind: Kind, key: &str, scope: &Namespaces) -> Result<Option<QName>> {
     if key.starts_with("_:") {
         if kind.is_element() {
             return Err(structure(format!(
@@ -86,7 +86,7 @@ fn records_from(
     kind: Kind,
     id: Option<&QName>,
     body: &JsonRecord,
-    scope: &Scope<'_>,
+    scope: &Namespaces,
 ) -> Result<Vec<Record>> {
     let mut formals: Vec<(FormalAttr, Formal)> = Vec::new();
     let mut members: Vec<QName> = Vec::new();
@@ -152,7 +152,7 @@ impl JsonValue {
 }
 
 /// The design note's reading table.
-fn decode_value(v: &JsonValue, scope: &Scope<'_>) -> Result<Value> {
+fn decode_value(v: &JsonValue, scope: &Namespaces) -> Result<Value> {
     Ok(match v {
         JsonValue::Str(s) => Value::Str(s.clone()),
         JsonValue::Int(i) => integer(i.to_string(), i128::from(*i))?,
@@ -196,7 +196,7 @@ fn integer(lexical: String, n: i128) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::qname::well_known::{XSD_BOOLEAN, XSD_DOUBLE};
+    use crate::well_known::{XSD_BOOLEAN, XSD_DOUBLE};
     use crate::{Error, Record, Value};
 
     fn doc(json: &str) -> crate::Document {

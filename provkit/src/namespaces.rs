@@ -1,26 +1,38 @@
 //! Prefix tables and name resolution.
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, LazyLock};
 
 use indexmap::IndexMap;
 
+use crate::well_known::{PROV, XSD};
 use crate::{Error, QName, Result, pn};
 
-/// The PROV namespace IRI.
-pub const PROV: &str = "http://www.w3.org/ns/prov#";
-/// The XML Schema datatypes namespace IRI.
-pub const XSD: &str = "http://www.w3.org/2001/XMLSchema#";
+static PROV_IRI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from(PROV));
+static XSD_IRI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from(XSD));
 
 /// A default namespace plus an ordered prefix-to-IRI table.
 ///
 /// `prov` and `xsd` are always present and cannot be moved. The table is a
 /// presentation detail: it decides how names are written and never takes part
 /// in equality.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
 pub struct Namespaces {
     default: Option<Arc<str>>,
     prefixes: IndexMap<Box<str>, Arc<str>>,
+    /// For each IRI, the prefixes bound to it in declaration order, so the
+    /// first one answers `prefix_for`. Kept in step with `prefixes`.
+    by_iri: HashMap<Arc<str>, Vec<Box<str>>>,
 }
+
+/// Compares the default namespace and the bindings, ignoring their order.
+impl PartialEq for Namespaces {
+    fn eq(&self, other: &Self) -> bool {
+        self.default == other.default && self.prefixes == other.prefixes
+    }
+}
+
+impl Eq for Namespaces {}
 
 impl Namespaces {
     /// An empty table (with the predeclared `prov` and `xsd`).
@@ -29,13 +41,13 @@ impl Namespaces {
     }
 
     /// Set the default namespace, used for bare names.
-    pub fn set_default(&mut self, iri: impl Into<Arc<str>>) {
-        self.default = Some(iri.into());
+    pub fn set_default(&mut self, iri: &str) {
+        self.default = Some(Arc::from(iri));
     }
 
     /// The default namespace, if any.
-    pub fn default_namespace(&self) -> Option<&Arc<str>> {
-        self.default.as_ref()
+    pub fn default_namespace(&self) -> Option<&str> {
+        self.default.as_deref()
     }
 
     /// Bind `prefix` to `iri`, replacing an earlier binding of the same prefix.
@@ -61,8 +73,32 @@ impl Namespaces {
                 found: iri.into(),
             });
         }
-        self.prefixes.insert(prefix.into(), Arc::from(iri));
+        self.bind(prefix, Arc::from(iri));
         Ok(())
+    }
+
+    /// Bind `prefix` to `iri`, replacing an earlier binding of `prefix` and
+    /// keeping its place in the declaration order.
+    fn bind(&mut self, prefix: &str, iri: Arc<str>) {
+        self.unindex(prefix);
+        let (position, _) = self.prefixes.insert_full(prefix.into(), iri.clone());
+        let prefixes = &self.prefixes;
+        let bound = self.by_iri.entry(iri).or_default();
+        let at = bound.partition_point(|p| prefixes.get_index_of(&**p) < Some(position));
+        bound.insert(at, prefix.into());
+    }
+
+    /// Drop `prefix` from the reverse map, if it is bound.
+    fn unindex(&mut self, prefix: &str) {
+        let Some(iri) = self.prefixes.get(prefix) else {
+            return;
+        };
+        if let Some(bound) = self.by_iri.get_mut(&**iri) {
+            bound.retain(|p| &**p != prefix);
+            if bound.is_empty() {
+                self.by_iri.remove(&**iri);
+            }
+        }
     }
 
     /// Add the bindings of `other` that this table lacks. A prefix or default
@@ -72,9 +108,9 @@ impl Namespaces {
             self.default.clone_from(&other.default);
         }
         for (prefix, iri) in &other.prefixes {
-            self.prefixes
-                .entry(prefix.clone())
-                .or_insert_with(|| iri.clone());
+            if !self.prefixes.contains_key(prefix) {
+                self.bind(prefix, iri.clone());
+            }
         }
     }
 
@@ -82,19 +118,30 @@ impl Namespaces {
     // Only the JSON writer calls this, and it is feature-gated.
     #[cfg_attr(not(feature = "json"), allow(dead_code))]
     pub(crate) fn forget(&mut self, prefix: &str) {
+        self.unindex(prefix);
         self.prefixes.shift_remove(prefix);
     }
 
-    /// Declared prefixes in declaration order, without `prov` and `xsd`.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &Arc<str>)> {
-        self.prefixes.iter().map(|(p, iri)| (&**p, iri))
+    /// Declared prefixes and their IRIs, in declaration order. The reserved
+    /// `prov` and `xsd` are not listed.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.prefixes.iter().map(|(p, iri)| (&**p, &**iri))
     }
 
-    /// The IRI bound to `prefix`, including the predeclared ones.
-    pub fn lookup(&self, prefix: &str) -> Option<Arc<str>> {
+    /// The IRI bound to `prefix`, including the reserved `prov` and `xsd`.
+    pub fn lookup(&self, prefix: &str) -> Option<&str> {
         match reserved(prefix) {
-            Some(iri) => Some(Arc::from(iri)),
-            None => self.prefixes.get(prefix).cloned(),
+            Some(iri) => Some(iri),
+            None => self.prefixes.get(prefix).map(|iri| &**iri),
+        }
+    }
+
+    /// As [`lookup`](Self::lookup), sharing the stored allocation.
+    fn lookup_shared(&self, prefix: &str) -> Option<Arc<str>> {
+        match prefix {
+            "prov" => Some(PROV_IRI.clone()),
+            "xsd" => Some(XSD_IRI.clone()),
+            _ => self.prefixes.get(prefix).cloned(),
         }
     }
 
@@ -108,10 +155,45 @@ impl Namespaces {
     /// - [`Error::InvalidQName`] if the text is empty, starts with `:` or
     ///   uses the blank-node prefix `_`.
     pub fn resolve(&self, text: &str) -> Result<QName> {
-        resolve_with(text, |prefix| self.lookup(prefix), self.default.clone())
+        match text.split_once(':') {
+            // `_:` marks a blank node; readers handle it before resolving.
+            Some(("" | "_", _)) => Err(Error::InvalidQName(text.into())),
+            Some((prefix, local)) => self.resolve_parts(prefix, local),
+            None => self.resolve_parts("", text),
+        }
+    }
+
+    /// Resolve a name already split into `prefix` and `local`; an empty
+    /// prefix means a bare name. A colon in `local` stays in the local part.
+    ///
+    /// # Errors
+    ///
+    /// As [`resolve`](Self::resolve).
+    // Only the PROV-N reader calls this, and it is feature-gated.
+    #[cfg_attr(not(feature = "provn"), allow(dead_code))]
+    pub(crate) fn resolve_parts(&self, prefix: &str, local: &str) -> Result<QName> {
+        if prefix.is_empty() {
+            if local.is_empty() {
+                return Err(Error::InvalidQName(String::new()));
+            }
+            let ns = self
+                .default
+                .clone()
+                .ok_or_else(|| Error::NoDefaultNamespace(local.into()))?;
+            return Ok(QName::in_namespace(ns, local));
+        }
+        if prefix == "_" {
+            return Err(Error::InvalidQName(format!("{prefix}:{local}")));
+        }
+        let ns = self
+            .lookup_shared(prefix)
+            .ok_or_else(|| Error::UndeclaredPrefix(prefix.into()))?;
+        Ok(QName::in_namespace(ns, local))
     }
 
     /// The prefix bound to `namespace`, if any (`prov` and `xsd` included).
+    /// When several prefixes share the IRI, the first declared answers. The
+    /// default namespace has no prefix and never answers.
     pub fn prefix_for(&self, namespace: &str) -> Option<&str> {
         if namespace == PROV {
             return Some("prov");
@@ -119,10 +201,10 @@ impl Namespaces {
         if namespace == XSD {
             return Some("xsd");
         }
-        self.prefixes
-            .iter()
-            .find(|(_, iri)| &***iri == namespace)
-            .map(|(p, _)| &**p)
+        self.by_iri
+            .get(namespace)
+            .and_then(|bound| bound.first())
+            .map(|p| &**p)
     }
 
     /// The prefix for `namespace`, minting `ns1`, `ns2`, ... when none exists.
@@ -140,8 +222,7 @@ impl Namespaces {
         loop {
             let candidate = format!("ns{n}");
             if !self.prefixes.contains_key(candidate.as_str()) && accept(&candidate) {
-                self.prefixes
-                    .insert(candidate.clone().into(), Arc::from(namespace));
+                self.bind(&candidate, Arc::from(namespace));
                 return candidate;
             }
             n += 1;
@@ -165,9 +246,9 @@ impl Namespaces {
     /// let mut bundle = Namespaces::new();
     /// bundle.declare("ex", "http://bundle.org/").unwrap();
     ///
-    /// let scope = bundle.with_fallback(&document);
-    /// assert_eq!(&*scope.lookup("ex").unwrap(), "http://bundle.org/");
-    /// assert_eq!(&*scope.lookup("o").unwrap(), "http://other.org/");
+    /// let merged = bundle.with_fallback(&document);
+    /// assert_eq!(merged.lookup("ex"), Some("http://bundle.org/"));
+    /// assert_eq!(merged.lookup("o"), Some("http://other.org/"));
     /// ```
     #[must_use]
     pub fn with_fallback(&self, parent: &Namespaces) -> Namespaces {
@@ -206,7 +287,7 @@ impl Namespaces {
             && self
                 .default
                 .as_deref()
-                .is_some_and(|d| d == &**name.namespace());
+                .is_some_and(|d| d == name.namespace());
         if bare {
             return None;
         }
@@ -219,86 +300,6 @@ fn reserved(prefix: &str) -> Option<&'static str> {
         "prov" => Some(PROV),
         "xsd" => Some(XSD),
         _ => None,
-    }
-}
-
-/// Shared resolution: split at the first colon, look the prefix up, or fall
-/// back to the default namespace for a bare name.
-fn resolve_with(
-    text: &str,
-    lookup: impl Fn(&str) -> Option<Arc<str>>,
-    default: Option<Arc<str>>,
-) -> Result<QName> {
-    if let Some((prefix, local)) = text.split_once(':') {
-        // `_:` marks a blank node; readers handle it before resolving.
-        if prefix.is_empty() || prefix == "_" {
-            return Err(Error::InvalidQName(text.into()));
-        }
-        let ns = lookup(prefix).ok_or_else(|| Error::UndeclaredPrefix(prefix.into()))?;
-        Ok(QName::new(ns, local))
-    } else {
-        if text.is_empty() {
-            return Err(Error::InvalidQName(text.into()));
-        }
-        let ns = default.ok_or_else(|| Error::NoDefaultNamespace(text.into()))?;
-        Ok(QName::new(ns, text))
-    }
-}
-
-/// Resolution inside a bundle: the bundle's table first, the document's second.
-pub struct Scope<'a> {
-    document: &'a Namespaces,
-    bundle: Option<&'a Namespaces>,
-}
-
-impl<'a> Scope<'a> {
-    /// A scope over `document`, and over `bundle` when inside one.
-    pub fn new(document: &'a Namespaces, bundle: Option<&'a Namespaces>) -> Self {
-        Scope { document, bundle }
-    }
-
-    /// Resolve as [`Namespaces::resolve`], with the fallback.
-    ///
-    /// # Errors
-    ///
-    /// As [`Namespaces::resolve`].
-    pub fn resolve(&self, text: &str) -> Result<QName> {
-        resolve_with(text, |prefix| self.lookup(prefix), self.default_namespace())
-    }
-
-    /// Resolve a name already split into `prefix` and `local`; an empty
-    /// prefix means a bare name. A colon in `local` stays in the local part.
-    // Only the PROV-N reader calls this, and it is feature-gated.
-    #[cfg_attr(not(feature = "provn"), allow(dead_code))]
-    pub(crate) fn resolve_parts(&self, prefix: &str, local: &str) -> Result<QName> {
-        if prefix.is_empty() {
-            if local.is_empty() {
-                return Err(Error::InvalidQName(String::new()));
-            }
-            let ns = self
-                .default_namespace()
-                .ok_or_else(|| Error::NoDefaultNamespace(local.into()))?;
-            return Ok(QName::new(ns, local));
-        }
-        if prefix == "_" {
-            return Err(Error::InvalidQName(format!("{prefix}:{local}")));
-        }
-        let ns = self
-            .lookup(prefix)
-            .ok_or_else(|| Error::UndeclaredPrefix(prefix.into()))?;
-        Ok(QName::new(ns, local))
-    }
-
-    fn lookup(&self, prefix: &str) -> Option<Arc<str>> {
-        self.bundle
-            .and_then(|b| b.lookup(prefix))
-            .or_else(|| self.document.lookup(prefix))
-    }
-
-    fn default_namespace(&self) -> Option<Arc<str>> {
-        self.bundle
-            .and_then(|b| b.default_namespace().cloned())
-            .or_else(|| self.document.default_namespace().cloned())
     }
 }
 
@@ -352,8 +353,8 @@ mod tests {
         let doc = Namespaces::new();
         let mut bundle = Namespaces::new();
         bundle.set_default("http://default.org/");
-        let scope = Scope::new(&doc, Some(&bundle));
-        assert!(matches!(scope.resolve("_:x"), Err(Error::InvalidQName(_))));
+        let merged = bundle.with_fallback(&doc);
+        assert!(matches!(merged.resolve("_:x"), Err(Error::InvalidQName(_))));
     }
 
     #[test]
@@ -447,18 +448,18 @@ mod tests {
     }
 
     #[test]
-    fn scope_falls_back_to_document() {
+    fn a_bundle_table_falls_back_to_the_document() {
         let mut doc = Namespaces::new();
         doc.declare("ex", "http://example.org/").unwrap();
         let mut bundle = Namespaces::new();
         bundle.declare("b", "http://bundle.org/").unwrap();
-        let scope = Scope::new(&doc, Some(&bundle));
+        let merged = bundle.with_fallback(&doc);
         assert_eq!(
-            scope.resolve("ex:e").unwrap(),
+            merged.resolve("ex:e").unwrap(),
             QName::new("http://example.org/", "e")
         );
         assert_eq!(
-            scope.resolve("b:e").unwrap(),
+            merged.resolve("b:e").unwrap(),
             QName::new("http://bundle.org/", "e")
         );
     }
@@ -470,44 +471,126 @@ mod tests {
         doc.declare("a", "http://a.org/").unwrap();
         let mut bundle = Namespaces::new();
         bundle.declare("a", "http://bundle.org/").unwrap();
-        let scope = Scope::new(&doc, Some(&bundle));
+        let merged = bundle.with_fallback(&doc);
         assert_eq!(
-            scope.resolve_parts("", "a:b").unwrap(),
+            merged.resolve_parts("", "a:b").unwrap(),
             QName::new("http://default.org/", "a:b")
         );
         assert_eq!(
-            scope.resolve_parts("a", "b").unwrap(),
+            merged.resolve_parts("a", "b").unwrap(),
             QName::new("http://bundle.org/", "b")
         );
         assert!(
-            matches!(scope.resolve_parts("zz", "b"), Err(Error::UndeclaredPrefix(p)) if p == "zz")
+            matches!(merged.resolve_parts("zz", "b"), Err(Error::UndeclaredPrefix(p)) if p == "zz")
         );
         assert!(matches!(
-            scope.resolve_parts("_", "b"),
+            merged.resolve_parts("_", "b"),
             Err(Error::InvalidQName(_))
         ));
         let bare = Namespaces::new();
         assert!(matches!(
-            Scope::new(&bare, None).resolve_parts("", "b"),
+            bare.resolve_parts("", "b"),
             Err(Error::NoDefaultNamespace(l)) if l == "b"
         ));
     }
 
     #[test]
-    fn scope_prefers_bundle_binding() {
+    fn a_merged_table_prefers_the_bundle_binding() {
         let mut doc = Namespaces::new();
         doc.declare("ex", "http://doc.org/").unwrap();
         doc.set_default("http://doc-default.org/");
         let mut bundle = Namespaces::new();
         bundle.declare("ex", "http://bundle.org/").unwrap();
-        let scope = Scope::new(&doc, Some(&bundle));
+        let merged = bundle.with_fallback(&doc);
         assert_eq!(
-            scope.resolve("ex:e").unwrap(),
+            merged.resolve("ex:e").unwrap(),
             QName::new("http://bundle.org/", "e")
         );
         assert_eq!(
-            scope.resolve("e").unwrap(),
+            merged.resolve("e").unwrap(),
             QName::new("http://doc-default.org/", "e")
         );
+        let mut own_default = Namespaces::new();
+        own_default.set_default("http://bundle-default.org/");
+        assert_eq!(
+            own_default.with_fallback(&doc).resolve("e").unwrap(),
+            QName::new("http://bundle-default.org/", "e")
+        );
+    }
+
+    #[test]
+    fn the_first_declared_prefix_answers_for_a_shared_iri() {
+        let mut ns = Namespaces::new();
+        ns.declare("a", "http://x.org/").unwrap();
+        ns.declare("b", "http://x.org/").unwrap();
+        assert_eq!(ns.prefix_for("http://x.org/"), Some("a"));
+        // Redeclaring keeps a prefix's place, so `a` still leads.
+        ns.declare("b", "http://y.org/").unwrap();
+        ns.declare("b", "http://x.org/").unwrap();
+        assert_eq!(ns.prefix_for("http://x.org/"), Some("a"));
+        assert_eq!(ns.prefix_for("http://y.org/"), None);
+    }
+
+    #[test]
+    fn a_redeclared_prefix_moves_to_its_new_iri() {
+        let mut ns = Namespaces::new();
+        ns.declare("a", "http://x.org/").unwrap();
+        ns.declare("b", "http://x.org/").unwrap();
+        ns.declare("a", "http://y.org/").unwrap();
+        assert_eq!(ns.prefix_for("http://x.org/"), Some("b"));
+        assert_eq!(ns.prefix_for("http://y.org/"), Some("a"));
+        // `a` keeps its earlier position, so it leads a later shared IRI.
+        ns.declare("b", "http://y.org/").unwrap();
+        assert_eq!(ns.prefix_for("http://y.org/"), Some("a"));
+        assert_eq!(ns.prefix_for("http://x.org/"), None);
+    }
+
+    #[test]
+    fn a_forgotten_prefix_stops_answering() {
+        let mut ns = Namespaces::new();
+        ns.declare("a", "http://x.org/").unwrap();
+        ns.declare("b", "http://x.org/").unwrap();
+        ns.forget("a");
+        assert_eq!(ns.prefix_for("http://x.org/"), Some("b"));
+        ns.forget("b");
+        assert_eq!(ns.prefix_for("http://x.org/"), None);
+        ns.forget("b");
+    }
+
+    #[test]
+    fn the_default_namespace_has_no_prefix() {
+        let mut ns = Namespaces::new();
+        ns.set_default("http://x.org/");
+        assert_eq!(ns.prefix_for("http://x.org/"), None);
+    }
+
+    #[test]
+    fn a_merged_table_answers_prefix_for() {
+        let mut doc = Namespaces::new();
+        doc.declare("d", "http://x.org/").unwrap();
+        doc.declare("e", "http://z.org/").unwrap();
+        let mut bundle = Namespaces::new();
+        bundle.declare("b", "http://x.org/").unwrap();
+        let merged = bundle.with_fallback(&doc);
+        assert_eq!(merged.prefix_for("http://x.org/"), Some("b"));
+        assert_eq!(merged.prefix_for("http://z.org/"), Some("e"));
+    }
+
+    #[test]
+    fn minted_prefixes_answer_prefix_for() {
+        let mut ns = Namespaces::new();
+        assert_eq!(ns.ensure_prefix("http://x.org/"), "ns1");
+        assert_eq!(ns.prefix_for("http://x.org/"), Some("ns1"));
+    }
+
+    #[test]
+    fn equality_ignores_declaration_order() {
+        let mut a = Namespaces::new();
+        a.declare("p", "http://x.org/").unwrap();
+        a.declare("q", "http://x.org/").unwrap();
+        let mut b = Namespaces::new();
+        b.declare("q", "http://x.org/").unwrap();
+        b.declare("p", "http://x.org/").unwrap();
+        assert_eq!(a, b);
     }
 }
