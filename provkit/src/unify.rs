@@ -1,5 +1,19 @@
 //! Merging records that share an identifier (PROV-CONSTRAINTS key
-//! constraints 22 and 23, and the compatibility table of constraint 55).
+//! constraints 22 and 23) and rejecting the sharing that PROV-CONSTRAINTS
+//! forbids.
+//!
+//! - Constraint 53: `used`, `wasGeneratedBy`, `wasInvalidatedBy`,
+//!   `wasStartedBy`, `wasEndedBy`, `wasInformedBy`, `wasAttributedTo`,
+//!   `wasAssociatedWith` and `actedOnBehalfOf` are pairwise disjoint, so no
+//!   identifier names two of them.
+//! - Constraint 54: an entity, activity or agent identifier cannot also
+//!   identify any of those nine relations, `wasInfluencedBy` or
+//!   `wasDerivedFrom`.
+//! - Constraint 55: `entity` and `activity` are disjoint. An agent may also
+//!   be an entity or an activity.
+//!
+//! `wasInfluencedBy` and `wasDerivedFrom` are outside Constraint 53, so either
+//! may share an identifier with any relation, including each other.
 
 use std::collections::HashMap;
 
@@ -18,11 +32,22 @@ impl Document {
     /// attribute and both values. Non-formal attributes are the union in
     /// first-seen order. The merged record takes the first member's position.
     ///
-    /// Kinds that PROV-CONSTRAINTS forbids under one identifier (an entity
-    /// and an activity, two relation kinds, an element and a relation) are
-    /// an error. An agent may overlap with an entity or an activity and
-    /// stays a separate record. Records without an identifier never merge,
-    /// and neither do `hadMember` records, which PROV-DM gives no identifier.
+    /// Kinds that PROV-CONSTRAINTS forbids under one identifier are an
+    /// error:
+    ///
+    /// - two different kinds among the nine relations of Constraint 53
+    ///   (`used`, `wasGeneratedBy`, `wasInvalidatedBy`, `wasStartedBy`,
+    ///   `wasEndedBy`, `wasInformedBy`, `wasAttributedTo`,
+    ///   `wasAssociatedWith`, `actedOnBehalfOf`);
+    /// - an element and any of the eleven relations of Constraint 54 (those
+    ///   nine plus `wasInfluencedBy` and `wasDerivedFrom`);
+    /// - an entity and an activity (Constraint 55).
+    ///
+    /// An agent may overlap with an entity or an activity and stays a
+    /// separate record. `wasInfluencedBy` and `wasDerivedFrom` may share an
+    /// identifier with any relation. Records without an identifier never
+    /// merge, and neither do `hadMember`, `alternateOf`, `specializationOf`
+    /// and `mentionOf` records, which PROV-DM gives no identifier.
     ///
     /// Bundles unify independently. Bundles that share an identifier are
     /// combined first, as document equality treats them.
@@ -52,11 +77,11 @@ impl Document {
 
 fn unify_records(records: &[Record]) -> Result<Vec<Record>> {
     // Positions per identifier, groups in first-seen order. PROV-DM gives
-    // `hadMember` no identifier, so a Membership id is only a PROV-JSON
+    // these four kinds no identifier, so one carried by PROV-JSON is only a
     // grouping key and never merges.
     let mut groups: IndexMap<&QName, Vec<usize>> = IndexMap::new();
     for (i, r) in records.iter().enumerate() {
-        if let Some(id) = r.id().filter(|_| r.kind() != Kind::Membership) {
+        if let Some(id) = r.id().filter(|_| !has_no_identifier(r.kind())) {
             groups.entry(id).or_default().push(i);
         }
     }
@@ -97,8 +122,49 @@ fn unify_records(records: &[Record]) -> Result<Vec<Record>> {
         .collect())
 }
 
-/// Constraint 55: entity and activity are disjoint, an agent may be either,
-/// and relation kinds are disjoint from each other and from elements.
+/// Kinds that PROV-DM gives no identifier.
+fn has_no_identifier(kind: Kind) -> bool {
+    matches!(
+        kind,
+        Kind::Membership | Kind::Alternate | Kind::Specialization | Kind::Mention
+    )
+}
+
+/// Constraint 53: these relation kinds cannot share an identifier with one
+/// another.
+const DISJOINT_RELATIONS: [Kind; 9] = [
+    Kind::Usage,
+    Kind::Generation,
+    Kind::Invalidation,
+    Kind::Start,
+    Kind::End,
+    Kind::Communication,
+    Kind::Attribution,
+    Kind::Association,
+    Kind::Delegation,
+];
+
+/// Whether PROV-CONSTRAINTS lets two different kinds share an identifier.
+fn may_share_an_identifier(a: Kind, b: Kind) -> bool {
+    let in_53 = |k| DISJOINT_RELATIONS.contains(&k);
+    // Constraint 54 adds influence and derivation to the relations an
+    // element excludes.
+    let in_54 = |k| in_53(k) || matches!(k, Kind::Influence | Kind::Derivation);
+    match (a.is_element(), b.is_element()) {
+        // Constraint 55: entity and activity are disjoint, an agent may be
+        // either.
+        (true, true) => !matches!(
+            (a, b),
+            (Kind::Entity, Kind::Activity) | (Kind::Activity, Kind::Entity)
+        ),
+        (true, false) => !in_54(b),
+        (false, true) => !in_54(a),
+        (false, false) => !(in_53(a) && in_53(b)),
+    }
+}
+
+/// Reject the pairs of kinds that Constraints 53, 54 and 55 forbid under one
+/// identifier.
 fn check_kinds(id: &QName, kinds: impl Iterator<Item = Kind>) -> Result<()> {
     let mut seen: Vec<Kind> = Vec::new();
     for kind in kinds {
@@ -106,12 +172,7 @@ fn check_kinds(id: &QName, kinds: impl Iterator<Item = Kind>) -> Result<()> {
             continue;
         }
         for &other in &seen {
-            let compatible = matches!(
-                (kind, other),
-                (Kind::Entity | Kind::Activity, Kind::Agent)
-                    | (Kind::Agent, Kind::Entity | Kind::Activity)
-            );
-            if !compatible {
+            if !may_share_an_identifier(kind, other) {
                 return Err(Error::Unification {
                     id: id.clone(),
                     reason: format!(
@@ -313,29 +374,123 @@ mod tests {
         );
     }
 
+    fn pair(a: Kind, b: Kind) -> crate::Result<Document> {
+        let mut d = Document::new();
+        d.records.push(rec(a, "x", vec![], None));
+        d.records.push(rec(b, "x", vec![], None));
+        d.unified()
+    }
+
+    const CONSTRAINT_53: [Kind; 9] = [
+        Kind::Usage,
+        Kind::Generation,
+        Kind::Invalidation,
+        Kind::Start,
+        Kind::End,
+        Kind::Communication,
+        Kind::Attribution,
+        Kind::Association,
+        Kind::Delegation,
+    ];
+
     #[test]
-    fn kind_compatibility() {
-        let pair = |a: Kind, b: Kind| {
-            let mut d = Document::new();
-            d.records.push(rec(a, "x", vec![], None));
-            d.records.push(rec(b, "x", vec![], None));
-            d.unified()
-        };
-        assert_eq!(pair(Kind::Entity, Kind::Agent).unwrap().records.len(), 2);
-        assert_eq!(pair(Kind::Agent, Kind::Entity).unwrap().records.len(), 2);
-        assert_eq!(pair(Kind::Activity, Kind::Agent).unwrap().records.len(), 2);
-        assert_eq!(pair(Kind::Agent, Kind::Activity).unwrap().records.len(), 2);
+    fn influence_and_derivation_share_with_any_relation() {
+        for (a, b) in [
+            (Kind::Influence, Kind::Derivation),
+            (Kind::Generation, Kind::Influence),
+            (Kind::Derivation, Kind::Usage),
+        ] {
+            assert_eq!(pair(a, b).unwrap().records.len(), 2, "{a:?} and {b:?}");
+            assert_eq!(pair(b, a).unwrap().records.len(), 2, "{b:?} and {a:?}");
+        }
+        for k in CONSTRAINT_53 {
+            for other in [Kind::Influence, Kind::Derivation] {
+                assert!(pair(k, other).is_ok(), "{k:?} and {other:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn constraint_53_relations_are_pairwise_disjoint() {
+        for (i, &a) in CONSTRAINT_53.iter().enumerate() {
+            for &b in &CONSTRAINT_53[i + 1..] {
+                for (x, y) in [(a, b), (b, a)] {
+                    assert!(
+                        matches!(pair(x, y), Err(Error::Unification { .. })),
+                        "{x:?} and {y:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn constraint_54_keeps_elements_apart_from_eleven_relations() {
+        let relations = CONSTRAINT_53
+            .into_iter()
+            .chain([Kind::Influence, Kind::Derivation]);
+        for relation in relations {
+            for element in [Kind::Entity, Kind::Activity, Kind::Agent] {
+                for (x, y) in [(element, relation), (relation, element)] {
+                    assert!(
+                        matches!(pair(x, y), Err(Error::Unification { .. })),
+                        "{x:?} and {y:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn constraint_55_entity_and_activity_are_disjoint_and_agents_overlap() {
         for (a, b) in [
             (Kind::Entity, Kind::Activity),
-            (Kind::Generation, Kind::Usage),
-            (Kind::Entity, Kind::Generation),
-            (Kind::Agent, Kind::Usage),
+            (Kind::Activity, Kind::Entity),
         ] {
-            assert!(
-                matches!(pair(a, b), Err(Error::Unification { .. })),
-                "{a:?} and {b:?}"
-            );
+            assert!(matches!(pair(a, b), Err(Error::Unification { .. })));
         }
+        for (a, b) in [
+            (Kind::Entity, Kind::Agent),
+            (Kind::Agent, Kind::Entity),
+            (Kind::Activity, Kind::Agent),
+            (Kind::Agent, Kind::Activity),
+        ] {
+            assert_eq!(pair(a, b).unwrap().records.len(), 2, "{a:?} and {b:?}");
+        }
+    }
+
+    #[test]
+    fn an_entity_agent_and_activity_under_one_identifier_fail() {
+        let mut d = Document::new();
+        for kind in [Kind::Entity, Kind::Agent, Kind::Activity] {
+            d.records.push(rec(kind, "x", vec![], None));
+        }
+        assert!(matches!(d.unified(), Err(Error::Unification { .. })));
+    }
+
+    #[test]
+    fn identifier_less_kinds_are_never_merged_or_checked() {
+        let with = |kind: Kind, formals: Vec<(F, Formal)>| rec(kind, "x", formals, None);
+        let mut d = Document::new();
+        for (a1, a2) in [("a", "b"), ("c", "d")] {
+            d.records.push(with(
+                Kind::Alternate,
+                vec![(F::Alternate1, name(a1)), (F::Alternate2, name(a2))],
+            ));
+            d.records.push(with(
+                Kind::Specialization,
+                vec![(F::SpecificEntity, name(a1))],
+            ));
+            d.records
+                .push(with(Kind::Mention, vec![(F::SpecificEntity, name(a1))]));
+            d.records
+                .push(with(Kind::Membership, vec![(F::Collection, name(a1))]));
+        }
+        // None of the eight clashes with the entity under the same identifier,
+        // and none merges with its twin.
+        d.records.push(with(Kind::Entity, vec![]));
+        let u = d.unified().unwrap();
+        assert_eq!(u.records, d.records);
     }
 
     #[test]

@@ -106,7 +106,16 @@ follows [Semantic Versioning](https://semver.org/).
     ignore one leading byte-order mark.
   - Set-based `Document` equality.
   - `Document::unified()`, which merges records by identifier and kind and
-    reports conflicts as `Error::Unification`.
+    reports conflicts as `Error::Unification`. It rejects the identifier
+    sharing that PROV-CONSTRAINTS forbids and no other. Constraint 53 makes
+    `used`, `wasGeneratedBy`, `wasInvalidatedBy`, `wasStartedBy`,
+    `wasEndedBy`, `wasInformedBy`, `wasAttributedTo`, `wasAssociatedWith` and
+    `actedOnBehalfOf` pairwise disjoint. Constraint 54 keeps entity, activity
+    and agent identifiers apart from those nine, `wasInfluencedBy` and
+    `wasDerivedFrom`. Constraint 55 makes `entity` and `activity` disjoint
+    and lets an agent be either. `wasInfluencedBy` and `wasDerivedFrom` may
+    share an identifier with any relation. `alternateOf`, `specializationOf`,
+    `mentionOf` and `hadMember` records are never merged.
   - `Error`, with one variant and a typed payload per kind of failure. Every
     error from the PROV-N reader carries a line and column: `Error::Syntax`
     for text the grammar rejects, and `Error::At` around the error for a
