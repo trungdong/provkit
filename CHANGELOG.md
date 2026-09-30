@@ -96,7 +96,8 @@ follows [Semantic Versioning](https://semver.org/).
     for text the grammar rejects, and `Error::At` around the error for a
     name, literal or record.
   - Public modules `json`, `provn` and `well_known`. Every other public item
-    has one path, at the crate root, and `provn::Profile` lives under `provn`.
+    has one path, at the crate root, and `provn::Profile` and `provn::Ignored`
+    live under `provn`.
     `well_known` holds the `QName` statics and the `PROV` and `XSD`
     namespace IRIs.
   - Signatures take and return `&str` for namespaces, never `Arc<str>`.
