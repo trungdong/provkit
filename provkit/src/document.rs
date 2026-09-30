@@ -70,13 +70,16 @@ impl Document {
 /// a dropped binding only changes how a writer spells a name.
 pub(crate) fn merged_bundles(bundles: &[Bundle]) -> Vec<Bundle> {
     let mut merged: Vec<Bundle> = Vec::new();
+    // Identifier -> position in `merged`.
+    let mut at: HashMap<&QName, usize> = HashMap::new();
     for bundle in bundles {
-        let Some(into) = merged.iter_mut().find(|m| m.id == bundle.id) else {
+        if let Some(&i) = at.get(&bundle.id) {
+            merged[i].namespaces.absorb(&bundle.namespaces);
+            merged[i].records.extend(bundle.records.iter().cloned());
+        } else {
+            at.insert(&bundle.id, merged.len());
             merged.push(bundle.clone());
-            continue;
-        };
-        into.namespaces.absorb(&bundle.namespaces);
-        into.records.extend(bundle.records.iter().cloned());
+        }
     }
     merged
 }
@@ -216,5 +219,19 @@ mod tests {
                 &agent("e5"),
             ]
         );
+    }
+
+    #[test]
+    fn merged_bundles_keep_first_positions() {
+        let bundles = vec![
+            bundle("b", vec![entity("e1")]),
+            bundle("c", vec![entity("e2")]),
+            bundle("b", vec![entity("e3")]),
+        ];
+        let merged = merged_bundles(&bundles);
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].id, q("b"));
+        assert_eq!(merged[0].records, [entity("e1"), entity("e3")]);
+        assert_eq!(merged[1].id, q("c"));
     }
 }

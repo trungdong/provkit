@@ -1,5 +1,7 @@
 //! The event interface every reader drives.
 
+use std::collections::HashSet;
+
 use crate::{Bundle, Document, Error, Namespaces, QName, Record, Result};
 
 /// Receives a document as a sequence of events.
@@ -62,6 +64,8 @@ enum State {
 pub struct DocumentBuilder {
     document: Document,
     open: Option<Bundle>,
+    /// Identifiers of the bundles started so far.
+    bundle_ids: HashSet<QName>,
     state: State,
 }
 
@@ -78,6 +82,7 @@ impl DocumentBuilder {
         DocumentBuilder {
             document: Document::new(),
             open: None,
+            bundle_ids: HashSet::new(),
             state: State::Idle,
         }
     }
@@ -132,7 +137,7 @@ impl Sink for DocumentBuilder {
             State::InDocument,
             "bundle outside the document body (bundles do not nest)",
         )?;
-        if self.document.bundle(&id).is_some() {
+        if !self.bundle_ids.insert(id.clone()) {
             return Err(Error::DuplicateBundle(id));
         }
         self.open = Some(Bundle {
@@ -231,5 +236,25 @@ mod tests {
             b.start_bundle(q("b"), Namespaces::new()),
             Err(Error::DuplicateBundle(id)) if id == q("b")
         ));
+    }
+
+    #[test]
+    fn many_bundles_check_duplicates_by_lookup() {
+        let mut b = DocumentBuilder::new();
+        b.start_document(Namespaces::new()).unwrap();
+        for i in 0..20_000 {
+            b.start_bundle(q(&format!("b{i}")), Namespaces::new())
+                .unwrap();
+            b.end_bundle().unwrap();
+        }
+        assert!(matches!(
+            b.start_bundle(q("b7"), Namespaces::new()),
+            Err(Error::DuplicateBundle(_))
+        ));
+        b.end_document().unwrap();
+        let d = b.finish().unwrap();
+        assert_eq!(d.bundles.len(), 20_000);
+        assert_eq!(d.bundles[0].id, q("b0"));
+        assert_eq!(d.bundles[19_999].id, q("b19999"));
     }
 }

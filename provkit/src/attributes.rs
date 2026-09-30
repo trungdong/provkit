@@ -2,15 +2,18 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
+use indexmap::IndexSet;
+
 use crate::{QName, Value};
 
 /// An ordered set of (name, value) pairs.
 ///
 /// Insertion order is kept for output. A pair already present is not added
 /// again. Two sets are equal when they hold the same pairs in any order.
+/// Inserting and looking up a pair take constant time on average.
 #[derive(Clone, Debug, Default)]
 pub struct Attributes {
-    pairs: Vec<(QName, Value)>,
+    pairs: IndexSet<(QName, Value)>,
 }
 
 impl Attributes {
@@ -22,11 +25,7 @@ impl Attributes {
 
     /// Add a pair. Returns `false` if it was already present.
     pub fn insert(&mut self, name: QName, value: Value) -> bool {
-        if self.pairs.iter().any(|(n, v)| *n == name && *v == value) {
-            return false;
-        }
-        self.pairs.push((name, value));
-        true
+        self.pairs.insert((name, value))
     }
 
     /// Pairs in insertion order.
@@ -64,11 +63,7 @@ impl Attributes {
 
 impl PartialEq for Attributes {
     fn eq(&self, other: &Self) -> bool {
-        self.pairs.len() == other.pairs.len()
-            && self
-                .pairs
-                .iter()
-                .all(|(n, v)| other.pairs.iter().any(|(m, w)| n == m && v == w))
+        self.pairs.len() == other.pairs.len() && self.pairs.iter().all(|p| other.pairs.contains(p))
     }
 }
 
@@ -127,5 +122,22 @@ mod tests {
         a.extend_from(&b);
         assert_eq!(a.len(), 2);
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn large_sets_insert_and_compare_without_pairwise_scans() {
+        // Quadratic insert or equality would take minutes at this size.
+        let n = 50_000;
+        let mut a = Attributes::new();
+        let mut b = Attributes::new();
+        for i in 0..n {
+            assert!(a.insert(PROV_LABEL.clone(), Value::from(i)));
+            b.insert(PROV_LABEL.clone(), Value::from(n - 1 - i));
+        }
+        assert!(!a.insert(PROV_LABEL.clone(), Value::from(0)));
+        assert_eq!(a.len(), 50_000);
+        assert_eq!(a, b);
+        assert_eq!(hash(&a), hash(&b));
+        assert_eq!(a.iter().next().unwrap().1, &Value::from(0));
     }
 }
