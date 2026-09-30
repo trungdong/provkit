@@ -228,7 +228,7 @@ fn report_side(out: &mut String, name: &Path, this: &Document, other: &Document)
     for (bundle, records) in bundles {
         // A bundle sees its own prefixes first, then the document's.
         let scope = bundle.namespaces.with_fallback(&this.namespaces);
-        match provn::statement_name(&bundle.id, &scope) {
+        match provn::name(&bundle.id, &mut scope.clone()) {
             Ok(id) => writeln!(out, "  bundle {id}:")?,
             Err(_) => writeln!(out, "  bundle <{}>: {UNWRITABLE}", bundle.id)?,
         }
@@ -247,10 +247,10 @@ const UNWRITABLE: &str = "// not valid PROV-N";
 /// write as `<full IRI>` (inside `[...]` when it belongs to an attribute),
 /// followed by [`UNWRITABLE`].
 fn statement_line(record: &Record, namespaces: &Namespaces) -> String {
-    if let Ok(line) = provn::statement(record, namespaces) {
+    if let Ok(line) = provn::statement(record, &mut namespaces.clone()) {
         return line;
     }
-    let writable = |q: &QName| provn::statement_name(q, namespaces).is_ok();
+    let writable = |q: &QName| provn::name(q, &mut namespaces.clone()).is_ok();
     let mut names: Vec<(&QName, bool)> = record.id().into_iter().map(|q| (q, false)).collect();
     names.extend(record.formals().into_iter().filter_map(|(_, f)| match f {
         FormalRef::Name(q) => Some((q, false)),
@@ -267,7 +267,7 @@ fn statement_line(record: &Record, namespaces: &Namespaces) -> String {
 
     let mut parts = Vec::new();
     if let Some(id) = record.id() {
-        parts.push(match provn::statement_name(id, namespaces) {
+        parts.push(match provn::name(id, &mut namespaces.clone()) {
             Ok(text) => text,
             Err(_) => format!("<{id}>"),
         });

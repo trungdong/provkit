@@ -9,7 +9,7 @@ mod write;
 use crate::sink::{DocumentBuilder, Sink};
 use crate::{Document, Result, strip_bom};
 
-pub use write::{statement, statement_name, to_string, write};
+pub use write::{name, statement, to_string, write};
 
 /// How closely the reader follows the Recommendation's grammar.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

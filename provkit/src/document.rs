@@ -1,5 +1,6 @@
 //! Documents and bundles.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use crate::{Namespaces, QName, Record};
@@ -45,10 +46,43 @@ impl Document {
         Self::default()
     }
 
-    /// The bundle with `id`, if any.
+    /// The first bundle with `id`, if any.
+    ///
+    /// A hand-built document can hold several bundles with one identifier.
+    /// [`merged_bundles`](Self::merged_bundles) reads them as one bundle.
     #[must_use]
     pub fn bundle(&self, id: &QName) -> Option<&Bundle> {
         self.bundles.iter().find(|b| b.id == *id)
+    }
+
+    /// The bundles as document equality and the writers read them: bundles
+    /// sharing an identifier become one.
+    ///
+    /// The first copy keeps its position, records follow in document order
+    /// and the first binding of a prefix wins. Names are resolved IRIs, so a
+    /// dropped binding only changes how a writer spells a name.
+    ///
+    /// When every identifier is unique, the result borrows the document's own
+    /// bundles and copies nothing.
+    #[must_use]
+    pub fn merged_bundles(&self) -> Cow<'_, [Bundle]> {
+        let mut seen = HashSet::new();
+        if self.bundles.iter().all(|b| seen.insert(&b.id)) {
+            return Cow::Borrowed(&self.bundles);
+        }
+        let mut merged: Vec<Bundle> = Vec::new();
+        // Identifier -> position in `merged`.
+        let mut at: HashMap<&QName, usize> = HashMap::new();
+        for bundle in &self.bundles {
+            if let Some(&i) = at.get(&bundle.id) {
+                merged[i].namespaces.absorb(&bundle.namespaces);
+                merged[i].records.extend(bundle.records.iter().cloned());
+            } else {
+                at.insert(&bundle.id, merged.len());
+                merged.push(bundle.clone());
+            }
+        }
+        Cow::Owned(merged)
     }
 
     /// Top-level records carrying `id`, in assertion order.
@@ -62,26 +96,6 @@ impl Document {
             .iter()
             .chain(self.bundles.iter().flat_map(|b| b.records.iter()))
     }
-}
-
-/// Bundles sharing an identifier become one, as document equality treats
-/// them. The first copy keeps its position, records follow in document
-/// order and the first binding of a prefix wins. Names are resolved IRIs, so
-/// a dropped binding only changes how a writer spells a name.
-pub(crate) fn merged_bundles(bundles: &[Bundle]) -> Vec<Bundle> {
-    let mut merged: Vec<Bundle> = Vec::new();
-    // Identifier -> position in `merged`.
-    let mut at: HashMap<&QName, usize> = HashMap::new();
-    for bundle in bundles {
-        if let Some(&i) = at.get(&bundle.id) {
-            merged[i].namespaces.absorb(&bundle.namespaces);
-            merged[i].records.extend(bundle.records.iter().cloned());
-        } else {
-            at.insert(&bundle.id, merged.len());
-            merged.push(bundle.clone());
-        }
-    }
-    merged
 }
 
 /// Compares as sets, so order and duplicates do not matter.
@@ -228,10 +242,42 @@ mod tests {
             bundle("c", vec![entity("e2")]),
             bundle("b", vec![entity("e3")]),
         ];
-        let merged = merged_bundles(&bundles);
+        let doc = Document {
+            bundles,
+            ..Document::default()
+        };
+        let merged = doc.merged_bundles();
+        assert!(matches!(merged, Cow::Owned(_)));
         assert_eq!(merged.len(), 2);
         assert_eq!(merged[0].id, q("b"));
         assert_eq!(merged[0].records, [entity("e1"), entity("e3")]);
         assert_eq!(merged[1].id, q("c"));
+    }
+
+    #[test]
+    fn merged_bundles_borrow_when_identifiers_are_unique() {
+        let doc = Document {
+            bundles: vec![
+                bundle("b", vec![entity("e1")]),
+                bundle("c", vec![entity("e2")]),
+            ],
+            ..Document::default()
+        };
+        let merged = doc.merged_bundles();
+        assert!(matches!(merged, Cow::Borrowed(_)));
+        assert!(std::ptr::eq(merged.as_ptr(), doc.bundles.as_ptr()));
+        assert!(Document::new().merged_bundles().is_empty());
+    }
+
+    #[test]
+    fn bundle_returns_the_first_of_several_with_one_identifier() {
+        let doc = Document {
+            bundles: vec![
+                bundle("b", vec![entity("e1")]),
+                bundle("b", vec![entity("e2")]),
+            ],
+            ..Document::default()
+        };
+        assert_eq!(doc.bundle(&q("b")).unwrap().records, [entity("e1")]);
     }
 }

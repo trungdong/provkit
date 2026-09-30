@@ -5,7 +5,6 @@ use std::io::Write;
 use indexmap::IndexMap;
 
 use super::wire::{JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany};
-use crate::document::merged_bundles;
 use crate::well_known::{PROV_INTERNATIONALIZED_STRING, XSD_DATETIME, XSD_QNAME};
 use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
 
@@ -38,6 +37,11 @@ pub fn write(document: &Document, out: &mut impl Write) -> Result<()> {
 /// # Errors
 ///
 /// As [`write()`], except that [`Error::Io`](crate::Error::Io) cannot occur.
+///
+/// # Panics
+///
+/// Never in practice. `serde_json` writes valid UTF-8 and the trailing
+/// newline is ASCII, so the buffer always converts to a `String`.
 pub fn to_string(document: &Document) -> Result<String> {
     let mut buf = Vec::new();
     write(document, &mut buf)?;
@@ -57,8 +61,8 @@ fn to_wire(document: &Document) -> Result<JsonDocument> {
     let mut next_blank = 0;
     let sections = sections(&document.records, &mut table, &mut next_blank)?;
     let mut bundles = IndexMap::new();
-    for bundle in merged_bundles(&document.bundles) {
-        let (key, wire) = bundle_wire(&bundle, &table, &bundles, &mut next_blank)?;
+    for bundle in document.merged_bundles().iter() {
+        let (key, wire) = bundle_wire(bundle, &table, &bundles, &mut next_blank)?;
         bundles.insert(key, wire);
     }
     Ok(JsonDocument {

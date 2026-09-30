@@ -105,6 +105,14 @@ follows [Semantic Versioning](https://semver.org/).
   - `json::read`, `provn::read`, `provn::read_with` and `provn::read_report`
     ignore one leading byte-order mark.
   - Set-based `Document` equality.
+  - `Document::merged_bundles()`, which reads bundles that share an
+    identifier as one, as equality and both writers do. It borrows the
+    document's bundles when every identifier is unique. `Document::bundle`
+    returns the first bundle with an identifier.
+  - `provn::statement` writes one record and `provn::name` one name. Both
+    take `&mut Namespaces`, so a prefix they mint stays with the caller and a
+    second call for the same namespace reuses it. `provn::statement_name` does
+    not exist.
   - `Document::unified()`, which merges records by identifier and kind and
     reports conflicts as `Error::Unification`. It rejects the identifier
     sharing that PROV-CONSTRAINTS forbids and no other. Constraint 53 makes

@@ -19,7 +19,6 @@ use std::collections::HashMap;
 
 use indexmap::IndexMap;
 
-use crate::document::merged_bundles;
 use crate::{Attributes, Bundle, Document, Error, Formal, FormalAttr, Kind, QName, Record, Result};
 
 impl Document {
@@ -61,10 +60,11 @@ impl Document {
     ///   record, but a hand-built one can.
     pub fn unified(&self) -> Result<Document> {
         let mut bundles = Vec::new();
-        for bundle in merged_bundles(&self.bundles) {
+        for bundle in self.merged_bundles().iter() {
             bundles.push(Bundle {
+                id: bundle.id.clone(),
+                namespaces: bundle.namespaces.clone(),
                 records: unify_records(&bundle.records)?,
-                ..bundle
             });
         }
         Ok(Document {
