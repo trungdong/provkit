@@ -294,8 +294,45 @@ fn code_point_escapes_decode_in_strings_and_iris() {
             TokenKind::Eof
         ]
     );
+    // `\U` starts at U+10000, where `\u` ends.
+    assert_eq!(
+        kinds("\"\\uFFFF\\U00010000\""),
+        [TokenKind::Str("\u{FFFF}\u{10000}".into()), TokenKind::Eof]
+    );
     // Names take no code point escapes.
     assert!(tokenize("ex:a\\u00E9").is_err());
+}
+
+#[test]
+fn a_decoded_escape_is_content_and_is_not_lexed_again() {
+    // A quote, a line feed in a short string, and a backslash before `n`.
+    for (src, content) in [
+        ("\"\\u0022\"", "\""),
+        ("\"a\\u000Ab\"", "a\nb"),
+        ("\"\\u005Cn\"", "\\n"),
+    ] {
+        assert_eq!(
+            kinds(src),
+            [TokenKind::Str(content.into()), TokenKind::Eof],
+            "{src}"
+        );
+    }
+}
+
+#[test]
+fn an_upper_case_u_escape_below_u10000_is_a_syntax_error_at_its_backslash() {
+    for (src, column) in [
+        ("\"a\\U000000E9\"", 3),
+        ("\"a\\U0000FFFF\"", 3),
+        ("<a\\U000000E9>", 3),
+        ("\"ab\\U00000041\"", 4),
+    ] {
+        assert_eq!(syntax_at(src), (1, column), "{src}");
+    }
+    match tokenize("\"\\U000000E9\"") {
+        Err(Error::Syntax { message, .. }) => assert!(message.contains("U+10000"), "{message}"),
+        other => panic!("unexpected {other:?}"),
+    }
 }
 
 #[test]

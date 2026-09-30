@@ -86,8 +86,9 @@ follows [Semantic Versioning](https://semver.org/).
     1.0. A name may start with `@`, a `\` in a local part escapes only the
     eleven characters of `PN_CHARS_ESC`, and `/*/` opens a comment that is
     not closed. `\uXXXX` and `\UXXXXXXXX` (upper-case hex digits) decode to a
-    code point in string literals and IRIs, and a surrogate, a value above
-    `10FFFF` or a character `IRI_REF` forbids is a syntax error.
+    code point in string literals and IRIs: `\u` up to `FFFF` and `\U` from
+    `10000`. A surrogate, a value above `10FFFF`, a `\U` below `10000` or a
+    character `IRI_REF` forbids is a syntax error.
   - `Profile::Strict` accepts the whole PROV-N grammar and the MUST
     statements of its prose. It rejects `default` after `prefix` (production
     [45]), a statement after a bundle (production [1]), an identifier or
