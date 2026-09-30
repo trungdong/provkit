@@ -154,6 +154,17 @@ pub mod well_known {
         XSD_INT = "xsd" XSD:"int";
         XSD_LONG = "xsd" XSD:"long";
         XSD_INTEGER = "xsd" XSD:"integer";
+        XSD_SHORT = "xsd" XSD:"short";
+        XSD_BYTE = "xsd" XSD:"byte";
+        XSD_NON_NEGATIVE_INTEGER = "xsd" XSD:"nonNegativeInteger";
+        XSD_POSITIVE_INTEGER = "xsd" XSD:"positiveInteger";
+        XSD_NON_POSITIVE_INTEGER = "xsd" XSD:"nonPositiveInteger";
+        XSD_NEGATIVE_INTEGER = "xsd" XSD:"negativeInteger";
+        XSD_UNSIGNED_LONG = "xsd" XSD:"unsignedLong";
+        XSD_UNSIGNED_INT = "xsd" XSD:"unsignedInt";
+        XSD_UNSIGNED_SHORT = "xsd" XSD:"unsignedShort";
+        XSD_UNSIGNED_BYTE = "xsd" XSD:"unsignedByte";
+        XSD_DECIMAL = "xsd" XSD:"decimal";
         XSD_DOUBLE = "xsd" XSD:"double";
         XSD_FLOAT = "xsd" XSD:"float";
         XSD_BOOLEAN = "xsd" XSD:"boolean";

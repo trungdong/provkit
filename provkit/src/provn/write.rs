@@ -278,44 +278,31 @@ fn lexes_as_bare_name(text: &str, local: &str) -> bool {
     )
 }
 
-/// Characters escaped wherever they occur: the Recommendation's
-/// `PN_CHARS_ESC` [55].
-const ALWAYS_ESCAPED: &str = "='(),-:;[].";
-
 /// The local part of `q` as a `PN_LOCAL` that lexes back to the same text.
 ///
-/// A character from [`ALWAYS_ESCAPED`] is escaped. Any other character that
-/// the lexer accepts after `\` but not bare in its position is escaped too.
-/// `%` passes through only before two hex digits, since the reader keeps
-/// `%XX` verbatim. Everything else is an error.
+/// [`pn::local_char`] says whether a character is written bare or after
+/// `\`. A character no `PN_LOCAL` holds is an error.
 fn escape_local(q: &QName) -> Result<String> {
     let local = q.local();
     let mut out = String::with_capacity(local.len());
     for (i, c) in local.char_indices() {
-        let first = i == 0;
-        let bare = pn::is_pn_chars_u(c)
-            || c.is_ascii_digit()
-            || pn::is_pn_local_other(c)
-            || (!first && pn::is_pn_chars(c));
-        if ALWAYS_ESCAPED.contains(c) {
-            out.push('\\');
-        } else if c == '%' {
-            let hex = local.as_bytes().get(i + 1..i + 3);
-            if !hex.is_some_and(|h| h.iter().all(u8::is_ascii_hexdigit)) {
+        match pn::local_char(local, i, c) {
+            Some(pn::LocalChar::Bare) => {}
+            Some(pn::LocalChar::Escaped) => out.push('\\'),
+            None if c == '%' => {
                 return Err(unwritable(
                     q,
                     "a '%' in a local part must be followed by two hex digits".to_owned(),
                 ));
             }
-        } else if !bare && pn::PN_CHARS_ESC.contains(c) {
-            out.push('\\');
-        } else if !bare {
-            let place = if first && pn::is_pn_chars(c) {
-                "at the start of a local part"
-            } else {
-                "in a local part"
-            };
-            return Err(unwritable(q, format!("{} cannot appear {place}", show(c))));
+            None => {
+                let place = if i == 0 && pn::is_pn_chars(c) {
+                    "at the start of a local part"
+                } else {
+                    "in a local part"
+                };
+                return Err(unwritable(q, format!("{} cannot appear {place}", show(c))));
+            }
         }
         out.push(c);
     }
@@ -366,7 +353,7 @@ fn value(v: &Value, names: &mut Namespaces) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT};
+    use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT, XSD_QNAME};
     use crate::{
         Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, LangStr,
         Namespaces, QName, Record, Value, provn,
@@ -535,18 +522,19 @@ endDocument
         a.insert(ex("q"), ex("name").into());
         a.insert(ex("i"), 1i32.into());
         a.insert(ex("neg"), Value::typed("-42", XSD_INT.clone()).unwrap());
+        a.insert(ex("zeros"), Value::typed("005", XSD_INT.clone()).unwrap());
         a.insert(ex("l"), 7i64.into());
         a.insert(ex("c"), Value::typed("x", ex("dt")).unwrap());
         assert_eq!(
             line(element(Kind::Entity, ex("e"), a)),
-            "entity(ex:e, [ex:q='ex:name', ex:i=1, ex:neg=-42, \
+            "entity(ex:e, [ex:q='ex:name', ex:i=1, ex:neg=-42, ex:zeros=005, \
              ex:l=\"7\" %% xsd:long, ex:c=\"x\" %% ex:dt])"
         );
     }
 
     #[test]
     fn a_lone_minus_or_empty_int_is_not_bare() {
-        for text in ["-", "", "+1", "1.0", "--1", "1 "] {
+        for text in ["-", "", "+1", "1.0", "--1", "1 ", " 5 ", "abc"] {
             let mut a = Attributes::new();
             a.insert(ex("i"), Value::typed(text, XSD_INT.clone()).unwrap());
             assert_eq!(
@@ -825,6 +813,8 @@ endDocument
             XSD_INT.clone(),
             crate::well_known::XSD_LONG.clone(),
             crate::well_known::XSD_STRING.clone(),
+            crate::well_known::XSD_DATETIME.clone(),
+            crate::well_known::XSD_DOUBLE.clone(),
             QName::new(crate::well_known::XSD, "anyURI"),
             ex("dt"),
         ];
@@ -837,6 +827,41 @@ endDocument
             values.push(Value::typed(lexical, crate::well_known::XSD_DATETIME.clone()).unwrap());
         }
         values
+    }
+
+    #[test]
+    fn a_qualified_name_literal_is_a_name_exactly_when_provn_can_write_it() {
+        let names = document(vec![]).namespaces;
+        let (mut resolved, mut kept) = (0, 0);
+        for local in sample_texts() {
+            let text = format!("ex:{local}");
+            let writable = provn::statement_name(&ex(&local), &names).is_ok();
+            let value = Value::typed_in(&names, &text, XSD_QNAME.clone()).unwrap();
+            match &value {
+                Value::QName(q) => {
+                    assert!(writable, "{text:?}");
+                    assert_eq!(*q, ex(&local));
+                    resolved += 1;
+                }
+                Value::Typed { lexical, .. } => {
+                    assert!(!writable, "{text:?}");
+                    assert_eq!(*lexical, text);
+                    kept += 1;
+                }
+                other => panic!("{text:?}: {other:?}"),
+            }
+            // Either way it is written, and reads back equal from both formats.
+            let mut a = Attributes::new();
+            a.insert(ex("v"), value);
+            let d = document(vec![element(Kind::Entity, ex("e"), a)]);
+            assert!(written_reads_back(&d), "{text:?}");
+            #[cfg(feature = "json")]
+            {
+                let json = crate::json::to_string(&d).unwrap();
+                assert_eq!(crate::json::read(&json).unwrap(), d, "{json}");
+            }
+        }
+        assert!(resolved > 1000 && kept > 100, "{resolved} {kept}");
     }
 
     #[test]

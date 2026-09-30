@@ -159,7 +159,7 @@ impl Hash for Attributes {
 mod tests {
     use super::*;
     use crate::test_util::hash;
-    use crate::well_known::{PROV_LABEL, PROV_TYPE};
+    use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT, XSD_LONG};
 
     #[test]
     fn ordered_deduplicated_set_equal() {
@@ -185,6 +185,30 @@ mod tests {
 
     fn q(l: &str) -> QName {
         QName::new("http://example.org/", l)
+    }
+
+    #[test]
+    fn equal_values_are_one_pair_and_the_first_spelling_stays() {
+        let int = |text: &str| Value::typed(text, XSD_INT.clone()).unwrap();
+        let mut a = Attributes::new();
+        assert!(a.insert(q("v"), int(" 5 ")));
+        assert!(!a.insert(q("v"), int("5")));
+        assert!(!a.insert(q("v"), int("+005")));
+        assert!(a.insert(q("v"), Value::typed("5", XSD_LONG.clone()).unwrap()));
+        assert!(a.insert(q("w"), int("5")));
+        assert_eq!(a.len(), 3);
+        let (_, first) = a.iter().next().unwrap();
+        assert!(matches!(first, Value::Typed { lexical, .. } if lexical == " 5 "));
+
+        // A set spelled another way is the same set.
+        let mut b = Attributes::new();
+        b.insert(q("w"), int("05"));
+        b.insert(q("v"), Value::typed("+5", XSD_LONG.clone()).unwrap());
+        b.insert(q("v"), int("5"));
+        assert_eq!(a, b);
+        assert_eq!(hash(&a), hash(&b));
+        assert!(a.remove(&q("v"), &int("5")));
+        assert_eq!(a.len(), 2);
     }
 
     #[test]

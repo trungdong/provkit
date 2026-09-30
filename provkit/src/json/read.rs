@@ -384,6 +384,173 @@ mod tests {
         ));
     }
 
+    /// A document holding one entity `ex:e` with the attributes in `body`.
+    fn entity(body: &str) -> String {
+        format!(r#"{{{PFX}, "entity": {{"ex:e": {{{body}}}}}}}"#)
+    }
+
+    /// The values under `ex:<local>` of the first record.
+    fn values(d: &crate::Document, local: &str) -> Vec<Value> {
+        d.records[0].attributes().get(&ex(local)).cloned().collect()
+    }
+
+    #[test]
+    fn ill_formed_literals_read_and_round_trip() {
+        let literals = [
+            ("2012-13-01T00:00:00", "xsd:dateTime"),
+            ("nope", "xsd:dateTime"),
+            ("abc", "xsd:int"),
+            ("maybe", "xsd:boolean"),
+            ("1,5", "xsd:decimal"),
+            ("ex:a b", "xsd:QName"),
+            ("_:b", "prov:QUALIFIED_NAME"),
+            ("", "prov:QUALIFIED_NAME"),
+        ];
+        let body: Vec<String> = literals
+            .iter()
+            .enumerate()
+            .map(|(i, (text, datatype))| {
+                format!(r#""ex:k{i}": {{"$": "{text}", "type": "{datatype}"}}"#)
+            })
+            .collect();
+        let d = doc(&entity(&body.join(", ")));
+        for (i, (text, datatype)) in literals.iter().enumerate() {
+            let value = &values(&d, &format!("k{i}"))[0];
+            assert!(
+                matches!(value, Value::Typed { lexical, .. } if lexical == text),
+                "{text:?} as {datatype}: {value:?}"
+            );
+        }
+        // Each literal is written with the text and datatype it was read with.
+        let written = crate::json::to_string(&d).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&written).unwrap();
+        for (i, (text, datatype)) in literals.iter().enumerate() {
+            assert_eq!(
+                v["entity"]["ex:e"][format!("ex:k{i}")],
+                serde_json::json!({"$": text, "type": datatype}),
+                "{written}"
+            );
+        }
+        assert_eq!(doc(&written), d);
+    }
+
+    #[test]
+    fn a_name_that_cannot_be_written_in_provn_stays_a_literal() {
+        // With a default namespace too, the text is not a qualified name.
+        let d = doc(&entity(
+            r#""ex:k": {"$": "not a name", "type": "prov:QUALIFIED_NAME"}"#,
+        ));
+        assert!(matches!(
+            &values(&d, "k")[0],
+            Value::Typed { lexical, datatype }
+                if lexical == "not a name" && *datatype == *crate::well_known::PROV_QUALIFIED_NAME
+        ));
+        #[cfg(feature = "provn")]
+        {
+            let provn = crate::provn::to_string(&d).unwrap();
+            assert!(
+                provn.contains(r#"ex:k="not a name" %% prov:QUALIFIED_NAME"#),
+                "{provn}"
+            );
+            assert_eq!(crate::provn::read(&provn).unwrap(), d);
+        }
+        // Text that is a qualified name must resolve.
+        assert!(matches!(
+            crate::json::read(&entity(r#""ex:k": {"$": "zz:foo", "type": "prov:QUALIFIED_NAME"}"#)),
+            Err(Error::UndeclaredPrefix(p)) if p == "zz"
+        ));
+    }
+
+    #[test]
+    fn an_ill_formed_time_formal_is_an_error() {
+        for (section, key) in [
+            ("wasGeneratedBy", "prov:time"),
+            ("activity", "prov:startTime"),
+            ("activity", "prov:endTime"),
+        ] {
+            let text = format!(r#"{{{PFX}, "{section}": {{"ex:x": {{"{key}": "nope"}}}}}}"#);
+            assert!(
+                matches!(
+                    crate::json::read(&text),
+                    Err(Error::InvalidLiteral { datatype, .. }) if datatype == "xsd:dateTime"
+                ),
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
+    fn literals_compare_by_value_and_keep_their_text() {
+        let d = doc(&entity(
+            r#""ex:n": 5, "ex:s": {"$": "005", "type": "xsd:int"},
+               "ex:d": 1.0, "ex:b": true, "ex:c": {"$": "1.50", "type": "xsd:decimal"}"#,
+        ));
+        let same = doc(&entity(
+            r#""ex:n": {"$": "+5", "type": "xsd:int"}, "ex:s": 5,
+               "ex:d": {"$": "1.0E0", "type": "xsd:double"},
+               "ex:b": {"$": "1", "type": "xsd:boolean"},
+               "ex:c": {"$": "1.5", "type": "xsd:decimal"}"#,
+        ));
+        assert_eq!(d, same);
+        let other = doc(&entity(
+            r#""ex:n": {"$": "5", "type": "xsd:long"}, "ex:s": 5, "ex:d": 1.0, "ex:b": true,
+               "ex:c": {"$": "1.5", "type": "xsd:decimal"}"#,
+        ));
+        assert_ne!(d, other);
+        // A raw number or boolean and a `$` object are both written as a `$`
+        // object, each with its own text.
+        let written = crate::json::to_string(&d).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&written).unwrap();
+        let body = &v["entity"]["ex:e"];
+        assert_eq!(
+            body["ex:n"],
+            serde_json::json!({"$": "5", "type": "xsd:int"})
+        );
+        assert_eq!(
+            body["ex:s"],
+            serde_json::json!({"$": "005", "type": "xsd:int"})
+        );
+        assert_eq!(
+            body["ex:d"],
+            serde_json::json!({"$": "1", "type": "xsd:double"})
+        );
+        assert_eq!(
+            body["ex:b"],
+            serde_json::json!({"$": "true", "type": "xsd:boolean"})
+        );
+        assert_eq!(
+            body["ex:c"],
+            serde_json::json!({"$": "1.50", "type": "xsd:decimal"})
+        );
+    }
+
+    #[test]
+    fn equal_values_under_one_name_are_one_pair() {
+        let d = doc(&entity(
+            r#""ex:v": [{"$": " 5 ", "type": "xsd:int"}, 5, {"$": "5", "type": "xsd:int"},
+                       {"$": "5", "type": "xsd:long"}]"#,
+        ));
+        // The first spelling stays; the `xsd:long` is another value.
+        let read = values(&d, "v");
+        assert_eq!(read.len(), 2);
+        assert!(matches!(&read[0], Value::Typed { lexical, .. } if lexical == " 5 "));
+        assert_eq!(read[1].datatype(), Some(XSD_LONG.clone()));
+    }
+
+    #[test]
+    fn an_ill_formed_language_tag_is_an_error() {
+        assert!(matches!(
+            crate::json::read(&entity(r#""ex:k": {"$": "x", "lang": "en_US"}"#)),
+            Err(Error::InvalidLanguageTag(tag)) if tag == "en_US"
+        ));
+        let d = doc(&entity(
+            r#""ex:k": {"$": "x", "lang": "en-GB-x-averylongsubtag"}"#,
+        ));
+        assert!(
+            matches!(&values(&d, "k")[0], Value::LangStr(l) if l.lang() == "en-GB-x-averylongsubtag")
+        );
+    }
+
     #[test]
     fn json_errors_name_the_problem() {
         let message = |s: &str| crate::json::read(s).unwrap_err().to_string();

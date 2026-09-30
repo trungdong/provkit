@@ -21,7 +21,8 @@
 //! Comparison and merging:
 //!
 //! - `==` on [`Document`] is set-based. It ignores record order, attribute
-//!   order, namespace tables, blank-node labels and `dateTime` spelling.
+//!   order, namespace tables, blank-node labels and the spelling of a
+//!   number, boolean or `dateTime`.
 //! - [`Document::unified`] merges records that share an identifier and kind,
 //!   and returns [`Error::Unification`] when their formal attributes conflict.
 //! - [`provn::Profile`] selects how strictly PROV-N input is checked.

@@ -25,6 +25,28 @@ follows [Semantic Versioning](https://semver.org/).
     (owned and by reference).
   - Strict name resolution with `QName` and `Namespaces`.
   - `Value` with plain, language-tagged, name, `dateTime` and typed literals.
+    No typed literal is rejected for its text. `Value::typed` and both readers
+    keep an ill-formed one as `Value::Typed`, and each value is written with
+    the text it was read with. A `dateTime` in a formal position must still
+    parse, and `Value::typed` still refuses a qualified-name datatype.
+  - `Value` compares and hashes by value under one datatype. Spellings of
+    one integer (`"5"`, `" 5 "`, `"+5"`, `"005"`), decimal, `xsd:double`,
+    `xsd:float` or `xsd:boolean` are equal, so `Attributes` keeps one pair
+    for them and `Document` equality ignores the spelling. Ill-formed text
+    and every other datatype compare by text, and values of different
+    datatypes are never equal.
+  - Both readers keep a qualified-name literal (`xsd:QName`,
+    `prov:QUALIFIED_NAME`) whose text spells no qualified name as
+    `Value::Typed`. Text that spells one must resolve, as before.
+  - `LangStr::new` accepts a tag of the grammar's `LANGTAG` shape, letters
+    then any number of `-` and letters or digits, with no limit on the length
+    of a subtag.
+  - `well_known` names every XSD datatype compared by value: `XSD_DECIMAL`,
+    `XSD_SHORT`, `XSD_BYTE`, `XSD_NON_NEGATIVE_INTEGER`,
+    `XSD_POSITIVE_INTEGER`, `XSD_NON_POSITIVE_INTEGER`,
+    `XSD_NEGATIVE_INTEGER`, `XSD_UNSIGNED_LONG`, `XSD_UNSIGNED_INT`,
+    `XSD_UNSIGNED_SHORT` and `XSD_UNSIGNED_BYTE` join the names already
+    there.
   - `DateTime` follows XSD 1.1: year `0000` exists and is a leap year, and
     `-0000` is the same year. `DateTime::new` accepts only values whose
     printed text `DateTime::parse` reads back, and its errors carry the text

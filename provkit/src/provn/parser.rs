@@ -581,6 +581,11 @@ mod tests {
         }
     }
 
+    /// The values of the first record's attributes, in order.
+    fn values(d: &Document) -> Vec<&Value> {
+        d.records[0].attributes().iter().map(|(_, v)| v).collect()
+    }
+
     #[test]
     fn attribute_named_after_an_own_formal_is_rejected() {
         let text = "document\nprefix ex <http://example.org/>\n\
@@ -813,14 +818,15 @@ mod tests {
             read("entity(e)"),
             ((3, 8), Error::NoDefaultNamespace(l)) if l == "e"
         ));
-        // A literal's value, at the literal's first token.
+        // A bare qualified-name value, at the literal's first token.
         assert!(matches!(
-            read("entity(ex:e, [ex:k=\"x\" %% xsd:dateTime])"),
-            ((3, 20), Error::InvalidLiteral { .. })
+            read("entity(ex:e, [ex:k=\"v\" %% xsd:QName])"),
+            ((3, 20), Error::NoDefaultNamespace(l)) if l == "v"
         ));
+        // A dateTime argument, at its own token.
         assert!(matches!(
-            read("entity(ex:e, [ex:k=\"x\"@abcdefghi])"),
-            ((3, 20), Error::InvalidLanguageTag(tag)) if tag == "abcdefghi"
+            read("activity(ex:a, -, 2012-13-01T00:00:00)"),
+            ((3, 19), Error::InvalidLiteral { .. })
         ));
         // A reserved prefix, at the prefix token.
         let text = "document\nprefix prov <http://example.org/>\nendDocument\n";
@@ -926,12 +932,148 @@ mod tests {
             r#"entity(ex:e, [ex:a="ex:v" %% prov:QUALIFIED_NAME, ex:b="ex:v" %% xsd:QName])"#,
             Profile::Strict,
         );
-        let values: Vec<&Value> = d.records[0].attributes().iter().map(|(_, v)| v).collect();
-        assert_eq!(values, [&Value::QName(ex("v")), &Value::QName(ex("v"))]);
+        assert_eq!(values(&d), [&Value::QName(ex("v")), &Value::QName(ex("v"))]);
         assert!(matches!(
             located(err(r#"entity(ex:e, [ex:a="zz:v" %% prov:QUALIFIED_NAME])"#, Profile::Default)),
             (_, Error::UndeclaredPrefix(p)) if p == "zz"
         ));
+        // A name the grammar writes with an escape is spelled here without it.
+        let d = doc(
+            r#"entity(ex:e, [ex:a="ex:a=b" %% xsd:QName, ex:b='ex:a\=b'])"#,
+            Profile::Strict,
+        );
+        assert_eq!(values(&d), [&Value::QName(ex("a=b")); 2]);
+    }
+
+    #[test]
+    fn ill_formed_literals_read_and_round_trip() {
+        let literals = [
+            (
+                r#""2012-13-01T00:00:00" %% xsd:dateTime"#,
+                "2012-13-01T00:00:00",
+            ),
+            (r#""x" %% xsd:dateTime"#, "x"),
+            (r#""abc" %% xsd:int"#, "abc"),
+            (r#""maybe" %% xsd:boolean"#, "maybe"),
+            (r#""1,5" %% xsd:decimal"#, "1,5"),
+            (r#""not a name" %% prov:QUALIFIED_NAME"#, "not a name"),
+            (r#""ex:a b" %% xsd:QName"#, "ex:a b"),
+        ];
+        let pairs: Vec<String> = literals
+            .iter()
+            .enumerate()
+            .map(|(i, (literal, _))| format!("ex:k{i}={literal}"))
+            .collect();
+        let d = doc(
+            &format!("entity(ex:e, [{}])", pairs.join(", ")),
+            Profile::Strict,
+        );
+        let read = values(&d);
+        assert_eq!(read.len(), literals.len());
+        for (value, (literal, text)) in read.iter().zip(literals) {
+            assert!(
+                matches!(value, Value::Typed { lexical, .. } if lexical == text),
+                "{literal}: {value:?}"
+            );
+        }
+        // Each literal is written with the text it was read with.
+        let written = provn::to_string(&d).unwrap();
+        for (literal, _) in literals {
+            assert!(written.contains(literal), "{literal}\n{written}");
+        }
+        assert_eq!(provn::read(&written).unwrap(), d);
+        #[cfg(feature = "json")]
+        {
+            let json = crate::json::to_string(&d).unwrap();
+            assert_eq!(crate::json::read(&json).unwrap(), d, "{json}");
+        }
+    }
+
+    #[test]
+    fn long_language_subtags_read() {
+        let d = doc(
+            r#"entity(ex:e, [ex:k="x"@abcdefghi, ex:l="x"@en-GB-x-averylongsubtag])"#,
+            Profile::Strict,
+        );
+        let tags: Vec<&str> = values(&d)
+            .into_iter()
+            .map(|v| match v {
+                Value::LangStr(l) => l.lang(),
+                other => panic!("expected a tagged string, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(tags, ["abcdefghi", "en-GB-x-averylongsubtag"]);
+    }
+
+    #[test]
+    fn an_ill_formed_time_argument_is_an_error() {
+        for body in [
+            "activity(ex:a, 2012-13-01T00:00:00, -)",
+            "wasGeneratedBy(ex:e, ex:a, 2012-02-30T00:00:00)",
+        ] {
+            let (_, inner) = located(err(body, Profile::Default));
+            assert!(
+                matches!(&inner, Error::InvalidLiteral { datatype, .. } if datatype == "xsd:dateTime"),
+                "{body}: {inner:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn literals_compare_by_value_and_keep_their_text() {
+        let body = r#"entity(ex:e, [ex:i=005, ex:j="+5" %% xsd:int, ex:d="1.0E0" %% xsd:double, ex:b="1" %% xsd:boolean, ex:c="1.50" %% xsd:decimal])"#;
+        let other = r#"entity(ex:e, [ex:i=5, ex:j=" 5 " %% xsd:int, ex:d="1" %% xsd:double, ex:b="true" %% xsd:boolean, ex:c="1.5" %% xsd:decimal])"#;
+        let d = doc(body, Profile::Strict);
+        assert_eq!(d, doc(other, Profile::Strict));
+        assert_ne!(d, doc(&other.replace("ex:i=5", "ex:i=6"), Profile::Strict));
+        assert_ne!(
+            d,
+            doc(
+                &other.replace("ex:i=5", r#"ex:i="5" %% xsd:long"#),
+                Profile::Strict
+            )
+        );
+        let written = provn::to_string(&d).unwrap();
+        for literal in [
+            "ex:i=005",
+            r#"ex:j="+5" %% xsd:int"#,
+            r#"ex:d="1.0E0" %% xsd:double"#,
+            r#"ex:b="1" %% xsd:boolean"#,
+            r#"ex:c="1.50" %% xsd:decimal"#,
+        ] {
+            assert!(written.contains(literal), "{literal}\n{written}");
+        }
+        let lexicals = |d: &Document| -> Vec<String> {
+            values(d)
+                .into_iter()
+                .map(|v| match v {
+                    Value::Typed { lexical, .. } => lexical.clone(),
+                    other => panic!("expected a typed literal, got {other:?}"),
+                })
+                .collect()
+        };
+        assert_eq!(lexicals(&provn::read(&written).unwrap()), lexicals(&d));
+        #[cfg(feature = "json")]
+        {
+            let json = crate::json::to_string(&d).unwrap();
+            assert_eq!(lexicals(&crate::json::read(&json).unwrap()), lexicals(&d));
+        }
+    }
+
+    #[test]
+    fn equal_values_under_one_name_are_one_pair() {
+        let d = doc(
+            r#"entity(ex:e, [ex:v=" 5 " %% xsd:int, ex:v="5" %% xsd:int, ex:v=5, ex:v="5" %% xsd:long])"#,
+            Profile::Strict,
+        );
+        // The first spelling stays; the `xsd:long` is another value.
+        let read = values(&d);
+        assert_eq!(read.len(), 2);
+        assert!(matches!(read[0], Value::Typed { lexical, .. } if lexical == " 5 "));
+        assert_eq!(
+            read[1].datatype(),
+            Some(crate::well_known::XSD_LONG.clone())
+        );
     }
 
     #[test]
