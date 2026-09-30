@@ -53,14 +53,6 @@ const EXCLUDED_SPEC_EXAMPLES: &[(&str, &str)] = &[
         "the bundle identifier 'b' has no declared default namespace; the example illustrates qualified-name resolution for ex:e001, not the bundle name itself",
     ),
     (
-        "prov-n-example-63.provn",
-        "the dictionary set-of-pairs literal '{(\"k1\",e1), ...}' is PROV-Dictionary syntax the lexer has no punctuation for, unsupported by design",
-    ),
-    (
-        "prov-n-example-64.provn",
-        "dictExt:hadMembers(...) is an extensibility expression (prefix:name(...)), unsupported by design",
-    ),
-    (
         "prov-dm-example-03.provn",
         "used and wasGeneratedBy give only the entity/activity without the paired time; the formal grammar requires them together",
     ),
@@ -139,19 +131,11 @@ const EXCLUDED_PROVTOOLBOX_DOCUMENTS: &[(&str, &str)] = &[
     ),
     (
         "container1.provn",
-        "derivedByInsertionFrom's dictionary set-of-pairs literal '{(\"k1\", ex:e2)}' is PROV-Dictionary syntax the lexer has no punctuation for, unsupported by design",
+        "'\"hello2\"@EN %% xsd:string' gives one string both a language tag and a datatype; productions [41] and [43] allow one or the other",
     ),
     (
         "container2.provn",
         "'%% <http://example.org/type>' uses a bare IRI as a datatype; production [53] requires datatype to be a qualifiedName",
-    ),
-    (
-        "prov-family.provn",
-        "derivedByInsertionFrom's dictionary set-of-pairs literal '{('tr:prov-dm', tr2011:WD-prov-dm-20111018)}' is PROV-Dictionary syntax the lexer has no punctuation for, unsupported by design",
-    ),
-    (
-        "prov-family-graphics.provn",
-        "derivedByInsertionFrom's dictionary set-of-pairs literal '{('tr:prov-dm', tr2011:WD-prov-dm-20111018)}' is PROV-Dictionary syntax the lexer has no punctuation for, unsupported by design",
     ),
 ];
 

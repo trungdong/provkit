@@ -1,6 +1,7 @@
 //! PROV-N (W3C Recommendation, 2013) read and write.
 
 mod chars;
+mod extension;
 mod lexer;
 mod parser;
 mod write;
@@ -39,7 +40,23 @@ pub enum Profile {
     Default,
 }
 
+/// An extensibility expression the reader parsed and left out of the document.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Ignored {
+    /// The expression's name as written, for example `dictExt:hadMembers`.
+    pub name: String,
+    /// 1-based line of the name.
+    pub line: usize,
+    /// 1-based column of the name.
+    pub column: usize,
+}
+
 /// Read a PROV-N document under [`Profile::Default`].
+///
+/// An extensibility expression (Recommendation section 5, a statement whose
+/// keyword has a prefix and is not `prov:mentionOf`) is parsed and left out
+/// of the document. [`read_report`] lists the ones left out.
 ///
 /// # Errors
 ///
@@ -60,16 +77,35 @@ pub fn read(text: &str) -> Result<Document> {
 ///
 /// As [`read`].
 pub fn read_with(text: &str, profile: Profile) -> Result<Document> {
+    read_report(text, profile).map(|(document, _)| document)
+}
+
+/// Read a PROV-N document under `profile`, and list the extensibility
+/// expressions it holds. PROV defines no meaning for them, so they are
+/// not in the document.
+///
+/// The list holds one entry per outermost expression, in source order.
+///
+/// # Errors
+///
+/// As [`read`].
+pub fn read_report(text: &str, profile: Profile) -> Result<(Document, Vec<Ignored>)> {
     let mut builder = DocumentBuilder::new();
-    read_into_with(strip_bom(text), profile, &mut builder)?;
-    Ok(builder.finish())
+    let ignored = read_into_with(strip_bom(text), profile, &mut builder)?;
+    Ok((builder.finish(), ignored))
 }
 
 /// Read PROV-N text under `profile`, sending events to `sink` as each
-/// statement is parsed.
-pub(crate) fn read_into_with(text: &str, profile: Profile, sink: &mut impl Sink) -> Result<()> {
+/// statement is parsed. Returns the extensibility expressions left out.
+pub(crate) fn read_into_with(
+    text: &str,
+    profile: Profile,
+    sink: &mut impl Sink,
+) -> Result<Vec<Ignored>> {
     let tokens = lexer::tokenize(text)?;
-    parser::Parser::new(&tokens, profile).document(sink)
+    let mut parser = parser::Parser::new(text, &tokens, profile);
+    parser.document(sink)?;
+    Ok(parser.ignored)
 }
 
 #[cfg(test)]

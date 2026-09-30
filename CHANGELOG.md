@@ -77,8 +77,17 @@ follows [Semantic Versioning](https://semver.org/).
     `[ex:k=3000000000]` equal to the PROV-JSON `{"ex:k": 3000000000}`. The
     PROV-N writer writes a value bare when its text is `-?[0-9]+` and reads
     back as the same datatype, so `"5" %% xsd:long` is written quoted.
-  - `json::read`, `provn::read` and `provn::read_with` ignore one leading
-    byte-order mark.
+  - The PROV-N reader parses every extensibility expression (section 5,
+    productions [49] to [51]) under both profiles and leaves it out of the
+    document. Names inside one are not resolved and literals inside one are
+    not built, but its tokens must match the productions, and nesting deeper
+    than 64 levels of expressions and tuples is a syntax error.
+  - `provn::read_report`, which reads a document and lists the extensibility
+    expressions it left out, one per outermost expression in source order.
+  - `provn::Ignored`, an entry in that list: the expression's name as written
+    and the line and column of the name.
+  - `json::read`, `provn::read`, `provn::read_with` and `provn::read_report`
+    ignore one leading byte-order mark.
   - Set-based `Document` equality.
   - `Document::unified()`, which merges records by identifier and kind and
     reports conflicts as `Error::Unification`.

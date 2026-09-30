@@ -52,12 +52,16 @@ pub(crate) enum TokenKind {
     Eof,
 }
 
-/// A token with its 1-based position.
+/// A token with its 1-based position and its byte span in the source.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Token {
     pub(crate) kind: TokenKind,
     pub(crate) line: usize,
     pub(crate) column: usize,
+    /// Byte offset of the first character.
+    pub(crate) start: usize,
+    /// Byte offset just past the last character.
+    pub(crate) end: usize,
 }
 
 /// Tokenise the whole input eagerly. The last token is always `Eof`.
@@ -177,13 +181,15 @@ impl<'a> Lexer<'a> {
     }
 
     fn next_token(&mut self) -> Result<Token> {
-        let (line, column) = (self.line, self.column());
+        let (line, column, start) = (self.line, self.column(), self.pos);
         let rest = self.rest();
         let Some(c) = rest.chars().next() else {
             return Ok(Token {
                 kind: TokenKind::Eof,
                 line,
                 column,
+                start,
+                end: start,
             });
         };
         let kind = match c {
@@ -204,7 +210,13 @@ impl<'a> Lexer<'a> {
             _ => self.literal_or_name()?,
         };
         self.after_string = matches!(kind, TokenKind::Str(_));
-        Ok(Token { kind, line, column })
+        Ok(Token {
+            kind,
+            line,
+            column,
+            start,
+            end: self.pos,
+        })
     }
 
     /// A dateTime, integer, name or marker, in that order of preference.

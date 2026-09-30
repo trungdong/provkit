@@ -5,9 +5,12 @@
 //!
 //! Every error carries a position. A grammar error is [`Error::Syntax`], and
 //! an error from the name, value or record layer is wrapped by [`at`].
+//!
+//! Extensibility expressions (section 5) are parsed by the methods in
+//! `extension.rs` and recorded in [`Parser::ignored`] instead of the sink.
 
-use super::Profile;
 use super::lexer::{Token, TokenKind};
+use super::{Ignored, Profile};
 use crate::sink::Sink;
 use crate::well_known::{PROV, XSD};
 use crate::{
@@ -50,7 +53,7 @@ fn at(token: &Token, error: Error) -> Error {
 }
 
 /// A name token split into its parts, before resolution.
-struct NameParts<'t> {
+pub(super) struct NameParts<'t> {
     token: &'t Token,
     prefix: String,
     local: String,
@@ -64,34 +67,45 @@ enum Arg {
 }
 
 pub(super) struct Parser<'t> {
+    source: &'t str,
     tokens: &'t [Token],
     pos: usize,
     profile: Profile,
     document_ns: Namespaces,
     /// Inside a bundle, its table with the document's behind it.
     bundle_names: Option<Namespaces>,
+    /// The outermost extensibility expressions, in source order.
+    pub(super) ignored: Vec<Ignored>,
 }
 
 impl<'t> Parser<'t> {
-    /// A parser over `tokens`, which end with `Eof`.
-    pub(super) fn new(tokens: &'t [Token], profile: Profile) -> Self {
+    /// A parser over `tokens`, which are lexed from `source` and end with
+    /// `Eof`.
+    pub(super) fn new(source: &'t str, tokens: &'t [Token], profile: Profile) -> Self {
         Parser {
+            source,
             tokens,
             pos: 0,
             profile,
             document_ns: Namespaces::new(),
             bundle_names: None,
+            ignored: Vec::new(),
         }
     }
 
     // Token helpers
 
-    fn peek(&self) -> &'t Token {
+    pub(super) fn peek(&self) -> &'t Token {
         &self.tokens[self.pos]
     }
 
+    /// The token after the current one, or `Eof` at the end.
+    pub(super) fn peek_next(&self) -> &'t Token {
+        self.tokens.get(self.pos + 1).unwrap_or_else(|| self.peek())
+    }
+
     /// The current token, advancing unless it is `Eof`.
-    fn bump(&mut self) -> &'t Token {
+    pub(super) fn bump(&mut self) -> &'t Token {
         let token = &self.tokens[self.pos];
         if token.kind != TokenKind::Eof {
             self.pos += 1;
@@ -99,7 +113,12 @@ impl<'t> Parser<'t> {
         token
     }
 
-    fn error_at(token: &Token, message: String) -> Error {
+    /// The source text `token` was lexed from.
+    pub(super) fn text_of(&self, token: &Token) -> &'t str {
+        &self.source[token.start..token.end]
+    }
+
+    pub(super) fn error_at(token: &Token, message: String) -> Error {
         Error::Syntax {
             line: token.line,
             column: token.column,
@@ -108,7 +127,7 @@ impl<'t> Parser<'t> {
     }
 
     /// "expected `what`, found ..." at the current token.
-    fn expected(&self, what: &str) -> Error {
+    pub(super) fn expected(&self, what: &str) -> Error {
         let token = self.peek();
         Self::error_at(
             token,
@@ -116,7 +135,7 @@ impl<'t> Parser<'t> {
         )
     }
 
-    fn expect(&mut self, kind: &TokenKind, what: &str) -> Result<()> {
+    pub(super) fn expect(&mut self, kind: &TokenKind, what: &str) -> Result<()> {
         if self.peek().kind == *kind {
             self.bump();
             Ok(())
@@ -168,7 +187,7 @@ impl<'t> Parser<'t> {
     /// A name token in an identifier or attribute-name position, where an
     /// unsigned integer is a bare local name made of digits. The lexer
     /// cannot tell that apart from `INT_LITERAL`.
-    fn identifier(&mut self, what: &str) -> Result<NameParts<'t>> {
+    pub(super) fn identifier(&mut self, what: &str) -> Result<NameParts<'t>> {
         let token = self.peek();
         if let TokenKind::Int(digits) = &token.kind
             && !digits.starts_with('-')
@@ -219,8 +238,7 @@ impl<'t> Parser<'t> {
                         ),
                     ));
                 }
-                let record = self.expression()?;
-                sink.record(record)?;
+                self.statement(sink)?;
             }
         }
         self.bump();
@@ -317,12 +335,29 @@ impl<'t> Parser<'t> {
             {
                 return Err(self.expected("a statement or 'endBundle'"));
             }
-            let record = self.expression()?;
-            sink.record(record)?;
+            self.statement(sink)?;
         }
         self.bump();
         self.bundle_names = None;
         sink.end_bundle()
+    }
+
+    /// One statement: a PROV expression, sent to `sink` as a record, or an
+    /// extensibility expression, parsed and recorded in `ignored`. A keyword
+    /// with a prefix that names no PROV statement starts an extensibility
+    /// expression (section 5); a bare unknown keyword is a syntax error.
+    fn statement(&mut self, sink: &mut impl Sink) -> Result<()> {
+        let is_extension = matches!(
+            &self.peek().kind,
+            TokenKind::Name { prefix, local }
+                if !prefix.is_empty() && classify(prefix, local, self.profile).is_none()
+        );
+        if is_extension {
+            self.extensibility_expression()
+        } else {
+            let record = self.expression()?;
+            sink.record(record)
+        }
     }
 
     // expression ::= keyword "(" optionalIdentifier arguments optionalAttributeValuePairs ")"
@@ -333,15 +368,13 @@ impl<'t> Parser<'t> {
             return Err(self.expected("a statement"));
         };
         let kind = classify(prefix, local, self.profile).ok_or_else(|| {
-            let message = if !prefix.is_empty() {
-                format!(
-                    "expected a PROV statement, found the extensibility expression \
-                     '{prefix}:{local}(...)', which is not supported"
-                )
-            } else if local == "mentionOf" {
+            let message = if prefix.is_empty() && local == "mentionOf" {
                 "expected 'prov:mentionOf' under the strict profile, found 'mentionOf'".to_owned()
             } else {
-                format!("expected a PROV statement, found unknown keyword '{local}'")
+                format!(
+                    "expected a PROV statement, found unknown keyword {}",
+                    describe(&start.kind)
+                )
             };
             Self::error_at(start, message)
         })?;
@@ -570,7 +603,7 @@ impl<'t> Parser<'t> {
 }
 
 /// A token as it reads in an error message.
-fn describe(kind: &TokenKind) -> String {
+pub(super) fn describe(kind: &TokenKind) -> String {
     let name = |prefix: &str, local: &str| {
         if prefix.is_empty() {
             local.to_owned()
@@ -757,20 +790,10 @@ mod tests {
         );
         // Beyond the leading required positions, `-` is fine under Strict.
         assert!(read("wasDerivedFrom(ex:a, ex:b, -, -, -)", Profile::Strict).is_ok());
-        assert!(matches!(
-            err("ex:custom(ex:a)", Profile::Default),
-            Error::Syntax { .. }
-        ));
     }
 
     #[test]
-    fn strict_rejects_extensions_and_keeps_mention_attributes() {
-        // Extensibility expressions are rejected under both profiles.
-        assert!(matches!(
-            err("ex:custom(ex:a)", Profile::Strict),
-            Error::Syntax { .. }
-        ));
-        // `mentionOf` takes attributes.
+    fn mention_takes_attributes() {
         assert!(
             read(
                 "prov:mentionOf(ex:a, ex:b, ex:c, [ex:k=\"v\"])",
