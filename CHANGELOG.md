@@ -88,10 +88,14 @@ follows [Semantic Versioning](https://semver.org/).
     statements of its prose. It rejects `default` after `prefix` (production
     [45]), a statement after a bundle (production [1]), an identifier or
     attributes on `alternateOf`, `specializationOf` and `hadMember`
-    (productions [24] to [26]), a declaration of `prov` or `xsd` at its own
-    IRI (section 3.7.4), bare `mentionOf` and `-` in a required position.
-    `Profile::Default` reads all of these. Both profiles reject a second
-    `default` and a prefix that is not a `PN_PREFIX`.
+    (productions [24] to [26]), an identifier on `mentionOf`, a declaration
+    of `prov` or `xsd` at its own IRI (section 3.7.4), bare `mentionOf` and
+    `-` in a required position. `Profile::Default` reads all of these. Both
+    profiles reject a second `default` and a prefix that is not a
+    `PN_PREFIX`.
+  - `prov:mentionOf` is a mention only when three names follow it, with or
+    without an attribute block. With any other arguments, or under `Strict`
+    with an identifier, it is an extensibility expression.
   - A datatype of digits, as in `"x" %% 123`, reads as a name in the default
     namespace.
   - Both readers type an integer by range: `xsd:int` within `i32`, `xsd:long`

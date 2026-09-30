@@ -52,6 +52,18 @@ pub(crate) enum TokenKind {
     Eof,
 }
 
+impl TokenKind {
+    /// The digits of an unsigned `Int`, which is a bare name made of digits
+    /// wherever the grammar wants an identifier. The lexer cannot tell that
+    /// apart from `INT_LITERAL`, so the parser asks in identifier positions.
+    pub(crate) fn digit_name(&self) -> Option<&str> {
+        match self {
+            TokenKind::Int(digits) if !digits.starts_with('-') => Some(digits),
+            _ => None,
+        }
+    }
+}
+
 /// A token with its 1-based position and its byte span in the source.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Token {

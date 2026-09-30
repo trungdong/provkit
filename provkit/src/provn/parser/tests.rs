@@ -159,6 +159,75 @@ fn mention_takes_attributes() {
     );
 }
 
+/// The document with `body` under `profile`, and the expressions left out.
+fn report(body: &str, profile: Profile) -> (Document, Vec<provn::Ignored>) {
+    provn::read_report(&format!("{HEAD}{body}\nendDocument"), profile).unwrap()
+}
+
+/// `prov:mentionOf` is a mention only in the shape of one: three names,
+/// then `)` or an attribute block. Any other shape is an extensibility
+/// expression under production [49], parsed and left out.
+#[test]
+fn prov_mention_of_is_a_statement_only_in_its_own_shape() {
+    for profile in [Profile::Strict, Profile::Default] {
+        for body in [
+            "prov:mentionOf(ex:e2, ex:e1, ex:b)",
+            "prov:mentionOf(ex:e2, ex:e1, ex:b, [ex:k=\"v\"])",
+            "prov:mentionOf(12, ex:e1, ex:b)",
+        ] {
+            let (doc, ignored) = report(body, profile);
+            assert!(ignored.is_empty(), "{body}");
+            assert!(
+                matches!(&doc.records[0], Record::Mention(m) if m.id.is_none() && m.bundle == Some(ex("b"))),
+                "{body}: {:?}",
+                doc.records
+            );
+        }
+        for body in [
+            "prov:mentionOf(ex:e2, ex:e1)",
+            "prov:mentionOf(ex:e2, ex:e1, -)",
+            "prov:mentionOf(ex:e2, ex:e1, \"b\")",
+            "prov:mentionOf(ex:e2, ex:e1, ex:b, 5)",
+            "prov:mentionOf(ex:e2, ex:e1, {ex:b})",
+            "prov:mentionOf(ex:e2, ex:e1, 2012-01-01T00:00:00)",
+        ] {
+            let (doc, ignored) = report(body, profile);
+            assert!(doc.records.is_empty(), "{body}: {:?}", doc.records);
+            assert_eq!(ignored.len(), 1, "{body}");
+            assert_eq!(ignored[0].name, "prov:mentionOf", "{body}");
+        }
+    }
+    // Bare `mentionOf` is never an extensibility expression, so `-` in its
+    // third position is the mention with no bundle that `Default` reads.
+    let (doc, ignored) = report("mentionOf(ex:e2, ex:e1, -)", Profile::Default);
+    assert!(ignored.is_empty());
+    assert!(matches!(&doc.records[0], Record::Mention(m) if m.bundle.is_none()));
+}
+
+/// PROV-DM gives `mentionOf` no identifier. Under `Strict` one makes
+/// `prov:mentionOf` an extensibility expression; `Default` reads it as the
+/// mention's identifier, as it does for bare `mentionOf`.
+#[test]
+fn an_identifier_on_prov_mention_of_is_an_extension_under_strict() {
+    let body = "prov:mentionOf(ex:m; ex:e2, ex:e1, ex:b)";
+    let (doc, ignored) = report(body, Profile::Strict);
+    assert!(doc.records.is_empty());
+    assert_eq!(ignored.len(), 1);
+    let (doc, ignored) = report(body, Profile::Default);
+    assert!(ignored.is_empty());
+    assert!(matches!(&doc.records[0], Record::Mention(m) if m.id == Some(ex("m"))));
+    let (doc, _) = report("prov:mentionOf(-; ex:e2, ex:e1, ex:b)", Profile::Default);
+    assert!(matches!(&doc.records[0], Record::Mention(m) if m.id.is_none()));
+    // Bare `mentionOf` with an identifier: a syntax error under `Strict`,
+    // because the keyword is bare, and a mention under `Default`.
+    assert!(matches!(
+        err("mentionOf(ex:m; ex:e2, ex:e1, ex:b)", Profile::Strict),
+        Error::Syntax { .. }
+    ));
+    let (doc, _) = report("mentionOf(ex:m; ex:e2, ex:e1, ex:b)", Profile::Default);
+    assert!(matches!(&doc.records[0], Record::Mention(m) if m.id == Some(ex("m"))));
+}
+
 #[test]
 fn strict_is_the_whole_grammar() {
     let p = "prefix ex <http://example.org/>\n";

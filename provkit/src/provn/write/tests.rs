@@ -149,6 +149,22 @@ fn identified_relation_leads_with_its_id_and_a_semicolon() {
 }
 
 #[test]
+fn an_identifier_on_a_bare_kind_is_written_and_reads_back() {
+    // PROV-JSON gives `hadMember` a key, which is the record's identifier.
+    let r = relation(
+        Kind::Membership,
+        Some(ex("m")),
+        vec![
+            (F::Collection, Formal::Name(ex("c"))),
+            (F::Entity, Formal::Name(ex("e"))),
+        ],
+    );
+    assert_eq!(line(r.clone()), "hadMember(ex:m; ex:c, ex:e)");
+    let d = document(vec![r]);
+    assert_eq!(provn::read(&provn::to_string(&d).unwrap()).unwrap(), d);
+}
+
+#[test]
 fn mention_is_written_bare() {
     let r = relation(
         Kind::Mention,

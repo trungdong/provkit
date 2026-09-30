@@ -81,7 +81,7 @@ fn unify_records(records: &[Record]) -> Result<Vec<Record>> {
     // grouping key and never merges.
     let mut groups: IndexMap<&QName, Vec<usize>> = IndexMap::new();
     for (i, r) in records.iter().enumerate() {
-        if let Some(id) = r.id().filter(|_| !has_no_identifier(r.kind())) {
+        if let Some(id) = r.id().filter(|_| !r.kind().is_bare()) {
             groups.entry(id).or_default().push(i);
         }
     }
@@ -120,14 +120,6 @@ fn unify_records(records: &[Record]) -> Result<Vec<Record>> {
             None => Some(r.clone()),
         })
         .collect())
-}
-
-/// Kinds that PROV-DM gives no identifier.
-fn has_no_identifier(kind: Kind) -> bool {
-    matches!(
-        kind,
-        Kind::Membership | Kind::Alternate | Kind::Specialization | Kind::Mention
-    )
 }
 
 /// Constraint 53: these relation kinds cannot share an identifier with one

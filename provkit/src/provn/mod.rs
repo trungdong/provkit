@@ -16,30 +16,30 @@ pub use write::{name, statement, to_string, write};
 #[non_exhaustive]
 pub enum Profile {
     /// The whole grammar of the Recommendation and the MUST statements of
-    /// its prose. `Strict` rejects:
+    /// its prose, with the departures `CONFORMANCE.md` records. `Strict`
+    /// rejects:
     ///
     /// - `mentionOf` without the `prov:` prefix.
     /// - `-` in a required position of a relation.
     /// - `default` after a `prefix` (production \[45\]).
     /// - A statement after a bundle at document level (production \[1\]).
     /// - An identifier or attributes on `alternateOf`, `specializationOf` and
-    ///   `hadMember` (productions \[24\] to \[26\]).
+    ///   `hadMember` (productions \[24\] to \[26\]), and an identifier on
+    ///   `mentionOf`.
     /// - A declaration of `prov` or `xsd` at its predeclared IRI (section
     ///   3.7.4).
+    ///
+    /// `prov:mentionOf` (PROV-LINKS) is a mention only when three names
+    /// follow it, with or without an attribute block. Under `Strict` an
+    /// identifier or any other argument makes it an extensibility
+    /// expression (production \[49\]), parsed and left out of the document.
     ///
     /// Both profiles reject a repeated `default`, a prefix that is not a
     /// `PN_PREFIX`, and every other text the grammar rejects.
     Strict,
-    /// The grammar plus these extensions, which `ProvToolbox` and `ProvPy`
-    /// write:
-    ///
-    /// - Bare `mentionOf`.
-    /// - `-` in a required position of a relation.
-    /// - `default` after a `prefix`.
-    /// - A statement after a bundle at document level.
-    /// - An identifier or attributes on `alternateOf`, `specializationOf` and
-    ///   `hadMember`.
-    /// - A declaration of `prov` or `xsd` at its predeclared IRI.
+    /// The grammar plus the six extensions that `Strict` rejects, which
+    /// `ProvToolbox` and `ProvPy` write. `prov:mentionOf` with an identifier
+    /// is a mention under `Default`, as bare `mentionOf` is.
     #[default]
     Default,
 }
@@ -59,8 +59,9 @@ pub struct Ignored {
 /// Read a PROV-N document under [`Profile::Default`].
 ///
 /// An extensibility expression (Recommendation section 5, a statement whose
-/// keyword has a prefix and is not `prov:mentionOf`) is parsed and left out
-/// of the document. [`read_report`] lists the ones left out.
+/// keyword has a prefix, other than `prov:mentionOf` in the shape of a
+/// mention; see [`Profile`]) is parsed and left out of the document.
+/// [`read_report`] lists the ones left out.
 ///
 /// # Errors
 ///

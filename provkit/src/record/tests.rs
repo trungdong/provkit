@@ -40,6 +40,16 @@ fn tables() {
         Some(FormalAttr::GeneratedEntity)
     );
     assert!(FormalAttr::Time.is_time() && !FormalAttr::Entity.is_time());
+    let bare: Vec<Kind> = Kind::ALL.iter().copied().filter(|k| k.is_bare()).collect();
+    assert_eq!(
+        bare,
+        [
+            Kind::Specialization,
+            Kind::Alternate,
+            Kind::Mention,
+            Kind::Membership
+        ]
+    );
 }
 
 #[test]

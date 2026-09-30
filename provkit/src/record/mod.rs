@@ -46,13 +46,16 @@ impl Record {
 /// over the kinds from one table.
 ///
 /// A row is `Variant "keyword" shape [arities] { field: FormalAttr, .. }`,
-/// under the struct's doc line. The shape is `element` or `relation`, and the
-/// arities are the argument counts PROV-N allows after the identifier. Each
-/// field carries its own doc line.
+/// under the struct's doc line. The shape is `element` or `relation`, and
+/// `relation bare` marks a relation PROV-DM gives no identifier. The arities
+/// are the argument counts PROV-N allows after the identifier. Each field
+/// carries its own doc line.
 macro_rules! records {
     // The identifier is mandatory on an element and optional on a relation.
     (@is_element element) => { true };
     (@is_element relation) => { false };
+    (@bare bare) => { true };
+    (@bare) => { false };
     (@id_type element) => { QName };
     (@id_type relation) => { Option<QName> };
     (@new_id element $kind:ident $id:ident) => {
@@ -70,7 +73,7 @@ macro_rules! records {
 
     ($(
         $(#[$doc:meta])*
-        $name:ident $keyword:literal $shape:ident [$($arity:literal),*] {
+        $name:ident $keyword:literal $shape:ident $($bare:ident)? [$($arity:literal),*] {
             $($(#[$field_doc:meta])* $field:ident: $attr:ident,)*
         }
     )*) => {
@@ -111,6 +114,16 @@ macro_rules! records {
             pub fn formals(self) -> &'static [FormalAttr] {
                 match self {
                     $(Kind::$name => &[$(FormalAttr::$attr),*],)*
+                }
+            }
+
+            /// Whether PROV-DM gives the kind no identifier: `alternateOf`,
+            /// `specializationOf`, `mentionOf` and `hadMember`. The PROV-N
+            /// grammar has no identifier for them, so `Profile::Strict`
+            /// rejects one, and `unified()` never merges them.
+            pub(crate) fn is_bare(self) -> bool {
+                match self {
+                    $(Kind::$name => records!(@bare $($bare)?),)*
                 }
             }
 
@@ -331,7 +344,7 @@ records! {
     }
 
     /// A specialisation (`specializationOf`).
-    Specialization "specializationOf" relation [2] {
+    Specialization "specializationOf" relation bare [2] {
         /// `prov:specificEntity`.
         specific_entity: SpecificEntity,
         /// `prov:generalEntity`.
@@ -339,7 +352,7 @@ records! {
     }
 
     /// An alternate (`alternateOf`).
-    Alternate "alternateOf" relation [2] {
+    Alternate "alternateOf" relation bare [2] {
         /// `prov:alternate1`.
         alternate1: Alternate1,
         /// `prov:alternate2`.
@@ -347,7 +360,7 @@ records! {
     }
 
     /// A mention (`mentionOf`).
-    Mention "mentionOf" relation [3] {
+    Mention "mentionOf" relation bare [3] {
         /// `prov:specificEntity`.
         specific_entity: SpecificEntity,
         /// `prov:generalEntity`.
@@ -357,7 +370,7 @@ records! {
     }
 
     /// A membership (`hadMember`).
-    Membership "hadMember" relation [2] {
+    Membership "hadMember" relation bare [2] {
         /// `prov:collection`.
         collection: Collection,
         /// `prov:entity`.

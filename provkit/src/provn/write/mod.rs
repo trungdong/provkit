@@ -218,7 +218,10 @@ fn expression(r: &Record, names: &mut Namespaces, s: &mut String) -> Result<()> 
             parts.push(formal(r, FormalAttr::EndTime, names)?);
         }
     } else {
-        // A relation without an identifier omits `id;` altogether.
+        // A relation without an identifier omits `id;` altogether. A kind
+        // PROV-DM gives no identifier keeps one it carries (a PROV-JSON key
+        // or a hand-built record), so the output reads back equal under
+        // `Profile::Default`.
         if let Some(id) = r.id() {
             let _ = write!(s, "{}; ", name(id, names)?);
         }

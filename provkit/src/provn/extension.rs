@@ -156,11 +156,8 @@ impl Parser<'_> {
 /// Whether `token` is an `identifierOrMarker`: a name, a bare name made of
 /// digits, or `-`.
 fn is_identifier_or_marker(token: &Token) -> bool {
-    match &token.kind {
-        TokenKind::Name { .. } | TokenKind::Marker => true,
-        TokenKind::Int(digits) => !digits.starts_with('-'),
-        _ => false,
-    }
+    matches!(token.kind, TokenKind::Name { .. } | TokenKind::Marker)
+        || token.kind.digit_name().is_some()
 }
 
 /// Check that a level below `depth` fits, before parsing it at `token`.

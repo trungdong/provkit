@@ -31,15 +31,6 @@ fn classify(prefix: &str, local: &str, profile: Profile) -> Option<Kind> {
     accepted.then_some(kind)
 }
 
-/// Whether the grammar gives `kind` neither an identifier nor attributes:
-/// productions [24] to [26].
-fn is_bare_relation(kind: Kind) -> bool {
-    matches!(
-        kind,
-        Kind::Specialization | Kind::Alternate | Kind::Membership
-    )
-}
-
 /// Attach `token`'s position to an error that has none.
 fn at(token: &Token, error: Error) -> Error {
     match error {
@@ -189,13 +180,11 @@ impl<'t> Parser<'t> {
     /// cannot tell that apart from `INT_LITERAL`.
     pub(super) fn identifier(&mut self, what: &str) -> Result<NameParts<'t>> {
         let token = self.peek();
-        if let TokenKind::Int(digits) = &token.kind
-            && !digits.starts_with('-')
-        {
+        if let Some(digits) = token.kind.digit_name() {
             let parts = NameParts {
                 token,
                 prefix: String::new(),
-                local: digits.clone(),
+                local: digits.to_owned(),
             };
             self.bump();
             return Ok(parts);
@@ -344,19 +333,61 @@ impl<'t> Parser<'t> {
 
     /// One statement: a PROV expression, sent to `sink` as a record, or an
     /// extensibility expression, parsed and recorded in `ignored`. A keyword
-    /// with a prefix that names no PROV statement starts an extensibility
-    /// expression (section 5); a bare unknown keyword is a syntax error.
+    /// with a prefix starts an extensibility expression (section 5), except
+    /// `prov:mentionOf` followed by the shape of a mention; a bare unknown
+    /// keyword is a syntax error.
     fn statement(&mut self, sink: &mut impl Sink) -> Result<()> {
-        let is_extension = matches!(
-            &self.peek().kind,
-            TokenKind::Name { prefix, local }
-                if !prefix.is_empty() && classify(prefix, local, self.profile).is_none()
-        );
+        let is_extension = match &self.peek().kind {
+            TokenKind::Name { prefix, .. } if prefix.is_empty() => false,
+            TokenKind::Name { prefix, local } => {
+                !(prefix == "prov" && local == "mentionOf" && self.mention_shape_follows())
+            }
+            _ => false,
+        };
         if is_extension {
             self.extensibility_expression()
         } else {
             let record = self.expression()?;
             sink.record(record)
+        }
+    }
+
+    /// Whether the tokens after the current `prov:mentionOf` have the shape
+    /// of a mention (PROV-LINKS): `(`, three names separated by `,`, then
+    /// `)` or `, [`. [`Profile::Default`] also takes an `identifierOrMarker`
+    /// and `;` before the names. Any other shape is an extensibility
+    /// expression under production [49].
+    fn mention_shape_follows(&self) -> bool {
+        let kind = |i: usize| self.tokens.get(self.pos + i).map(|t| &t.kind);
+        let is_name = |i: usize| {
+            kind(i).is_some_and(|k| matches!(k, TokenKind::Name { .. }) || k.digit_name().is_some())
+        };
+        if kind(1) != Some(&TokenKind::LParen) {
+            return false;
+        }
+        let mut i = 2;
+        if self.profile == Profile::Default
+            && kind(i + 1) == Some(&TokenKind::Semicolon)
+            && (is_name(i) || kind(i) == Some(&TokenKind::Marker))
+        {
+            i += 2;
+        }
+        for position in 0..3 {
+            if position > 0 {
+                if kind(i) != Some(&TokenKind::Comma) {
+                    return false;
+                }
+                i += 1;
+            }
+            if !is_name(i) {
+                return false;
+            }
+            i += 1;
+        }
+        match kind(i) {
+            Some(TokenKind::RParen) => true,
+            Some(TokenKind::Comma) => kind(i + 1) == Some(&TokenKind::LBracket),
+            _ => false,
         }
     }
 
@@ -403,7 +434,7 @@ impl<'t> Parser<'t> {
                         ));
                     }
                 };
-                if self.profile == Profile::Strict && is_bare_relation(kind) {
+                if self.profile == Profile::Strict && kind.is_bare() {
                     return Err(Self::error_at(
                         first.0,
                         format!(
@@ -425,7 +456,9 @@ impl<'t> Parser<'t> {
         while self.peek().kind == TokenKind::Comma {
             self.bump();
             if self.peek().kind == TokenKind::LBracket {
-                if self.profile == Profile::Strict && is_bare_relation(kind) {
+                // Productions [24] to [26] give these relations no attribute
+                // block; PROV-LINKS gives `mentionOf` one.
+                if self.profile == Profile::Strict && kind.is_bare() && kind != Kind::Mention {
                     return Err(Self::error_at(
                         self.peek(),
                         format!(
