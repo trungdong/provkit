@@ -52,10 +52,15 @@ impl Parser<'_> {
     // extensibilityArgument ::= identifierOrMarker | literal | time
     //                         | extensibilityExpression | extensibilityTuple
 
+    /// A nested expression's name has a non-empty prefix, as section 5
+    /// requires of every extensibility expression. A bare name is an
+    /// identifier, so a `(` after it is an error at the `(`.
     fn extensibility_argument(&mut self, depth: usize) -> Result<()> {
         let token = self.peek();
         match &token.kind {
-            TokenKind::Name { .. } if self.peek_next().kind == TokenKind::LParen => {
+            TokenKind::Name { prefix, .. }
+                if !prefix.is_empty() && self.peek_next().kind == TokenKind::LParen =>
+            {
                 enter(depth, token)?;
                 self.bump();
                 self.extensibility_body(depth + 1)
@@ -302,9 +307,9 @@ mod tests {
 
     #[test]
     fn every_argument_form_reads_unresolved() {
-        // Undeclared prefixes, an ill-formed literal, a bare nested name and
-        // every argument production, none of which is checked or built.
-        let body = r#"ex:f(zz:id; zz:a, -, 2011-11-16T16:05:33Z, "s", "s"@en, "x" %% xsd:dateTime, "s" %% 12, 5, -5, 'zz:q', set(1), zz:g(-; 1), (1, {2}), {"k"}, [zz:k="v" %% zz:t, 7=1])"#;
+        // Undeclared prefixes, an ill-formed literal and every argument
+        // production, none of which is checked or built.
+        let body = r#"ex:f(zz:id; zz:a, -, 2011-11-16T16:05:33Z, "s", "s"@en, "x" %% xsd:dateTime, "s" %% 12, 5, -5, 'zz:q', ex:set(1), zz:g(-; 1), (1, {2}), {"k"}, [zz:k="v" %% zz:t, 7=1])"#;
         for profile in [Profile::Strict, Profile::Default] {
             let (doc, ignored) = report(body, profile).unwrap();
             assert!(doc.records.is_empty());
@@ -335,6 +340,10 @@ mod tests {
             ("ex:f(ex:e, (1})", 14),
             ("ex:f(ex:e) ex:g)", 16),
             ("ex:f entity(ex:e)", 6),
+            // A nested expression's name has a prefix; a bare name is an
+            // identifier, which no '(' may follow.
+            ("ex:f(set(1))", 9),
+            ("ex:f({set(1)})", 10),
         ] {
             assert_eq!(
                 syntax_position(report(body, Profile::Default)),
