@@ -268,7 +268,8 @@ mod tests {
             attributes: Attributes::new(),
         }));
         d.records.push(entity_in(ex("e")));
-        d.records.push(entity_in(QName::new("http://other/", "o")));
+        d.records
+            .push(entity_in(QName::new("http://other/", "o").unwrap()));
         let text = json::to_string(&d).unwrap();
         let at = |needle: &str| text.find(needle).unwrap_or_else(|| panic!("no {needle}"));
         assert!(at("\"prefix\"") < at("\"entity\""));
@@ -348,7 +349,7 @@ mod tests {
             Bundle {
                 id: ex("b"),
                 namespaces: ns,
-                records: vec![entity_in(QName::new(iri, local))],
+                records: vec![entity_in(QName::new(iri, local).unwrap())],
             }
         };
         let mut d = Document::new();
@@ -422,10 +423,10 @@ mod tests {
         let mut inner = Namespaces::new();
         inner.declare("ex", "http://shadow.org/").unwrap();
         d.bundles.push(Bundle {
-            id: QName::new("http://shadow.org/", "b"),
+            id: QName::new("http://shadow.org/", "b").unwrap(),
             namespaces: inner,
             records: vec![
-                entity_in(QName::new("http://shadow.org/", "e")),
+                entity_in(QName::new("http://shadow.org/", "e").unwrap()),
                 entity_in(ex("f")),
             ],
         });
@@ -438,7 +439,7 @@ mod tests {
     fn attribute_spelling_an_own_formal_fails_to_write() {
         let mut attributes = Attributes::new();
         attributes.insert(
-            QName::new(crate::well_known::PROV, "activity"),
+            QName::new(crate::well_known::PROV, "activity").unwrap(),
             ex("a2").into(),
         );
         let mut d = Document::new();
@@ -464,13 +465,14 @@ mod tests {
         let mut d = Document::new();
         d.namespaces.declare("default", "http://d.org/").unwrap();
         d.namespaces.set_default("http://example.org/");
-        d.records.push(entity_in(QName::new("http://d.org/", "e")));
+        d.records
+            .push(entity_in(QName::new("http://d.org/", "e").unwrap()));
         let mut inner = Namespaces::new();
         inner.declare("default", "http://b.org/").unwrap();
         d.bundles.push(Bundle {
             id: ex("b"),
             namespaces: inner,
-            records: vec![entity_in(QName::new("http://b.org/", "f"))],
+            records: vec![entity_in(QName::new("http://b.org/", "f").unwrap())],
         });
         let text = json::to_string(&d).unwrap();
         let v: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -500,7 +502,7 @@ mod tests {
         d.bundles.push(Bundle {
             id: ex("b"),
             namespaces: other,
-            records: vec![entity_in(QName::new("http://o.org/", "two"))],
+            records: vec![entity_in(QName::new("http://o.org/", "two").unwrap())],
         });
         let text = json::to_string(&d).unwrap();
         let v: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -515,9 +517,9 @@ mod tests {
             let mut ns = Namespaces::new();
             ns.declare("ex", iri).unwrap();
             Bundle {
-                id: QName::new(iri, "b"),
+                id: QName::new(iri, "b").unwrap(),
                 namespaces: ns,
-                records: vec![entity_in(QName::new(iri, "e"))],
+                records: vec![entity_in(QName::new(iri, "e").unwrap())],
             }
         };
         let mut d = Document::new();
@@ -548,7 +550,7 @@ mod tests {
         d.bundles.insert(
             1,
             Bundle {
-                id: QName::new("http://x.org/", "b"),
+                id: QName::new("http://x.org/", "b").unwrap(),
                 namespaces: third,
                 records: vec![],
             },

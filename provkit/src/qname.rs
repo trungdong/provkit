@@ -5,6 +5,8 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+use crate::{Error, Result, pn};
+
 /// A PROV identifier: a namespace IRI and a local part.
 ///
 /// A name denotes the IRI its two parts join to. Equality, ordering and
@@ -15,9 +17,10 @@ use std::sync::Arc;
 /// ```
 /// use provkit::QName;
 ///
-/// let a = QName::new("http://example.org/", "foo/bar");
-/// let b = QName::new("http://example.org/foo/", "bar");
+/// let a = QName::new("http://example.org/", "foo/bar")?;
+/// let b = QName::new("http://example.org/foo/", "bar")?;
 /// assert_eq!(a, b);
+/// # Ok::<(), provkit::Error>(())
 /// ```
 #[derive(Clone)]
 pub struct QName {
@@ -27,16 +30,42 @@ pub struct QName {
 
 impl QName {
     /// A name in `namespace` with local part `local`.
-    pub fn new(namespace: &str, local: &str) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidQName`] if PROV-N cannot write `local`, even with an
+    /// escape: a space, a control character, one of `{ } < > " | ^ \`
+    /// or a backtick, a `%` not followed by two hex digits, or a first
+    /// character that may only continue a name (`·`, `‿`, `⁀` or a
+    /// combining mark). An empty local part is valid.
+    pub fn new(namespace: &str, local: &str) -> Result<Self> {
         Self::in_namespace(Arc::from(namespace), local)
     }
 
     /// A name that shares `namespace` with the other names built from the
     /// same table.
-    pub(crate) fn in_namespace(namespace: Arc<str>, local: &str) -> Self {
-        QName {
+    ///
+    /// # Errors
+    ///
+    /// As [`new`](Self::new).
+    pub(crate) fn in_namespace(namespace: Arc<str>, local: &str) -> Result<Self> {
+        Self::check_local(local)?;
+        Ok(QName {
             namespace,
             local: local.into(),
+        })
+    }
+
+    /// Every character of `local` has a place in a `PN_LOCAL`, bare or
+    /// after `\`.
+    fn check_local(local: &str) -> Result<()> {
+        let writable = local
+            .char_indices()
+            .all(|(at, c)| pn::local_char(local, at, c).is_some());
+        if writable {
+            Ok(())
+        } else {
+            Err(Error::InvalidQName(local.to_owned()))
         }
     }
 
@@ -135,7 +164,9 @@ pub mod well_known {
         ($($name:ident = $prefix:literal $ns:ident : $local:literal;)*) => {
             $(
                 #[doc = concat!("`", $prefix, ":", $local, "`")]
-                pub static $name: LazyLock<QName> = LazyLock::new(|| QName::new($ns, $local));
+                pub static $name: LazyLock<QName> = LazyLock::new(|| {
+                    QName::new($ns, $local).expect("a well-known local part")
+                });
             )*
         };
     }
@@ -186,13 +217,13 @@ mod tests {
         let b = ns.resolve("b:x").unwrap();
         assert_eq!(a, b);
         assert_eq!(hash(&a), hash(&b));
-        assert_eq!(a, QName::new("http://example.org/", "x"));
+        assert_eq!(a, QName::new("http://example.org/", "x").unwrap());
     }
 
     #[test]
     fn identity_is_the_iri() {
-        let split_late = QName::new("http://example.org/", "foo/bar");
-        let split_early = QName::new("http://example.org/foo/", "bar");
+        let split_late = QName::new("http://example.org/", "foo/bar").unwrap();
+        let split_early = QName::new("http://example.org/foo/", "bar").unwrap();
         assert_eq!(split_late, split_early);
         assert_eq!(hash(&split_late), hash(&split_early));
         assert_eq!(split_late.cmp(&split_early), Ordering::Equal);
@@ -201,27 +232,59 @@ mod tests {
 
         // Past the hash buffer, where the split falls in a later block.
         let long = "x".repeat(150);
-        let long_ns = QName::new(&format!("http://example.org/{long}"), "tail");
-        let long_local = QName::new("http://example.org/", &format!("{long}tail"));
+        let long_ns = QName::new(&format!("http://example.org/{long}"), "tail").unwrap();
+        let long_local = QName::new("http://example.org/", &format!("{long}tail")).unwrap();
         assert_eq!(long_ns, long_local);
         assert_eq!(hash(&long_ns), hash(&long_local));
 
-        let other = QName::new("http://example.org/", "foo/baz");
+        let other = QName::new("http://example.org/", "foo/baz").unwrap();
         assert_ne!(split_late, other);
         assert!(split_late < other && other > split_early);
-        assert!(QName::new("http://a/", "z") < QName::new("http://b/", "a"));
-        assert!(QName::new("http://a/", "b") < QName::new("http://a/b", "c"));
+        assert!(QName::new("http://a/", "z").unwrap() < QName::new("http://b/", "a").unwrap());
+        assert!(QName::new("http://a/", "b").unwrap() < QName::new("http://a/b", "c").unwrap());
         assert!(split_late.is("http://example.org/f", "oo/bar"));
         assert!(!split_late.is("http://example.org/", "foo/ba"));
     }
 
     #[test]
+    fn a_local_part_provn_cannot_write_is_invalid() {
+        let new = |local: &str| QName::new("http://example.org/", local);
+        for local in [
+            "a b", "a\tb", "a\u{7}b", "a{b", "a}b", "a<b", "a>b", "a\"b", "a|b", "a^b", "a\\b",
+            "a`b", "a%", "a%4", "a%zz", "\u{301}a", "\u{B7}a", "\u{2028}",
+        ] {
+            assert!(
+                matches!(new(local), Err(Error::InvalidQName(l)) if l == local),
+                "{local:?}"
+            );
+        }
+        // Escaped characters anywhere, `%XX`, an empty local part and, after
+        // the first character, the rest of `PN_CHARS`.
+        for local in [
+            "",
+            "a=b'c(d)e,f:g-h[i]j.k;l",
+            "-a",
+            ".a",
+            "a.",
+            "a%2Fb",
+            "12",
+            "a\u{301}\u{B7}",
+            "a-",
+            "@a",
+            "_a~b!c$d&e*f+g/h?i#j@k",
+            "é",
+        ] {
+            assert!(new(local).is_ok(), "{local:?}");
+        }
+    }
+
+    #[test]
     fn iri_joins_namespace_and_local() {
-        let a = QName::new("http://example.org/", "e1");
+        let a = QName::new("http://example.org/", "e1").unwrap();
         assert_eq!(a.iri(), "http://example.org/e1");
         assert_eq!(a.to_string(), "http://example.org/e1");
-        assert_ne!(a, QName::new("http://example.org/", "e2"));
-        assert_ne!(a, QName::new("http://other.org/", "e1"));
+        assert_ne!(a, QName::new("http://example.org/", "e2").unwrap());
+        assert_ne!(a, QName::new("http://other.org/", "e1").unwrap());
     }
 
     #[test]

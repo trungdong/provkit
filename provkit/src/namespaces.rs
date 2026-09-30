@@ -152,8 +152,9 @@ impl Namespaces {
     /// - [`Error::UndeclaredPrefix`] if the prefix has no binding.
     /// - [`Error::NoDefaultNamespace`] if the name is bare and no default
     ///   namespace is set.
-    /// - [`Error::InvalidQName`] if the text is empty, starts with `:` or
-    ///   uses the blank-node prefix `_`.
+    /// - [`Error::InvalidQName`] if the text is empty, starts with `:`,
+    ///   uses the blank-node prefix `_`, or has a local part PROV-N cannot
+    ///   write (see [`QName::new`]).
     pub fn resolve(&self, text: &str) -> Result<QName> {
         match text.split_once(':') {
             // `_:` marks a blank node; readers handle it before resolving.
@@ -180,7 +181,7 @@ impl Namespaces {
                 .default
                 .clone()
                 .ok_or_else(|| Error::NoDefaultNamespace(local.into()))?;
-            return Ok(QName::in_namespace(ns, local));
+            return QName::in_namespace(ns, local);
         }
         if prefix == "_" {
             return Err(Error::InvalidQName(format!("{prefix}:{local}")));
@@ -188,7 +189,7 @@ impl Namespaces {
         let ns = self
             .lookup_shared(prefix)
             .ok_or_else(|| Error::UndeclaredPrefix(prefix.into()))?;
-        Ok(QName::in_namespace(ns, local))
+        QName::in_namespace(ns, local)
     }
 
     /// The prefix bound to `namespace`, if any (`prov` and `xsd` included).
@@ -314,14 +315,20 @@ mod tests {
         ns.set_default("http://default.org/");
         assert_eq!(
             ns.resolve("ex:e1").unwrap(),
-            QName::new("http://example.org/", "e1")
+            QName::new("http://example.org/", "e1").unwrap()
         );
         assert_eq!(
             ns.resolve("e1").unwrap(),
-            QName::new("http://default.org/", "e1")
+            QName::new("http://default.org/", "e1").unwrap()
         );
-        assert_eq!(ns.resolve("prov:type").unwrap(), QName::new(PROV, "type"));
-        assert_eq!(ns.resolve("xsd:int").unwrap(), QName::new(XSD, "int"));
+        assert_eq!(
+            ns.resolve("prov:type").unwrap(),
+            QName::new(PROV, "type").unwrap()
+        );
+        assert_eq!(
+            ns.resolve("xsd:int").unwrap(),
+            QName::new(XSD, "int").unwrap()
+        );
     }
 
     #[test]
@@ -337,6 +344,29 @@ mod tests {
         ns.set_default("http://default.org/");
         assert!(matches!(ns.resolve(":e1"), Err(Error::InvalidQName(_))));
         assert!(matches!(ns.resolve(""), Err(Error::InvalidQName(_))));
+    }
+
+    #[test]
+    fn a_local_part_provn_cannot_write_does_not_resolve() {
+        let mut ns = Namespaces::new();
+        ns.declare("ex", "http://example.org/").unwrap();
+        ns.set_default("http://default.org/");
+        for (text, local) in [("ex:a b", "a b"), ("a b", "a b"), ("ex:a%4", "a%4")] {
+            assert!(
+                matches!(ns.resolve(text), Err(Error::InvalidQName(l)) if l == local),
+                "{text:?}"
+            );
+        }
+        assert!(matches!(
+            ns.resolve_parts("ex", "a\tb"),
+            Err(Error::InvalidQName(l)) if l == "a\tb"
+        ));
+        assert_eq!(
+            ns.resolve("ex:").unwrap(),
+            QName::new("http://example.org/", "").unwrap()
+        );
+        // The prefix is looked up before the local part is checked.
+        assert!(matches!(ns.resolve("zz:a b"), Err(Error::UndeclaredPrefix(p)) if p == "zz"));
     }
 
     #[test]
@@ -405,22 +435,34 @@ mod tests {
         let mut ns = Namespaces::new();
         ns.declare("ex", "http://example.org/").unwrap();
         ns.set_default("http://default.org/");
-        assert_eq!(ns.render(&QName::new("http://example.org/", "a")), "ex:a");
-        assert_eq!(ns.render(&QName::new("http://default.org/", "b")), "b");
-        assert_eq!(ns.render(&QName::new(PROV, "type")), "prov:type");
-        assert_eq!(ns.render(&QName::new("http://new/", "c")), "ns1:c");
+        assert_eq!(
+            ns.render(&QName::new("http://example.org/", "a").unwrap()),
+            "ex:a"
+        );
+        assert_eq!(
+            ns.render(&QName::new("http://default.org/", "b").unwrap()),
+            "b"
+        );
+        assert_eq!(ns.render(&QName::new(PROV, "type").unwrap()), "prov:type");
+        assert_eq!(ns.render(&QName::new("http://new/", "c").unwrap()), "ns1:c");
         assert_eq!(ns.iter().count(), 2);
         // A name in the default namespace never mints a prefix.
         let mut plain = Namespaces::new();
         plain.set_default("http://default.org/");
-        assert_eq!(plain.render(&QName::new("http://default.org/", "b")), "b");
+        assert_eq!(
+            plain.render(&QName::new("http://default.org/", "b").unwrap()),
+            "b"
+        );
         assert_eq!(plain.iter().count(), 0);
         // A colon in the local part cannot be written bare.
         assert_eq!(
-            plain.render(&QName::new("http://default.org/", "x:y")),
+            plain.render(&QName::new("http://default.org/", "x:y").unwrap()),
             "ns1:x:y"
         );
-        assert_eq!(plain.render(&QName::new("http://default.org/", "")), "ns1:");
+        assert_eq!(
+            plain.render(&QName::new("http://default.org/", "").unwrap()),
+            "ns1:"
+        );
     }
 
     #[test]
@@ -429,10 +471,10 @@ mod tests {
         ns.declare("ex", "http://example.org/").unwrap();
         ns.set_default("http://default.org/");
         let names = [
-            QName::new("http://example.org/", "a"),
-            QName::new("http://default.org/", "b"),
-            QName::new("http://default.org/", "x:y"),
-            QName::new("http://new/", "c"),
+            QName::new("http://example.org/", "a").unwrap(),
+            QName::new("http://default.org/", "b").unwrap(),
+            QName::new("http://default.org/", "x:y").unwrap(),
+            QName::new("http://new/", "c").unwrap(),
         ];
         for name in &names {
             let rendered = ns.render(name);
@@ -456,11 +498,11 @@ mod tests {
         let merged = bundle.with_fallback(&doc);
         assert_eq!(
             merged.resolve("ex:e").unwrap(),
-            QName::new("http://example.org/", "e")
+            QName::new("http://example.org/", "e").unwrap()
         );
         assert_eq!(
             merged.resolve("b:e").unwrap(),
-            QName::new("http://bundle.org/", "e")
+            QName::new("http://bundle.org/", "e").unwrap()
         );
     }
 
@@ -474,11 +516,11 @@ mod tests {
         let merged = bundle.with_fallback(&doc);
         assert_eq!(
             merged.resolve_parts("", "a:b").unwrap(),
-            QName::new("http://default.org/", "a:b")
+            QName::new("http://default.org/", "a:b").unwrap()
         );
         assert_eq!(
             merged.resolve_parts("a", "b").unwrap(),
-            QName::new("http://bundle.org/", "b")
+            QName::new("http://bundle.org/", "b").unwrap()
         );
         assert!(
             matches!(merged.resolve_parts("zz", "b"), Err(Error::UndeclaredPrefix(p)) if p == "zz")
@@ -504,17 +546,17 @@ mod tests {
         let merged = bundle.with_fallback(&doc);
         assert_eq!(
             merged.resolve("ex:e").unwrap(),
-            QName::new("http://bundle.org/", "e")
+            QName::new("http://bundle.org/", "e").unwrap()
         );
         assert_eq!(
             merged.resolve("e").unwrap(),
-            QName::new("http://doc-default.org/", "e")
+            QName::new("http://doc-default.org/", "e").unwrap()
         );
         let mut own_default = Namespaces::new();
         own_default.set_default("http://bundle-default.org/");
         assert_eq!(
             own_default.with_fallback(&doc).resolve("e").unwrap(),
-            QName::new("http://bundle-default.org/", "e")
+            QName::new("http://bundle-default.org/", "e").unwrap()
         );
     }
 

@@ -261,7 +261,7 @@ fn from_parts_rejects_bad_parts() {
 
 #[test]
 fn attribute_named_after_an_own_formal_is_rejected() {
-    let prov = |l: &str| QName::new(PROV, l);
+    let prov = |l: &str| QName::new(PROV, l).unwrap();
     let mut clash = Attributes::new();
     clash.insert(prov("activity"), Value::QName(q("a2")));
     let e = Record::from_parts(Kind::Generation, None, vec![], clash).unwrap_err();
@@ -364,7 +364,7 @@ fn formal_ref_to_owned_copies_the_value() {
 #[cfg(any(feature = "json", feature = "provn"))]
 #[test]
 fn check_attributes_rejects_a_hand_built_own_formal() {
-    let prov = |l: &str| QName::new(PROV, l);
+    let prov = |l: &str| QName::new(PROV, l).unwrap();
     let usage = |name: QName| {
         let mut attributes = Attributes::new();
         attributes.insert(name, Value::QName(q("x")));

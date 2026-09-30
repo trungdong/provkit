@@ -209,7 +209,7 @@ mod tests {
         json::read(json).unwrap()
     }
     fn ex(l: &str) -> QName {
-        QName::new("http://example.org/", l)
+        QName::new("http://example.org/", l).unwrap()
     }
     const PFX: &str =
         r#""prefix": {"ex": "http://example.org/", "default": "http://default.org/"}"#;
@@ -344,7 +344,7 @@ mod tests {
         assert!(matches!(&d.records[1], Record::Membership(m) if m.entity == Some(ex("a"))));
         assert!(matches!(&d.records[2], Record::Membership(m) if m.entity == Some(ex("b"))));
         assert!(
-            matches!(&d.records[3], Record::Activity(a) if a.id == QName::new("http://default.org/", "a1"))
+            matches!(&d.records[3], Record::Activity(a) if a.id == QName::new("http://default.org/", "a1").unwrap())
         );
     }
 
@@ -414,9 +414,6 @@ mod tests {
             ("abc", "xsd:int"),
             ("maybe", "xsd:boolean"),
             ("1,5", "xsd:decimal"),
-            ("ex:a b", "xsd:QName"),
-            ("_:b", "prov:QUALIFIED_NAME"),
-            ("", "prov:QUALIFIED_NAME"),
         ];
         let body: Vec<String> = literals
             .iter()
@@ -447,29 +444,53 @@ mod tests {
     }
 
     #[test]
-    fn a_name_that_cannot_be_written_in_provn_stays_a_literal() {
-        // With a default namespace too, the text is not a qualified name.
-        let d = doc(&entity(
-            r#""ex:k": {"$": "not a name", "type": "prov:QUALIFIED_NAME"}"#,
-        ));
-        assert!(matches!(
-            &values(&d, "k")[0],
-            Value::Typed { lexical, datatype }
-                if lexical == "not a name" && *datatype == *PROV_QUALIFIED_NAME
-        ));
-        #[cfg(feature = "provn")]
-        {
-            let provn = crate::provn::to_string(&d).unwrap();
-            assert!(
-                provn.contains(r#"ex:k="not a name" %% prov:QUALIFIED_NAME"#),
-                "{provn}"
-            );
-            assert_eq!(crate::provn::read(&provn).unwrap(), d);
+    fn a_name_that_cannot_be_written_in_provn_is_rejected() {
+        // Each position a name appears in, with `@N@` for the name.
+        let positions = [
+            r#"{{PFX}, "entity": {"@N@": {}}}"#,
+            r#"{{PFX}, "bundle": {"@N@": {}}}"#,
+            r#"{{PFX}, "entity": {"ex:e": {"@N@": "v"}}}"#,
+            r#"{{PFX}, "used": {"_:u": {"prov:entity": "@N@"}}}"#,
+            r#"{{PFX}, "hadMember": {"ex:m": {"prov:collection": "ex:c", "prov:entity": ["ex:a", "@N@"]}}}"#,
+            r#"{{PFX}, "entity": {"ex:e": {"ex:k": {"$": "v", "type": "@N@"}}}}"#,
+            r#"{{PFX}, "entity": {"ex:e": {"ex:k": {"$": "@N@", "type": "xsd:QName"}}}}"#,
+            r#"{{PFX}, "entity": {"ex:e": {"ex:k": {"$": "@N@", "type": "prov:QUALIFIED_NAME"}}}}"#,
+        ];
+        // The name as written and the local part the error carries.
+        let names = [
+            ("ex:a b", "a b"),
+            ("ex:a%4", "a%4"),
+            ("ex:a\\u0007b", "a\u{7}b"),
+            ("ex:<a>", "<a>"),
+            ("a b", "a b"),
+            ("not a name", "not a name"),
+            ("prov:agent ", "agent "),
+        ];
+        for position in positions {
+            for (name, local) in names {
+                let text = position.replace("{PFX}", PFX).replace("@N@", name);
+                assert!(
+                    matches!(
+                        json::read(&text),
+                        Err(Error::InvalidQName(l)) if l == local
+                    ),
+                    "{text}"
+                );
+            }
         }
+        // An empty local part after a prefix stays valid.
+        let d = doc(&entity(
+            r#""ex:k": {"$": "ex:", "type": "prov:QUALIFIED_NAME"}"#,
+        ));
+        assert_eq!(values(&d, "k"), [Value::QName(ex(""))]);
         // Text that is a qualified name must resolve.
         assert!(matches!(
             json::read(&entity(r#""ex:k": {"$": "zz:foo", "type": "prov:QUALIFIED_NAME"}"#)),
             Err(Error::UndeclaredPrefix(p)) if p == "zz"
+        ));
+        assert!(matches!(
+            json::read(&entity(r#""ex:k": {"$": "", "type": "xsd:QName"}"#)),
+            Err(Error::InvalidQName(t)) if t.is_empty()
         ));
     }
 
@@ -741,7 +762,7 @@ mod tests {
         assert_eq!(d.bundles[0].id, ex("b"));
         assert_eq!(
             d.bundles[0].records[0].id(),
-            Some(&QName::new("http://b.org/", "e"))
+            Some(&QName::new("http://b.org/", "e").unwrap())
         );
         assert_eq!(d.bundles[0].records[1].id(), Some(&ex("f")));
         assert_eq!(d.bundles[0].namespaces.iter().count(), 1);
@@ -831,7 +852,7 @@ mod tests {
         );
         assert_eq!(
             d.bundles[0].records[0].id(),
-            Some(&QName::new("http://shadow.org/", "e"))
+            Some(&QName::new("http://shadow.org/", "e").unwrap())
         );
     }
 
@@ -839,10 +860,13 @@ mod tests {
     fn bundle_id_resolves_in_bundle_scope() {
         let d = doc(r#"{"prefix": {"ex": "http://example.org/"},
             "bundle": {"ex:b": {"prefix": {"ex": "http://shadow.org/"}, "entity": {"ex:e": {}}}}}"#);
-        assert_eq!(d.bundles[0].id, QName::new("http://shadow.org/", "b"));
+        assert_eq!(
+            d.bundles[0].id,
+            QName::new("http://shadow.org/", "b").unwrap()
+        );
         assert_eq!(
             d.bundles[0].records[0].id(),
-            Some(&QName::new("http://shadow.org/", "e"))
+            Some(&QName::new("http://shadow.org/", "e").unwrap())
         );
     }
 

@@ -23,21 +23,37 @@ follows [Semantic Versioning](https://semver.org/).
     Its `Hash` sorts the per-pair hashes, `Attributes::remove` keeps the order
     of the rest, and it implements `FromIterator`, `Extend` and `IntoIterator`
     (owned and by reference).
-  - Strict name resolution with `QName` and `Namespaces`.
+  - Strict name resolution with `QName` and `Namespaces`. `QName::new`
+    returns `Result` and rejects a local part PROV-N cannot write, even
+    with an escape (a space, a control character, one of `{ } < > " | ^ \`
+    or a backtick, a `%` not followed by two hex digits, or a first
+    character that may only continue a name), with `Error::InvalidQName`.
+    Every name the readers build goes through the same check.
   - `Value` with plain, language-tagged, name, `dateTime` and typed literals.
-    No typed literal is rejected for its text. `Value::typed` and both readers
-    keep an ill-formed one as `Value::Typed`, and each value is written with
-    the text it was read with. A `dateTime` in a formal position must still
-    parse, and `Value::typed` still refuses a qualified-name datatype.
+    No typed literal is rejected for its text, except under a qualified-name
+    datatype. `Value::typed` and both readers keep an ill-formed one as
+    `Value::Typed`, and each value is written with the text it was read
+    with. A `dateTime` in a formal position must still parse, and
+    `Value::typed` still refuses a qualified-name datatype.
   - `Value` compares and hashes by value under one datatype. Spellings of
     one integer (`"5"`, `" 5 "`, `"+5"`, `"005"`), decimal, `xsd:double`,
     `xsd:float` or `xsd:boolean` are equal, so `Attributes` keeps one pair
     for them and `Document` equality ignores the spelling. Ill-formed text
     and every other datatype compare by text, and values of different
     datatypes are never equal.
-  - Both readers keep a qualified-name literal (`xsd:QName`,
-    `prov:QUALIFIED_NAME`) whose text spells no qualified name as
-    `Value::Typed`. Text that spells one must resolve, as before.
+  - Both readers resolve every qualified-name literal (`xsd:QName`,
+    `prov:QUALIFIED_NAME`) to a `Value::QName`. Text that spells no
+    qualified name, or one whose local part PROV-N cannot write, is
+    `Error::InvalidQName`; an undeclared prefix or a bare name with no
+    default namespace is an error as before.
+  - Both readers reject a name whose local part PROV-N cannot write
+    wherever a name appears: a PROV-JSON record, bundle or attribute key, a
+    name formal, a member of `hadMember`, a datatype, and the text of a
+    qualified-name literal. The PROV-N lexer already accepts no such name.
+  - The PROV-JSON reader reads a formal written as a value object only when
+    it has no `lang` and its `type` resolves to `xsd:QName` or
+    `prov:QUALIFIED_NAME` for a name, or to `xsd:dateTime` for a time. Any
+    other shape is `Error::JsonStructure` naming the formal.
   - `LangStr::new` accepts a tag of the grammar's `LANGTAG` shape, letters
     then any number of `-` and letters or digits, with no limit on the length
     of a subtag.

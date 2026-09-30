@@ -657,7 +657,7 @@ mod tests {
     }
 
     fn ex(l: &str) -> QName {
-        QName::new("http://example.org/", l)
+        QName::new("http://example.org/", l).unwrap()
     }
 
     fn syntax_message(e: Error) -> String {
@@ -728,7 +728,7 @@ mod tests {
             matches!(&d.records[1], Record::Activity(a) if a.start_time.is_some() && a.end_time.is_none())
         );
         assert!(
-            matches!(&d.records[2], Record::Generation(g) if g.id == Some(ex("g1")) && g.activity == Some(QName::new("http://default.org/", "a1")))
+            matches!(&d.records[2], Record::Generation(g) if g.id == Some(ex("g1")) && g.activity == Some(QName::new("http://default.org/", "a1").unwrap()))
         );
         assert!(
             matches!(&d.records[3], Record::Generation(g) if g.id.is_none() && g.activity.is_none())
@@ -1093,10 +1093,10 @@ mod tests {
         let d = doc("entity(123, [])\nwasDerivedFrom(ex:a, 42)", Profile::Strict);
         assert_eq!(
             d.records[0].id(),
-            Some(&QName::new("http://default.org/", "123"))
+            Some(&QName::new("http://default.org/", "123").unwrap())
         );
         assert!(
-            matches!(&d.records[1], Record::Derivation(r) if r.used_entity == Some(QName::new("http://default.org/", "42")))
+            matches!(&d.records[1], Record::Derivation(r) if r.used_entity == Some(QName::new("http://default.org/", "42").unwrap()))
         );
     }
 
@@ -1105,7 +1105,7 @@ mod tests {
         let d = doc(r"entity(ex\:e1)", Profile::Strict);
         assert_eq!(
             d.records[0].id(),
-            Some(&QName::new("http://default.org/", "ex:e1"))
+            Some(&QName::new("http://default.org/", "ex:e1").unwrap())
         );
     }
 
@@ -1129,6 +1129,38 @@ mod tests {
     }
 
     #[test]
+    fn a_qualified_name_literal_whose_text_is_not_a_name_is_an_error() {
+        for (literal, local) in [
+            (r#""not a name" %% prov:QUALIFIED_NAME"#, "not a name"),
+            (r#""ex:a b" %% xsd:QName"#, "a b"),
+            (r#""ex:a%4" %% xsd:QName"#, "a%4"),
+            (r#""" %% xsd:QName"#, ""),
+        ] {
+            let (position, inner) = located(err(
+                &format!("entity(ex:e, [ex:a={literal}])"),
+                Profile::Strict,
+            ));
+            assert_eq!(position, (4, 20), "{literal}");
+            assert!(
+                matches!(&inner, Error::InvalidQName(l) if l == local),
+                "{literal}: {inner:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_local_part_provn_cannot_write_is_a_syntax_error() {
+        // The lexer ends a name at a `%` without two hex digits and takes
+        // no `\u` escape in a name, so neither reaches the resolver.
+        for body in [r"entity(ex:a%4)", r"entity(ex:a\u00E9)", "entity(ex:a b)"] {
+            assert!(
+                matches!(err(body, Profile::Strict), Error::Syntax { .. }),
+                "{body}"
+            );
+        }
+    }
+
+    #[test]
     fn ill_formed_literals_read_and_round_trip() {
         let literals = [
             (
@@ -1139,8 +1171,6 @@ mod tests {
             (r#""abc" %% xsd:int"#, "abc"),
             (r#""maybe" %% xsd:boolean"#, "maybe"),
             (r#""1,5" %% xsd:decimal"#, "1,5"),
-            (r#""not a name" %% prov:QUALIFIED_NAME"#, "not a name"),
-            (r#""ex:a b" %% xsd:QName"#, "ex:a b"),
         ];
         let pairs: Vec<String> = literals
             .iter()
@@ -1268,7 +1298,7 @@ mod tests {
         assert_eq!(d.bundles[0].id, ex("b"));
         assert_eq!(
             d.bundles[0].records[0].id(),
-            Some(&QName::new("http://b.org/", "e"))
+            Some(&QName::new("http://b.org/", "e").unwrap())
         );
         assert_eq!(d.bundles[0].records[1].id(), Some(&ex("f")));
         assert_eq!(d.bundles[0].namespaces.iter().count(), 1);
@@ -1280,10 +1310,13 @@ mod tests {
             "bundle ex:b\n  prefix ex <http://bundle.org/>\n  entity(ex:e)\nendBundle\nentity(ex:e)",
             Profile::Default,
         );
-        assert_eq!(d.bundles[0].id, QName::new("http://bundle.org/", "b"));
+        assert_eq!(
+            d.bundles[0].id,
+            QName::new("http://bundle.org/", "b").unwrap()
+        );
         assert_eq!(
             d.bundles[0].records[0].id(),
-            Some(&QName::new("http://bundle.org/", "e"))
+            Some(&QName::new("http://bundle.org/", "e").unwrap())
         );
         // The bundle's declarations end with the bundle.
         assert_eq!(d.records[0].id(), Some(&ex("e")));

@@ -14,7 +14,7 @@ pub(crate) fn hash<T: Hash>(value: &T) -> u64 {
 
 /// A name in `http://example.org/`.
 pub(crate) fn q(local: &str) -> QName {
-    QName::new("http://example.org/", local)
+    QName::new("http://example.org/", local).unwrap()
 }
 
 /// An entity with no attributes.

@@ -491,6 +491,8 @@ fn compare_empty_bundle_against_none_prints_only_the_heading() {
         .stderr("");
 }
 
+/// A name in a namespace whose IRI PROV-N cannot write. Every local part
+/// is one PROV-N can write, because the readers accept no other.
 #[test]
 fn compare_marks_records_prov_n_cannot_write() {
     let dir = scratch("compare_marks_records_prov_n_cannot_write");
@@ -498,10 +500,10 @@ fn compare_marks_records_prov_n_cannot_write() {
     let b = dir.join("b.json");
     std::fs::write(
         &a,
-        r#"{"prefix": {"ex": "http://example.org/"},
-            "entity": {"ex:my entity": {}, "ex:e": {"ex:my attr": "v"}, "ex:f": {"ex:a": {"$": "x", "type": "ex:my type"}}},
-            "used": {"_:u": {"prov:activity": "ex:my activity"}},
-            "bundle": {"ex:my bundle": {"entity": {"ex:inner": {}}}}}"#,
+        r#"{"prefix": {"ex": "http://example.org/", "bad": "http://x.org/my ns/"},
+            "entity": {"bad:entity": {}, "ex:e": {"bad:attr": "v"}, "ex:f": {"ex:a": {"$": "x", "type": "bad:type"}}},
+            "used": {"_:u": {"prov:activity": "bad:activity"}},
+            "bundle": {"bad:bundle": {"entity": {"ex:inner": {}}}}}"#,
     )
     .unwrap();
     std::fs::write(&b, r#"{"prefix": {"ex": "http://example.org/"}}"#).unwrap();
@@ -513,11 +515,11 @@ fn compare_marks_records_prov_n_cannot_write() {
         .code(1)
         .stdout(format!(
             "only in {}:\n  \
-             entity(<http://example.org/my entity>) // not valid PROV-N\n  \
-             entity(ex:e, [<http://example.org/my attr>]) // not valid PROV-N\n  \
-             entity(ex:f, [<http://example.org/my type>]) // not valid PROV-N\n  \
-             used(<http://example.org/my activity>) // not valid PROV-N\n  \
-             bundle <http://example.org/my bundle>: // not valid PROV-N\n    \
+             entity(<http://x.org/my ns/entity>) // not valid PROV-N\n  \
+             entity(ex:e, [<http://x.org/my ns/attr>]) // not valid PROV-N\n  \
+             entity(ex:f, [<http://x.org/my ns/type>]) // not valid PROV-N\n  \
+             used(<http://x.org/my ns/activity>) // not valid PROV-N\n  \
+             bundle <http://x.org/my ns/bundle>: // not valid PROV-N\n    \
              entity(ex:inner)\n",
             a.display()
         ))

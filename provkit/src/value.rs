@@ -8,7 +8,7 @@ use crate::well_known::{
     XSD_NON_POSITIVE_INTEGER, XSD_POSITIVE_INTEGER, XSD_QNAME, XSD_SHORT, XSD_STRING,
     XSD_UNSIGNED_BYTE, XSD_UNSIGNED_INT, XSD_UNSIGNED_LONG, XSD_UNSIGNED_SHORT,
 };
-use crate::{DateTime, Error, Namespaces, QName, Result, pn};
+use crate::{DateTime, Error, Namespaces, QName, Result};
 
 /// A string with a language tag.
 ///
@@ -193,22 +193,20 @@ impl Value {
     }
 
     /// The rule both readers use for `"lexical" %% datatype` and
-    /// `{"$": lexical, "type": datatype}`. Under a qualified-name datatype,
-    /// text that spells a qualified name resolves in `names` to a
-    /// [`Value::QName`], and any other text is kept as written. Every other
+    /// `{"$": lexical, "type": datatype}`. Under a qualified-name datatype
+    /// the text resolves in `names` to a [`Value::QName`]. Every other
     /// datatype goes through [`Value::typed`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Namespaces::resolve`] for a qualified-name datatype.
     // Only the readers call this, and both are feature-gated.
     #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
     pub(crate) fn typed_in(names: &Namespaces, lexical: &str, datatype: QName) -> Result<Self> {
-        if !is_qname_datatype(&datatype) {
-            Value::typed(lexical, datatype)
-        } else if pn::is_qualified_name(lexical) {
-            Ok(Value::QName(names.resolve(lexical)?))
+        if is_qname_datatype(&datatype) {
+            names.resolve(lexical).map(Value::QName)
         } else {
-            Ok(Value::Typed {
-                lexical: lexical.to_owned(),
-                datatype,
-            })
+            Value::typed(lexical, datatype)
         }
     }
 
@@ -226,7 +224,7 @@ impl Value {
     }
 
     /// False for a `Typed` that another variant owns: an `xsd:string`, a
-    /// well-formed `xsd:dateTime` or a well-formed qualified name. The
+    /// well-formed `xsd:dateTime` or a qualified-name datatype. The
     /// writers assert this in debug builds.
     // Only the writers call this, and both are feature-gated.
     #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
@@ -234,13 +232,9 @@ impl Value {
         let Value::Typed { lexical, datatype } = self else {
             return true;
         };
-        let folded = if *datatype == *XSD_STRING {
-            true
-        } else if *datatype == *XSD_DATETIME {
-            DateTime::parse(lexical).is_ok()
-        } else {
-            is_qname_datatype(datatype) && pn::is_qualified_name(lexical)
-        };
+        let folded = *datatype == *XSD_STRING
+            || is_qname_datatype(datatype)
+            || (*datatype == *XSD_DATETIME && DateTime::parse(lexical).is_ok());
         !folded
     }
 }
@@ -708,7 +702,7 @@ mod tests {
             &["2012-13-01T00:00:00", "2012-13-01T00:00:00 "],
         );
         // Other datatypes have no value space here, so text is compared as written.
-        let any_uri = QName::new(crate::well_known::XSD, "anyURI");
+        let any_uri = QName::new(crate::well_known::XSD, "anyURI").unwrap();
         assert_distinct_values(&any_uri, &["5", " 5 ", "05"]);
     }
 
@@ -726,7 +720,7 @@ mod tests {
             typed("2011-11-16T16:05:33Z", &XSD_DATETIME)
         );
         // The datatype is compared as a name: by its IRI, however it is split.
-        let split = QName::new("http://www.w3.org/2001/", "XMLSchema#int");
+        let split = QName::new("http://www.w3.org/2001/", "XMLSchema#int").unwrap();
         assert_one_value(&split, &["5", " 005 "]);
         assert_eq!(typed("+5", &split), typed("5", &XSD_INT));
         assert_eq!(hash(&typed("+5", &split)), hash(&typed("5", &XSD_INT)));
@@ -783,7 +777,7 @@ mod tests {
     #[test]
     fn typed_in_resolves_qualified_names_and_delegates_the_rest() {
         let ns = example_names();
-        let foo = QName::new("http://example.org/", "foo");
+        let foo = QName::new("http://example.org/", "foo").unwrap();
         for datatype in [XSD_QNAME.clone(), PROV_QUALIFIED_NAME.clone()] {
             assert_eq!(
                 Value::typed_in(&ns, "ex:foo", datatype).unwrap(),
@@ -805,32 +799,46 @@ mod tests {
     }
 
     #[test]
-    fn typed_in_keeps_text_that_is_not_a_qualified_name() {
+    fn typed_in_rejects_text_that_is_not_a_qualified_name() {
         let mut with_default = example_names();
         with_default.set_default("http://default.org/");
-        for ns in [example_names(), with_default] {
-            for datatype in [XSD_QNAME.clone(), PROV_QUALIFIED_NAME.clone()] {
-                for text in [
-                    "not a name",
-                    "",
-                    ":foo",
-                    "_:foo",
-                    "1x:foo",
-                    "ex:a b",
-                    "ex:a\\.b",
-                    "ex:a%",
-                    "ex:<a>",
-                    "ex:\u{301}a",
-                ] {
-                    let value = Value::typed_in(&ns, text, datatype.clone()).unwrap();
+        for datatype in [XSD_QNAME.clone(), PROV_QUALIFIED_NAME.clone()] {
+            // Text no table resolves.
+            for ns in [&example_names(), &with_default] {
+                for text in ["", ":foo", "_:foo"] {
                     assert!(
-                        matches!(&value, Value::Typed { lexical, datatype: d }
-                            if lexical == text && *d == datatype),
-                        "{text:?}: {value:?}"
+                        matches!(
+                            Value::typed_in(ns, text, datatype.clone()),
+                            Err(Error::InvalidQName(t)) if t == text
+                        ),
+                        "{text:?}"
                     );
-                    assert!(value.has_one_representation());
                 }
             }
+            // A local part PROV-N cannot write, under a prefix or bare.
+            for local in ["a b", "a\\.b", "a%", "<a>", "\u{301}a"] {
+                assert!(
+                    matches!(
+                        Value::typed_in(&with_default, &format!("ex:{local}"), datatype.clone()),
+                        Err(Error::InvalidQName(l)) if l == local
+                    ),
+                    "{local:?}"
+                );
+            }
+            assert!(matches!(
+                Value::typed_in(&with_default, "not a name", datatype.clone()),
+                Err(Error::InvalidQName(l)) if l == "not a name"
+            ));
+            // A prefix that is not a `PN_PREFIX` can never be declared.
+            assert!(matches!(
+                Value::typed_in(&with_default, "1x:foo", datatype.clone()),
+                Err(Error::UndeclaredPrefix(p)) if p == "1x"
+            ));
+            // Without a default namespace, bare text fails on that first.
+            assert!(matches!(
+                Value::typed_in(&example_names(), "not a name", datatype),
+                Err(Error::NoDefaultNamespace(l)) if l == "not a name"
+            ));
         }
     }
 
@@ -848,7 +856,7 @@ mod tests {
             ));
         }
         // The text spells the name as the model holds it, without escapes.
-        let name = |local: &str| Value::QName(QName::new("http://example.org/", local));
+        let name = |local: &str| Value::QName(QName::new("http://example.org/", local).unwrap());
         for local in ["a=b", "a:b", "a.b.", "-a", "a(1)", "a%2Fb", "12", ""] {
             assert_eq!(
                 Value::typed_in(&ns, &format!("ex:{local}"), XSD_QNAME.clone()).unwrap(),
@@ -868,9 +876,8 @@ mod tests {
             Value::typed("x", XSD_STRING.clone()).unwrap(),
             Value::typed("2011-11-16T16:05:33Z", XSD_DATETIME.clone()).unwrap(),
             Value::typed("nope", XSD_DATETIME.clone()).unwrap(),
-            Value::typed("x", QName::new("http://example.org/", "dt")).unwrap(),
+            Value::typed("x", QName::new("http://example.org/", "dt").unwrap()).unwrap(),
             Value::typed_in(&ns, "ex:foo", XSD_QNAME.clone()).unwrap(),
-            Value::typed_in(&ns, "not a name", XSD_QNAME.clone()).unwrap(),
         ];
         assert!(values.iter().all(Value::has_one_representation));
         // The shapes no constructor builds.
@@ -883,6 +890,7 @@ mod tests {
             typed("2011-11-16T16:05:33Z", &XSD_DATETIME),
             typed("ex:foo", &XSD_QNAME),
             typed("foo", &PROV_QUALIFIED_NAME),
+            typed("not a name", &XSD_QNAME),
         ] {
             assert!(!folded.has_one_representation(), "{folded:?}");
         }

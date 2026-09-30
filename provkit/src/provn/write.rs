@@ -96,7 +96,7 @@ pub fn statement(record: &Record, namespaces: &Namespaces) -> Result<String> {
 ///
 /// let mut names = Namespaces::new();
 /// names.declare("ex", "http://example.org/").unwrap();
-/// let id = QName::new("http://example.org/", "b1");
+/// let id = QName::new("http://example.org/", "b1")?;
 /// assert_eq!(provn::statement_name(&id, &names)?, "ex:b1");
 /// # Ok::<(), provkit::Error>(())
 /// ```
@@ -364,7 +364,7 @@ mod tests {
     };
 
     fn ex(l: &str) -> QName {
-        QName::new("http://example.org/", l)
+        QName::new("http://example.org/", l).unwrap()
     }
 
     fn dt() -> DateTime {
@@ -409,13 +409,13 @@ mod tests {
         d.records.push(
             Record::from_parts(
                 Kind::Activity,
-                Some(QName::new("http://default.org/", "a1")),
+                Some(QName::new("http://default.org/", "a1").unwrap()),
                 vec![(F::StartTime, Formal::Time(dt()))],
                 Attributes::new(),
             )
             .unwrap(),
         );
-        let a1 = QName::new("http://default.org/", "a1");
+        let a1 = QName::new("http://default.org/", "a1").unwrap();
         d.records.push(relation(
             Kind::Generation,
             Some(ex("g1")),
@@ -599,7 +599,7 @@ endDocument
         let mut d = Document::new();
         d.records.push(element(
             Kind::Entity,
-            QName::new("http://new.org/", "e"),
+            QName::new("http://new.org/", "e").unwrap(),
             Attributes::new(),
         ));
         let before = d.namespaces.clone();
@@ -616,7 +616,7 @@ endDocument
         d.namespaces.set_default("http://default.org/");
         d.records.push(element(
             Kind::Entity,
-            QName::new("http://default.org/", "e"),
+            QName::new("http://default.org/", "e").unwrap(),
             Attributes::new(),
         ));
         assert_eq!(
@@ -655,10 +655,14 @@ endDocument
         let mut inner = Namespaces::new();
         inner.declare("ex", bundle_ns).unwrap();
         d.bundles.push(Bundle {
-            id: QName::new(bundle_ns, "b"),
+            id: QName::new(bundle_ns, "b").unwrap(),
             namespaces: inner,
             records: vec![
-                element(Kind::Entity, QName::new(bundle_ns, "in"), Attributes::new()),
+                element(
+                    Kind::Entity,
+                    QName::new(bundle_ns, "in").unwrap(),
+                    Attributes::new(),
+                ),
                 element(Kind::Entity, ex("out"), Attributes::new()),
             ],
         });
@@ -689,7 +693,7 @@ endDocument
             namespaces: Namespaces::new(),
             records: vec![element(
                 Kind::Entity,
-                QName::new("http://default.org/", "e"),
+                QName::new("http://default.org/", "e").unwrap(),
                 Attributes::new(),
             )],
         });
@@ -738,7 +742,7 @@ endDocument
         let mut d = document(vec![]);
         d.namespaces.set_default(default);
         for ns in ["http://example.org/", default] {
-            let n = QName::new(ns, local);
+            let n = QName::new(ns, local).unwrap();
             let mut a = Attributes::new();
             a.insert(n.clone(), Value::QName(n.clone()));
             a.insert(ex("t"), Value::typed("x", n.clone()).unwrap());
@@ -849,7 +853,7 @@ endDocument
             crate::well_known::XSD_STRING.clone(),
             crate::well_known::XSD_DATETIME.clone(),
             crate::well_known::XSD_DOUBLE.clone(),
-            QName::new(crate::well_known::XSD, "anyURI"),
+            QName::new(crate::well_known::XSD, "anyURI").unwrap(),
             ex("dt"),
         ];
         for lexical in sample_texts() {
@@ -864,51 +868,55 @@ endDocument
     }
 
     #[test]
-    fn a_qualified_name_literal_is_a_name_exactly_when_provn_can_write_it() {
+    fn a_qualified_name_literal_resolves_exactly_when_provn_can_write_it() {
         let names = document(vec![]).namespaces;
-        let (mut resolved, mut kept) = (0, 0);
+        let (mut resolved, mut rejected) = (0, 0);
         for local in sample_texts() {
             let text = format!("ex:{local}");
-            let writable = provn::statement_name(&ex(&local), &names).is_ok();
-            let value = Value::typed_in(&names, &text, XSD_QNAME.clone()).unwrap();
-            match &value {
-                Value::QName(q) => {
+            let writable = local
+                .char_indices()
+                .all(|(at, c)| crate::pn::local_char(&local, at, c).is_some());
+            match Value::typed_in(&names, &text, XSD_QNAME.clone()) {
+                Ok(Value::QName(q)) => {
                     assert!(writable, "{text:?}");
-                    assert_eq!(*q, ex(&local));
+                    assert_eq!(q, ex(&local));
+                    assert!(provn::statement_name(&q, &names).is_ok(), "{text:?}");
+                    // It is written, and reads back equal from both formats.
+                    let mut a = Attributes::new();
+                    a.insert(ex("v"), Value::QName(q));
+                    let d = document(vec![element(Kind::Entity, ex("e"), a)]);
+                    assert!(written_reads_back(&d), "{text:?}");
+                    #[cfg(feature = "json")]
+                    {
+                        let json = crate::json::to_string(&d).unwrap();
+                        assert_eq!(crate::json::read(&json).unwrap(), d, "{json}");
+                    }
                     resolved += 1;
                 }
-                Value::Typed { lexical, .. } => {
+                Err(Error::InvalidQName(l)) => {
                     assert!(!writable, "{text:?}");
-                    assert_eq!(*lexical, text);
-                    kept += 1;
+                    assert_eq!(l, local);
+                    rejected += 1;
                 }
                 other => panic!("{text:?}: {other:?}"),
             }
-            // Either way it is written, and reads back equal from both formats.
-            let mut a = Attributes::new();
-            a.insert(ex("v"), value);
-            let d = document(vec![element(Kind::Entity, ex("e"), a)]);
-            assert!(written_reads_back(&d), "{text:?}");
-            #[cfg(feature = "json")]
-            {
-                let json = crate::json::to_string(&d).unwrap();
-                assert_eq!(crate::json::read(&json).unwrap(), d, "{json}");
-            }
         }
-        assert!(resolved > 1000 && kept > 100, "{resolved} {kept}");
+        assert!(resolved > 1000 && rejected > 100, "{resolved} {rejected}");
     }
 
     #[test]
     fn whatever_the_writer_accepts_reads_back_equal() {
         let chars = palette();
         let locals = sample_texts();
+        // Every name that can be built is written, and reads back equal.
         let (mut accepted, mut rejected) = (0, 0);
         for local in &locals {
-            if written_reads_back(&every_position(local)) {
-                accepted += 1;
-            } else {
+            if QName::new("http://example.org/", local).is_err() {
                 rejected += 1;
+                continue;
             }
+            assert!(written_reads_back(&every_position(local)), "{local:?}");
+            accepted += 1;
         }
         assert!(accepted > 1000 && rejected > 100, "{accepted} {rejected}");
 
@@ -932,7 +940,7 @@ endDocument
             let mut minted = Document::new();
             minted.records.push(element(
                 Kind::Entity,
-                QName::new(iri.as_str(), "e"),
+                QName::new(iri.as_str(), "e").unwrap(),
                 Attributes::new(),
             ));
             written_reads_back(&minted);
@@ -948,7 +956,7 @@ endDocument
                 {
                     declared.records.push(element(
                         Kind::Entity,
-                        QName::new("http://p.org/", "e"),
+                        QName::new("http://p.org/", "e").unwrap(),
                         Attributes::new(),
                     ));
                     written_reads_back(&declared);
@@ -963,43 +971,6 @@ endDocument
             Err(Error::Unwritable { name, reason }) => (name, reason),
             other => panic!("expected Error::Unwritable, got {other:?}"),
         }
-    }
-
-    #[test]
-    fn unrepresentable_local_parts_are_errors() {
-        let cases = [
-            ("a b", "' ' (U+0020)"),
-            ("a\tb", "'\\t' (U+0009)"),
-            ("a\u{7}b", "'\\u{7}' (U+0007)"),
-            ("a{b", "'{'"),
-            ("a}b", "'}'"),
-            ("a<b", "'<'"),
-            ("a>b", "'>'"),
-            ("a\"b", "'\"'"),
-            ("a|b", "'|'"),
-            ("a^b", "'^'"),
-            ("a\\b", "'\\\\'"),
-            ("a`b", "'`'"),
-            ("a%", "'%'"),
-            ("a%4", "'%'"),
-            ("a%zz", "'%'"),
-            ("\u{301}a", "at the start"),
-            ("\u{B7}a", "at the start"),
-        ];
-        for (local, needle) in cases {
-            let d = document(vec![element(Kind::Entity, ex(local), Attributes::new())]);
-            let (name, reason) = unwritable(&d);
-            assert_eq!(name, ex(local));
-            // The reason names the character, with its code point.
-            assert!(reason.contains(needle), "{local:?}: {reason}");
-        }
-        // The same local parts work in the middle where the grammar allows them.
-        let d = document(vec![element(
-            Kind::Entity,
-            ex("a\u{301}\u{B7}"),
-            Attributes::new(),
-        )]);
-        assert!(written_reads_back(&d));
     }
 
     #[test]
@@ -1018,12 +989,18 @@ endDocument
 
     #[test]
     fn unrepresentable_iris_are_errors() {
-        let name_in = |iri: &str| element(Kind::Entity, QName::new(iri, "e"), Attributes::new());
+        let name_in = |iri: &str| {
+            element(
+                Kind::Entity,
+                QName::new(iri, "e").unwrap(),
+                Attributes::new(),
+            )
+        };
         // Met while rendering a name.
         let mut minted = Document::new();
         minted.records.push(name_in("http://x.org/a b/"));
         let (name, reason) = unwritable(&minted);
-        assert_eq!(name, QName::new("http://x.org/a b/", "e"));
+        assert_eq!(name, QName::new("http://x.org/a b/", "e").unwrap());
         assert!(reason.contains("' ' (U+0020)"), "{reason}");
 
         // Met while writing a declaration. The default namespace has an
@@ -1045,7 +1022,7 @@ endDocument
         ));
 
         let names = Namespaces::new();
-        let bad = QName::new("http://x.org/{", "e");
+        let bad = QName::new("http://x.org/{", "e").unwrap();
         assert!(matches!(
             provn::statement_name(&bad, &names),
             Err(Error::Unwritable { name, .. }) if name == bad
@@ -1054,23 +1031,6 @@ endDocument
             provn::statement(&name_in("http://x.org/|"), &names),
             Err(Error::Unwritable { .. })
         ));
-    }
-
-    #[cfg(feature = "json")]
-    #[test]
-    fn a_json_key_with_a_trailing_space_cannot_be_written() {
-        let d = crate::json::read(
-            r#"{"prefix": {"ex": "http://example.org/"},
-                "wasAttributedTo": {"_:a": {"prov:entity": "ex:e", "prov:agent ": "ex:ag"}}}"#,
-        )
-        .unwrap();
-        let Record::Attribution(a) = &d.records[0] else {
-            panic!()
-        };
-        assert_eq!(a.agent, None);
-        let (name, reason) = unwritable(&d);
-        assert_eq!(name, QName::new(crate::well_known::PROV, "agent "));
-        assert!(reason.contains("' ' (U+0020)"), "{reason}");
     }
 
     #[test]
@@ -1088,7 +1048,7 @@ endDocument
         for local in ["12", "", "@a", "//x", "/*y"] {
             d.records.push(element(
                 Kind::Entity,
-                QName::new("http://default.org/", local),
+                QName::new("http://default.org/", local).unwrap(),
                 Attributes::new(),
             ));
         }
@@ -1110,7 +1070,7 @@ endDocument
             d.namespaces.set_default("http://default.org/");
             d.records.push(element(
                 Kind::Entity,
-                QName::new("http://default.org/", local),
+                QName::new("http://default.org/", local).unwrap(),
                 Attributes::new(),
             ));
             let text = provn::to_string(&d).unwrap();
@@ -1125,7 +1085,7 @@ endDocument
     fn an_attribute_spelling_an_own_formal_cannot_be_written() {
         let mut a = Attributes::new();
         a.insert(
-            QName::new(crate::well_known::PROV, "entity"),
+            QName::new(crate::well_known::PROV, "entity").unwrap(),
             ex("x").into(),
         );
         let r = Record::Usage(crate::Usage {

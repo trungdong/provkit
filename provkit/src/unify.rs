@@ -475,7 +475,7 @@ mod tests {
 
     #[test]
     fn two_spellings_of_one_iri_merge() {
-        let split = |ns: &str, local: &str| crate::QName::new(ns, local);
+        let split = |ns: &str, local: &str| crate::QName::new(ns, local).unwrap();
         let mut d = Document::new();
         for (ns, local, label) in [
             ("http://example.org/", "foo/bar", "one"),
@@ -509,7 +509,7 @@ mod tests {
     fn merging_a_hand_built_formal_named_attribute_is_an_invalid_record() {
         let mut a = Attributes::new();
         a.insert(
-            crate::QName::new(crate::well_known::PROV, "activity"),
+            crate::QName::new(crate::well_known::PROV, "activity").unwrap(),
             q("x").into(),
         );
         let generation = |attributes: Attributes| {

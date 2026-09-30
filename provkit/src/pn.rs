@@ -87,18 +87,3 @@ pub(crate) fn local_char(local: &str, at: usize, c: char) -> Option<LocalChar> {
         None
     }
 }
-
-/// Whether `text` spells a name that a `QUALIFIED_NAME` [51] denotes:
-/// `prefix:local`, `prefix:` or a bare `local`, with the local part as the
-/// model holds it, without escapes. The first `:` ends the prefix.
-pub(crate) fn is_qualified_name(text: &str) -> bool {
-    let local = match text.split_once(':') {
-        Some((prefix, local)) if is_pn_prefix(prefix) => local,
-        Some(_) => return false,
-        None if text.is_empty() => return false,
-        None => text,
-    };
-    local
-        .char_indices()
-        .all(|(at, c)| local_char(local, at, c).is_some())
-}

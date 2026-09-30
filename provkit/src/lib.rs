@@ -10,7 +10,7 @@
 //! let text = r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e1": {}}}"#;
 //! let mut doc = json::read(text)?;
 //! doc.records.push(Record::Entity(Entity {
-//!     id: QName::new("http://example.org/", "e2"),
+//!     id: QName::new("http://example.org/", "e2")?,
 //!     attributes: Attributes::new(),
 //! }));
 //! let out = provn::to_string(&doc)?;

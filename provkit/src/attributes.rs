@@ -184,7 +184,7 @@ mod tests {
     }
 
     fn q(l: &str) -> QName {
-        QName::new("http://example.org/", l)
+        QName::new("http://example.org/", l).unwrap()
     }
 
     #[test]
