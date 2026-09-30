@@ -32,6 +32,8 @@ impl Format {
     pub fn sniff(text: &str) -> Option<Format> {
         // The readers drop a leading byte-order mark, so sniffing skips it too.
         let mut rest = text.strip_prefix('\u{FEFF}').unwrap_or(text);
+        // Mirrors `skip_trivia` in the library's PROV-N lexer, which is not
+        // public: the grammar's whitespace and both comment forms.
         loop {
             rest = rest.trim_start();
             if let Some(r) = rest.strip_prefix("//") {

@@ -124,6 +124,8 @@ macro_rules! records {
             }
 
             /// Argument counts PROV-N allows after the identifier.
+            // Only the PROV-N parser reads this, but it is a column of the
+            // table, so it stays with the table.
             #[cfg(feature = "provn")]
             pub(crate) fn arities(self) -> &'static [usize] {
                 match self {

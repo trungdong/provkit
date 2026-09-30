@@ -8,7 +8,7 @@ use super::lexer::{Token, TokenKind, tokenize};
 use crate::pn;
 use crate::well_known::XSD_DATETIME;
 use crate::{
-    Bundle, Document, Error, FormalAttr, FormalRef, Kind, Namespaces, QName, Record, Result, Value,
+    Bundle, Document, Error, FormalAttr, FormalRef, Namespaces, QName, Record, Result, Value,
 };
 
 /// Write `document` as PROV-N.
@@ -104,7 +104,7 @@ pub fn statement(record: &Record, namespaces: &mut Namespaces) -> Result<String>
 /// # Errors
 ///
 /// [`Error::Unwritable`] if the name's namespace IRI holds a character
-/// `IRI_REF` forbids.
+/// `IRI_REF` forbids. `namespaces` is then untouched.
 pub fn name(name: &QName, namespaces: &mut Namespaces) -> Result<String> {
     if let Some(reason) = iri_problem(name.namespace()) {
         return Err(unwritable(name, reason));
@@ -209,10 +209,12 @@ fn expression(r: &Record, names: &mut Namespaces, s: &mut String) -> Result<()> 
         if let Some(id) = r.id() {
             parts.push(name(id, names)?);
         }
-        // An activity writes both times or neither.
-        if kind == Kind::Activity && !r.formals().is_empty() {
-            parts.push(formal(r, FormalAttr::StartTime, names)?);
-            parts.push(formal(r, FormalAttr::EndTime, names)?);
+        // An element with any formal present writes all of them, so an
+        // activity writes both times or neither.
+        if !r.formals().is_empty() {
+            for &attr in kind.formals() {
+                parts.push(formal(r, attr, names)?);
+            }
         }
     } else {
         // A relation without an identifier omits `id;` altogether. A kind
