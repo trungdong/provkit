@@ -127,7 +127,8 @@ or they are not complete PROV-N:
 - `prov-n-example-16`: a time argument that is not a `dateTime`.
 - `prov-n-example-61`: a bundle identifier with no default namespace.
 
-The exact list and reasons are in `EXCLUDED_SPEC_EXAMPLES`. ProvPy 3.2.2
+The exact list and reasons are in
+`provkit/tests/data/excluded_spec_examples.tsv`. ProvPy 3.2.2
 excludes 27 too, but a different set. It excludes `prov-n-example-63` and
 `-64` (extensibility expressions, #520) and accepts `prov-n-example-51` and
 `prov-dm-example-42` under `strict` (#519).
@@ -136,7 +137,8 @@ Test: `spec_examples_parse_under_strict` (tests/corpus_provn.rs).
 
 ### ProvToolbox files
 
-9 files. 6 parse under `Default`. 3 are excluded:
+9 files. 6 parse under `Default`. 3 are excluded, listed with their reasons
+in `provkit/tests/data/excluded_provtoolbox_documents.tsv`:
 
 - `container0`: bare names with no default namespace.
 - `container1`: a language tag and a datatype on one literal, which

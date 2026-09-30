@@ -8,134 +8,29 @@ use provkit::Document;
 use provkit::provn::Profile;
 
 /// Recommendation examples that the formal grammar rejects or that are not
-/// complete PROV-N. Names and reasons follow `corpus/provn/README.md`.
-const EXCLUDED_SPEC_EXAMPLES: &[(&str, &str)] = &[
-    (
-        "prov-n-example-16.provn",
-        "the sixth wasGeneratedBy variant reuses tr:WD-prov-dm-20111215 as its time argument, which is not a dateTime; a copy-paste artefact in the Recommendation's own text",
-    ),
-    (
-        "prov-n-example-37.provn",
-        "wasAssociatedWith(ex:a1, ex:ag1) gives the agent without the paired plan; production [20] requires them together",
-    ),
-    (
-        "prov-n-example-51.provn",
-        "a default declaration follows a prefix declaration; production [45] puts the default before every prefix",
-    ),
-    (
-        "prov-n-example-52.provn",
-        "a bare typed-literal pair, not a statement",
-    ),
-    (
-        "prov-n-example-53.provn",
-        "a bare typed-literal pair, not a statement",
-    ),
-    (
-        "prov-n-example-54.provn",
-        "a bare qualified-name literal pair, not a statement",
-    ),
-    (
-        "prov-n-example-55.provn",
-        "a list of bare literals, not a statement",
-    ),
-    (
-        "prov-n-example-56.provn",
-        "a list of bare literals, not a statement",
-    ),
-    (
-        "prov-n-example-59.provn",
-        "a literal ellipsis elides the rest of the example, not complete PROV-N",
-    ),
-    (
-        "prov-n-example-61.provn",
-        "the bundle identifier 'b' has no declared default namespace; the example illustrates qualified-name resolution for ex:e001, not the bundle name itself",
-    ),
-    (
-        "prov-dm-example-03.provn",
-        "used and wasGeneratedBy give only the entity/activity without the paired time; the formal grammar requires them together",
-    ),
-    (
-        "prov-dm-example-04.provn",
-        "used and wasGeneratedBy give only the entity/activity without the paired time",
-    ),
-    (
-        "prov-dm-example-05.provn",
-        "a literal ellipsis elides the bundle's content, not complete PROV-N",
-    ),
-    (
-        "prov-dm-example-06.provn",
-        "a literal ellipsis elides the bundle's content, not complete PROV-N",
-    ),
-    (
-        "prov-dm-example-16.provn",
-        "wasGeneratedBy gives only the entity without the paired time",
-    ),
-    (
-        "prov-dm-example-19.provn",
-        "a spec typo leaves the agent's attribute list missing its closing ']'",
-    ),
-    (
-        "prov-dm-example-24.provn",
-        "wasAssociatedWith and wasGeneratedBy give only the activity/entity without the paired plan or time",
-    ),
-    (
-        "prov-dm-example-34.provn",
-        "wasAssociatedWith gives only the activity and agent without the paired plan",
-    ),
-    (
-        "prov-dm-example-42.provn",
-        "a statement follows an endBundle at document level; production [1] puts every expression before the bundles",
-    ),
-    (
-        "prov-dm-example-52.provn",
-        "wasAssociatedWith gives only the activity and agent without the paired plan",
-    ),
-    (
-        "prov-dm-example-53.provn",
-        "used gives only the activity and entity without the paired time",
-    ),
-    (
-        "prov-dm-example-55.provn",
-        "used and wasGeneratedBy give only the activity/entity without the paired time",
-    ),
-    (
-        "prov-dm-example-56.provn",
-        "used gives only the activity and entity without the paired time",
-    ),
-    (
-        "prov-dm-example-57.provn",
-        "a list of bare literals, not a statement",
-    ),
-    (
-        "prov-dm-example-58.provn",
-        "a bare typed-literal pair, not a statement",
-    ),
-    (
-        "prov-dm-example-59.provn",
-        "a bare qualified-name literal, not a statement",
-    ),
-    (
-        "prov-dm-example-63.provn",
-        "used gives only the activity and entity without the paired time",
-    ),
-];
+/// complete PROV-N, from `tests/data/excluded_spec_examples.tsv` (file name,
+/// tab, reason). Names and reasons follow `corpus/provn/README.md`.
+fn excluded_spec_examples() -> Vec<(String, String)> {
+    exclusions("excluded_spec_examples.tsv")
+}
 
-/// `ProvToolbox`'s own documents outside what the default profile reads.
-/// Names and reasons follow `corpus/provn/README.md`.
-const EXCLUDED_PROVTOOLBOX_DOCUMENTS: &[(&str, &str)] = &[
-    (
-        "container0.provn",
-        "several entity identifiers are bare local names ('\\--', '\\-', '\\.') with no default namespace declared anywhere in the document",
-    ),
-    (
-        "container1.provn",
-        "'\"hello2\"@EN %% xsd:string' gives one string both a language tag and a datatype; productions [41] and [43] allow one or the other",
-    ),
-    (
-        "container2.provn",
-        "'%% <http://example.org/type>' uses a bare IRI as a datatype; production [42] requires datatype to be a qualifiedName",
-    ),
-];
+/// `ProvToolbox`'s own documents outside what the default profile reads,
+/// from `tests/data/excluded_provtoolbox_documents.tsv` (file name, tab,
+/// reason). Names and reasons follow `corpus/provn/README.md`.
+fn excluded_provtoolbox_documents() -> Vec<(String, String)> {
+    exclusions("excluded_provtoolbox_documents.tsv")
+}
+
+/// The (file name, reason) rows of an exclusion list in `tests/data`.
+fn exclusions(file: &str) -> Vec<(String, String)> {
+    common::tsv(&common::data_path(file))
+        .into_iter()
+        .map(|row| match row.as_slice() {
+            [name, reason] => (name.clone(), reason.clone()),
+            other => panic!("{file}: expected a name and a reason, got {other:?}"),
+        })
+        .collect()
+}
 
 /// Why `ProvToolbox`'s writer output differs from its JSON twin
 /// (`corpus/provn/README.md`, "Known differences").
@@ -143,7 +38,7 @@ const EXCLUDED_PROVTOOLBOX_DOCUMENTS: &[(&str, &str)] = &[
 enum Difference {
     /// The generator embeds the wall-clock time of the corpus build.
     DynamicTimestamp,
-    /// The generator's datatype palette no longer lines up with the fixture.
+    /// The generator's datatype palette differs from the fixture's.
     DatatypePalette,
 }
 
@@ -183,8 +78,10 @@ fn writes_all_398() {
     report.finish(JSON_CORPUS_SIZE);
 }
 
-fn reason<'a>(list: &[(&str, &'a str)], name: &str) -> Option<&'a str> {
-    list.iter().find(|(n, _)| *n == name).map(|(_, r)| *r)
+fn reason<'a>(list: &'a [(String, String)], name: &str) -> Option<&'a str> {
+    list.iter()
+        .find(|(n, _)| n == name)
+        .map(|(_, r)| r.as_str())
 }
 
 /// The PROV-JSON twin of a PROV-N corpus file, as a per-file result.
@@ -198,11 +95,12 @@ fn json_twin(name: &str) -> Result<Document, String> {
 #[test]
 fn spec_examples_parse_under_strict() {
     let mut report = Report::default();
+    let excluded_examples = excluded_spec_examples();
     let mut excluded = 0;
     for sub in ["provn/spec/prov-n", "provn/spec/prov-dm"] {
         for (name, text) in files(&corpus_dir(sub), "provn") {
             let result = provkit::provn::read_with(&text, Profile::Strict);
-            if let Some(why) = reason(EXCLUDED_SPEC_EXAMPLES, &name) {
+            if let Some(why) = reason(&excluded_examples, &name) {
                 excluded += 1;
                 if result.is_ok() {
                     report.fail(&name, format!("listed as excluded ({why}) but accepted"));
@@ -216,17 +114,18 @@ fn spec_examples_parse_under_strict() {
         }
     }
     if std::env::var("PROVKIT_ONLY").is_err() {
-        assert_eq!(excluded, EXCLUDED_SPEC_EXAMPLES.len());
+        assert_eq!(excluded, excluded_examples.len());
     }
-    report.finish(127 - EXCLUDED_SPEC_EXAMPLES.len());
+    report.finish(127 - excluded_examples.len());
 }
 
 #[test]
 fn provtoolbox_files_parse_under_default() {
     let mut report = Report::default();
+    let excluded_documents = excluded_provtoolbox_documents();
     for (name, text) in files(&corpus_dir("provn/provtoolbox"), "provn") {
         let result = provkit::provn::read_with(&text, Profile::Default);
-        if let Some(why) = reason(EXCLUDED_PROVTOOLBOX_DOCUMENTS, &name) {
+        if let Some(why) = reason(&excluded_documents, &name) {
             if result.is_ok() {
                 report.fail(&name, format!("listed as excluded ({why}) but accepted"));
             }
@@ -241,7 +140,7 @@ fn provtoolbox_files_parse_under_default() {
             Err(e) => report.fail(&name, e),
         }
     }
-    report.finish(9 - EXCLUDED_PROVTOOLBOX_DOCUMENTS.len());
+    report.finish(9 - excluded_documents.len());
 }
 
 #[test]

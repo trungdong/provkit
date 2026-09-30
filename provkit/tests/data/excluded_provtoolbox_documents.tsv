@@ -1,0 +1,3 @@
+container0.provn	several entity identifiers are bare local names ('\--', '\-', '\.') with no default namespace declared anywhere in the document
+container1.provn	'"hello2"@EN %% xsd:string' gives one string both a language tag and a datatype; productions [41] and [43] allow one or the other
+container2.provn	'%% <http://example.org/type>' uses a bare IRI as a datatype; production [42] requires datatype to be a qualifiedName

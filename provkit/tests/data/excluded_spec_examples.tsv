@@ -1,0 +1,27 @@
+prov-n-example-16.provn	the sixth wasGeneratedBy variant reuses tr:WD-prov-dm-20111215 as its time argument, which is not a dateTime; a copy-paste artefact in the Recommendation's own text
+prov-n-example-37.provn	wasAssociatedWith(ex:a1, ex:ag1) gives the agent without the paired plan; production [20] requires them together
+prov-n-example-51.provn	a default declaration follows a prefix declaration; production [45] puts the default before every prefix
+prov-n-example-52.provn	a bare typed-literal pair, not a statement
+prov-n-example-53.provn	a bare typed-literal pair, not a statement
+prov-n-example-54.provn	a bare qualified-name literal pair, not a statement
+prov-n-example-55.provn	a list of bare literals, not a statement
+prov-n-example-56.provn	a list of bare literals, not a statement
+prov-n-example-59.provn	a literal ellipsis elides the rest of the example, not complete PROV-N
+prov-n-example-61.provn	the bundle identifier 'b' has no declared default namespace; the example illustrates qualified-name resolution for ex:e001, not the bundle name itself
+prov-dm-example-03.provn	used and wasGeneratedBy give only the entity/activity without the paired time; the formal grammar requires them together
+prov-dm-example-04.provn	used and wasGeneratedBy give only the entity/activity without the paired time
+prov-dm-example-05.provn	a literal ellipsis elides the bundle's content, not complete PROV-N
+prov-dm-example-06.provn	a literal ellipsis elides the bundle's content, not complete PROV-N
+prov-dm-example-16.provn	wasGeneratedBy gives only the entity without the paired time
+prov-dm-example-19.provn	a spec typo leaves the agent's attribute list missing its closing ']'
+prov-dm-example-24.provn	wasAssociatedWith and wasGeneratedBy give only the activity/entity without the paired plan or time
+prov-dm-example-34.provn	wasAssociatedWith gives only the activity and agent without the paired plan
+prov-dm-example-42.provn	a statement follows an endBundle at document level; production [1] puts every expression before the bundles
+prov-dm-example-52.provn	wasAssociatedWith gives only the activity and agent without the paired plan
+prov-dm-example-53.provn	used gives only the activity and entity without the paired time
+prov-dm-example-55.provn	used and wasGeneratedBy give only the activity/entity without the paired time
+prov-dm-example-56.provn	used gives only the activity and entity without the paired time
+prov-dm-example-57.provn	a list of bare literals, not a statement
+prov-dm-example-58.provn	a bare typed-literal pair, not a statement
+prov-dm-example-59.provn	a bare qualified-name literal, not a statement
+prov-dm-example-63.provn	used gives only the activity and entity without the paired time
