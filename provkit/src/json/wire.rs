@@ -13,24 +13,121 @@ pub(super) type JsonRecord = IndexMap<String, JsonValue>;
 /// Records of one kind, keyed by identifier.
 pub(super) type JsonSection = IndexMap<String, OneOrMany<JsonRecord>>;
 
-#[derive(Serialize, Deserialize)]
-#[serde(expecting = "a PROV-JSON document, which must be a JSON object")]
 pub(super) struct JsonDocument {
-    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub prefix: IndexMap<String, String>,
-    #[serde(flatten)]
     pub sections: IndexMap<String, JsonSection>,
-    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub bundle: IndexMap<String, JsonBundle>,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(expecting = "a bundle, which must be a JSON object")]
 pub(super) struct JsonBundle {
-    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub prefix: IndexMap<String, String>,
-    #[serde(flatten)]
     pub sections: IndexMap<String, JsonSection>,
+}
+
+/// Reads the keys of a document or bundle object. `prefix` is the
+/// namespace table, `bundle` (documents only) the bundles, and every other
+/// key a section. A repeated `prefix` or `bundle` is an error; a repeated
+/// section keeps its last value.
+struct ContainerVisitor {
+    expecting: &'static str,
+    bundles: bool,
+}
+
+/// A document or bundle as read, before it is split into the two types.
+type Container = (
+    IndexMap<String, String>,
+    IndexMap<String, JsonSection>,
+    IndexMap<String, JsonBundle>,
+);
+
+impl<'de> Visitor<'de> for ContainerVisitor {
+    type Value = Container;
+
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(self.expecting)
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Container, A::Error> {
+        let mut prefix = None;
+        let mut sections = IndexMap::new();
+        let mut bundle = None;
+        while let Some(key) = map.next_key::<String>()? {
+            match key.as_str() {
+                "prefix" if prefix.is_some() => return Err(de::Error::duplicate_field("prefix")),
+                "prefix" => prefix = Some(map.next_value()?),
+                "bundle" if self.bundles && bundle.is_some() => {
+                    return Err(de::Error::duplicate_field("bundle"));
+                }
+                "bundle" if self.bundles => bundle = Some(map.next_value()?),
+                _ => {
+                    let section = map.next_value()?;
+                    sections.insert(key, section);
+                }
+            }
+        }
+        Ok((
+            prefix.unwrap_or_default(),
+            sections,
+            bundle.unwrap_or_default(),
+        ))
+    }
+}
+
+impl<'de> Deserialize<'de> for JsonDocument {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let (prefix, sections, bundle) = d.deserialize_map(ContainerVisitor {
+            expecting: "a PROV-JSON document, which must be a JSON object",
+            bundles: true,
+        })?;
+        Ok(JsonDocument {
+            prefix,
+            sections,
+            bundle,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for JsonBundle {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let (prefix, sections, _) = d.deserialize_map(ContainerVisitor {
+            expecting: "a bundle, which must be a JSON object",
+            bundles: false,
+        })?;
+        Ok(JsonBundle { prefix, sections })
+    }
+}
+
+/// `prefix` first when there is one, then the sections, then `bundle`
+/// when there are any.
+fn serialize_container<S: Serializer>(
+    s: S,
+    prefix: &IndexMap<String, String>,
+    sections: &IndexMap<String, JsonSection>,
+    bundle: Option<&IndexMap<String, JsonBundle>>,
+) -> Result<S::Ok, S::Error> {
+    let mut m = s.serialize_map(None)?;
+    if !prefix.is_empty() {
+        m.serialize_entry("prefix", prefix)?;
+    }
+    for (key, section) in sections {
+        m.serialize_entry(key, section)?;
+    }
+    if let Some(bundle) = bundle.filter(|b| !b.is_empty()) {
+        m.serialize_entry("bundle", bundle)?;
+    }
+    m.end()
+}
+
+impl Serialize for JsonDocument {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        serialize_container(s, &self.prefix, &self.sections, Some(&self.bundle))
+    }
+}
+
+impl Serialize for JsonBundle {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        serialize_container(s, &self.prefix, &self.sections, None)
+    }
 }
 
 /// PROV-JSON lists several records under one identifier as an array.

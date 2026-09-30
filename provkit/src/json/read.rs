@@ -411,6 +411,26 @@ mod tests {
                 r#"{"bundle": {"ex:b": 3}}"#.to_owned(),
                 "expected a bundle, which must be a JSON object",
             ),
+            (
+                r#"{"prefix": 3}"#.to_owned(),
+                "invalid type: integer `3`, expected a map",
+            ),
+            (
+                r#"{"prefix": {"ex": 3}}"#.to_owned(),
+                "invalid type: integer `3`, expected a string",
+            ),
+            (
+                format!(r#"{{{PFX}, "entity": 3}}"#),
+                "invalid type: integer `3`, expected a map",
+            ),
+            (
+                format!(r#"{{{PFX}, "entity": {{"ex:e": {{}}}}, "foo": {{}}}}"#),
+                "unknown record kind `foo`",
+            ),
+            (
+                format!(r#"{{{PFX}, "bundle": {{"ex:b": {{"bundle": {{}}}}}}}}"#),
+                "unknown record kind `bundle`",
+            ),
         ];
         for (text, needle) in cases {
             let m = message(&text);
@@ -461,6 +481,31 @@ mod tests {
             read(r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"_:b": {}}}"#),
             Err(Error::Structure { .. })
         ));
+    }
+
+    #[test]
+    fn repeated_keys_in_a_document_or_bundle() {
+        // A repeated section keeps the last, as any repeated JSON key does.
+        let d = doc(&format!(
+            r#"{{{PFX}, "entity": {{"ex:a": {{}}}}, "entity": {{"ex:e": {{}}}}}}"#
+        ));
+        assert_eq!(d.records.len(), 1);
+        assert_eq!(d.records[0].id(), Some(&ex("e")));
+        // A repeated `prefix` or `bundle` is an error.
+        let message = |s: &str| crate::json::read(s).unwrap_err().to_string();
+        assert!(
+            message(&format!(r#"{{{PFX}, "prefix": {{}}}}"#)).contains("duplicate field `prefix`")
+        );
+        assert!(
+            message(&format!(r#"{{{PFX}, "bundle": {{}}, "bundle": {{}}}}"#))
+                .contains("duplicate field `bundle`")
+        );
+        assert!(
+            message(&format!(
+                r#"{{{PFX}, "bundle": {{"ex:b": {{"prefix": {{}}, "prefix": {{}}}}}}}}"#
+            ))
+            .contains("duplicate field `prefix`")
+        );
     }
 
     #[test]

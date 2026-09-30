@@ -36,7 +36,7 @@ covers it, as `test_name` (file). Files are under `provkit/` unless noted.
 
 | Departure | Reason | Test |
 |---|---|---|
-| A duplicated JSON object key keeps the last value and is not reported. | `serde_json` builds the map before provkit sees it. | `duplicated_keys_keep_the_last` (src/json/read.rs) |
+| A duplicated JSON object key keeps the last value and is not reported, except a repeated `prefix` or `bundle` key in a document or bundle, which is an error. | Sections, records and attributes are read into maps, where a later key replaces an earlier one. A second `prefix` or `bundle` would silently replace a whole namespace table or every bundle, so it is refused. | `duplicated_keys_keep_the_last`, `repeated_keys_in_a_document_or_bundle` (src/json/read.rs) |
 | Raw JSON numbers are re-rendered, not preserved. Integers type as `xsd:int` or `xsd:long` by range, and values in (`i64::MAX`, `u64::MAX`] as `xsd:integer`. Integers beyond `u64`, and any number with a fraction or exponent, become `xsd:double` from `f64` in shortest round-trip form, so digits beyond `f64` precision are lost. Writers never emit raw numbers. | `serde_json` runs without `arbitrary_precision`. Only third-party input is affected. | `integers_type_by_range` (src/json/read.rs) |
 | Blank-node labels are not preserved. The writer mints `_:id1`, `_:id2`, ... in document order, continuing through bundles. | Blank nodes have no identity beyond their position, and equality ignores labels. | `shape_and_blank_ids`, `blank_ids_continue_through_bundles`, `blank_ids_follow_record_order` (src/json/write.rs) |
 | A blank key on an element or a bundle is a read error. | Elements and bundles must have an identifier. | `errors` (src/json/read.rs) |
