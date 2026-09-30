@@ -1,5 +1,6 @@
 //! Tests for the record tables and [`Record::from_parts`].
 
+use super::FormalAttr as F;
 use super::*;
 use crate::test_util::{hash, q};
 use crate::{Attributes, Value};
