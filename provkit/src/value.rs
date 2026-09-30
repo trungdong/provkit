@@ -3,9 +3,10 @@
 use std::hash::{Hash, Hasher};
 
 use crate::qname::well_known::{
-    XSD_BOOLEAN, XSD_DATETIME, XSD_DOUBLE, XSD_FLOAT, XSD_INT, XSD_LONG, XSD_QNAME, XSD_STRING,
+    PROV_QUALIFIED_NAME, XSD_BOOLEAN, XSD_DATETIME, XSD_DOUBLE, XSD_FLOAT, XSD_INT, XSD_LONG,
+    XSD_QNAME, XSD_STRING,
 };
-use crate::{DateTime, Error, QName, Result};
+use crate::{DateTime, Error, QName, Result, Scope};
 
 /// A string with a BCP 47 language tag.
 ///
@@ -88,12 +89,18 @@ pub enum Value {
     DateTime(DateTime),
     /// Any other typed literal, kept as written.
     ///
-    /// Build it through [`Value::typed`], which folds `xsd:string` to
-    /// [`Value::Str`] and parses `xsd:dateTime` to [`Value::DateTime`], as
-    /// the readers do. A hand-built `Typed` with either datatype is not equal
-    /// to the value a reader produces. `xsd:QName` does not fold here either,
-    /// because resolving the lexical form needs the document's namespaces, so
-    /// a `Typed` with `xsd:QName` never equals a read [`Value::QName`].
+    /// Build it through [`Value::typed`] or a `From` conversion. The variant
+    /// is `#[non_exhaustive]`, so code outside this crate cannot build it
+    /// directly, and each value has one representation: a `Typed` never
+    /// holds `xsd:string`, `xsd:dateTime`, `xsd:QName` or
+    /// `prov:QUALIFIED_NAME`. Patterns outside the crate need `..`.
+    ///
+    /// ```compile_fail,E0639
+    /// use provkit::{Value, qname::well_known::XSD_INT};
+    ///
+    /// let v = Value::Typed { lexical: "1".into(), datatype: XSD_INT.clone() };
+    /// ```
+    #[non_exhaustive]
     Typed {
         /// The text as written.
         lexical: String,
@@ -102,25 +109,54 @@ pub enum Value {
     },
 }
 
+/// The reason [`Value::typed`] gives for a qualified-name datatype.
+const QNAME_REASON: &str =
+    "a qualified-name value must be resolved against a namespace table; use Value::QName";
+
 impl Value {
     /// A literal with a datatype. `xsd:string` folds to [`Value::Str`],
     /// `xsd:dateTime` is parsed, and anything else is kept verbatim.
     ///
-    /// `xsd:QName` stays [`Value::Typed`], because resolving `ex:name` needs
-    /// namespaces. Build a [`Value::QName`] directly instead; the readers
-    /// resolve `xsd:QName` literals to that variant.
+    /// ```
+    /// use provkit::{Value, qname::well_known::{XSD_INT, XSD_QNAME}};
+    ///
+    /// assert!(Value::typed("1", XSD_INT.clone()).is_ok());
+    /// assert!(Value::typed("ex:e", XSD_QNAME.clone()).is_err());
+    /// ```
     ///
     /// # Errors
     ///
-    /// Returns [`Error::InvalidLiteral`] if an `xsd:dateTime` does not parse.
+    /// Returns [`Error::InvalidLiteral`] if an `xsd:dateTime` does not parse,
+    /// or if `datatype` is `xsd:QName` or `prov:QUALIFIED_NAME`: resolving
+    /// such a value needs namespaces, so build a [`Value::QName`] instead.
     pub fn typed(lexical: impl Into<String>, datatype: QName) -> Result<Self> {
         let lexical = lexical.into();
         if datatype == *XSD_STRING {
             Ok(Value::Str(lexical))
         } else if datatype == *XSD_DATETIME {
             Ok(Value::DateTime(DateTime::parse(&lexical)?))
+        } else if is_qname_datatype(&datatype) {
+            Err(Error::InvalidLiteral {
+                datatype: datatype.to_string(),
+                lexical,
+                reason: QNAME_REASON.into(),
+            })
         } else {
             Ok(Value::Typed { lexical, datatype })
+        }
+    }
+
+    /// The rule both readers use for `"lexical" %% datatype` and
+    /// `{"$": lexical, "type": datatype}`: a qualified-name datatype
+    /// resolves `lexical` in `scope` to a [`Value::QName`], and any other
+    /// goes through [`Value::typed`].
+    // Only the readers call this, and both are feature-gated.
+    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
+    pub(crate) fn typed_in(scope: &Scope<'_>, lexical: &str, datatype: QName) -> Result<Self> {
+        if is_qname_datatype(&datatype) {
+            Ok(Value::QName(scope.resolve(lexical)?))
+        } else {
+            Value::typed(lexical, datatype)
         }
     }
 
@@ -136,6 +172,19 @@ impl Value {
             Value::Typed { datatype, .. } => Some(datatype.clone()),
         }
     }
+
+    /// False for a `Typed` whose datatype another variant owns. The writers
+    /// assert this in debug builds.
+    // Only the writers call this, and both are feature-gated.
+    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
+    pub(crate) fn has_one_representation(&self) -> bool {
+        !matches!(self, Value::Typed { datatype, .. }
+            if *datatype == *XSD_STRING || *datatype == *XSD_DATETIME || is_qname_datatype(datatype))
+    }
+}
+
+fn is_qname_datatype(datatype: &QName) -> bool {
+    *datatype == *XSD_QNAME || *datatype == *PROV_QUALIFIED_NAME
 }
 
 macro_rules! from_native {
@@ -207,7 +256,8 @@ impl From<LangStr> for Value {
 mod tests {
     use super::*;
     use crate::qname::well_known::{
-        XSD_BOOLEAN, XSD_DATETIME, XSD_DOUBLE, XSD_FLOAT, XSD_INT, XSD_LONG, XSD_STRING,
+        PROV_QUALIFIED_NAME, XSD_BOOLEAN, XSD_DATETIME, XSD_DOUBLE, XSD_FLOAT, XSD_INT, XSD_LONG,
+        XSD_QNAME, XSD_STRING,
     };
     use crate::test_util::hash;
 
@@ -227,11 +277,69 @@ mod tests {
         ));
         assert_eq!(
             Value::typed("1", XSD_INT.clone()).unwrap(),
-            Value::Typed {
-                lexical: "1".into(),
-                datatype: XSD_INT.clone()
-            }
+            Value::typed("1", XSD_INT.clone()).unwrap()
         );
+    }
+
+    #[test]
+    fn typed_rejects_qualified_name_datatypes() {
+        for datatype in [XSD_QNAME.clone(), PROV_QUALIFIED_NAME.clone()] {
+            match Value::typed("ex:foo", datatype.clone()) {
+                Err(Error::InvalidLiteral {
+                    datatype: shown,
+                    lexical,
+                    reason,
+                }) => {
+                    assert_eq!(shown, datatype.to_string());
+                    assert_eq!(lexical, "ex:foo");
+                    assert_eq!(
+                        reason,
+                        "a qualified-name value must be resolved against a namespace table; \
+                         use Value::QName"
+                    );
+                }
+                other => panic!("expected InvalidLiteral, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn typed_in_resolves_qualified_names_and_delegates_the_rest() {
+        let mut ns = crate::Namespaces::new();
+        ns.declare("ex", "http://example.org/").unwrap();
+        let scope = Scope::new(&ns, None);
+        let foo = QName::new("http://example.org/", "foo");
+        for datatype in [XSD_QNAME.clone(), PROV_QUALIFIED_NAME.clone()] {
+            assert_eq!(
+                Value::typed_in(&scope, "ex:foo", datatype).unwrap(),
+                Value::QName(foo.clone())
+            );
+        }
+        assert!(matches!(
+            Value::typed_in(&scope, "zz:foo", XSD_QNAME.clone()),
+            Err(Error::UndeclaredPrefix(p)) if p == "zz"
+        ));
+        assert_eq!(
+            Value::typed_in(&scope, "x", XSD_STRING.clone()).unwrap(),
+            Value::Str("x".into())
+        );
+        assert_eq!(
+            Value::typed_in(&scope, "1", XSD_INT.clone()).unwrap(),
+            Value::from(1i32)
+        );
+    }
+
+    #[test]
+    fn every_constructor_keeps_one_representation() {
+        let values = [
+            Value::from("s"),
+            Value::from(1i32),
+            Value::from(f64::NAN),
+            Value::typed("x", XSD_STRING.clone()).unwrap(),
+            Value::typed("2011-11-16T16:05:33Z", XSD_DATETIME.clone()).unwrap(),
+            Value::typed("x", QName::new("http://example.org/", "dt")).unwrap(),
+        ];
+        assert!(values.iter().all(Value::has_one_representation));
     }
 
     #[test]
@@ -263,38 +371,23 @@ mod tests {
     fn native_conversions_are_exact() {
         assert_eq!(
             Value::from(1i32),
-            Value::Typed {
-                lexical: "1".into(),
-                datatype: XSD_INT.clone()
-            }
+            Value::typed("1", XSD_INT.clone()).unwrap()
         );
         assert_eq!(
             Value::from(1i64),
-            Value::Typed {
-                lexical: "1".into(),
-                datatype: XSD_LONG.clone()
-            }
+            Value::typed("1", XSD_LONG.clone()).unwrap()
         );
         assert_eq!(
             Value::from(1.5f64),
-            Value::Typed {
-                lexical: "1.5".into(),
-                datatype: XSD_DOUBLE.clone()
-            }
+            Value::typed("1.5", XSD_DOUBLE.clone()).unwrap()
         );
         assert_eq!(
             Value::from(1.5f32),
-            Value::Typed {
-                lexical: "1.5".into(),
-                datatype: XSD_FLOAT.clone()
-            }
+            Value::typed("1.5", XSD_FLOAT.clone()).unwrap()
         );
         assert_eq!(
             Value::from(true),
-            Value::Typed {
-                lexical: "true".into(),
-                datatype: XSD_BOOLEAN.clone()
-            }
+            Value::typed("true", XSD_BOOLEAN.clone()).unwrap()
         );
         assert_eq!(Value::from("s"), Value::Str("s".into()));
     }

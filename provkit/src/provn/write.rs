@@ -342,6 +342,7 @@ fn bare_int(lexical: &str, datatype: &QName) -> bool {
 }
 
 fn value(v: &Value, names: &mut Namespaces) -> Result<String> {
+    debug_assert!(v.has_one_representation(), "{v:?} has a folded datatype");
     Ok(match v {
         Value::Str(s) => string(s),
         Value::LangStr(l) => format!("{}@{}", string(l.value()), l.lang()),
@@ -542,13 +543,7 @@ endDocument
     fn a_lone_minus_or_empty_int_is_not_bare() {
         for text in ["-", "", "+1", "1.0", "--1", "1 "] {
             let mut a = Attributes::new();
-            a.insert(
-                ex("i"),
-                Value::Typed {
-                    lexical: text.into(),
-                    datatype: XSD_INT.clone(),
-                },
-            );
+            a.insert(ex("i"), Value::typed(text, XSD_INT.clone()).unwrap());
             assert_eq!(
                 line(element(Kind::Entity, ex("e"), a)),
                 format!("entity(ex:e, [ex:i=\"{text}\" %% xsd:int])"),
@@ -748,8 +743,9 @@ endDocument
         chars
     }
 
-    #[test]
-    fn whatever_the_writer_accepts_reads_back_equal() {
+    /// Local parts and lexical forms: every palette character alone and in
+    /// context, pseudo-random mixes, and hand-picked edge cases.
+    fn sample_texts() -> Vec<String> {
         let chars = palette();
         let mut locals: Vec<String> = Vec::new();
         for &c in &chars {
@@ -779,6 +775,53 @@ endDocument
             ]
             .map(String::from),
         );
+        locals
+    }
+
+    /// Values from every public constructor: the `From` conversions, and
+    /// [`Value::typed`] over sample lexical forms and datatypes.
+    fn sample_values() -> Vec<Value> {
+        let mut values = vec![
+            Value::from(0i32),
+            Value::from(i32::MIN),
+            Value::from(i64::MAX),
+            Value::from(1.5f32),
+            Value::from(f32::NAN),
+            Value::from(f64::INFINITY),
+            Value::from(f64::NEG_INFINITY),
+            Value::from(-0.0f64),
+            Value::from(true),
+            Value::from(false),
+            Value::from("a\"b\\c\nd\re\tf"),
+            Value::from(String::from("é\u{2028}😀")),
+            Value::from(ex("q")),
+            Value::from(dt()),
+            Value::from(LangStr::new("hi", "en-GB").unwrap()),
+        ];
+        let datatypes = [
+            XSD_INT.clone(),
+            crate::qname::well_known::XSD_LONG.clone(),
+            crate::qname::well_known::XSD_STRING.clone(),
+            QName::new(crate::namespaces::XSD, "anyURI"),
+            ex("dt"),
+        ];
+        for lexical in sample_texts() {
+            for datatype in &datatypes {
+                values.push(Value::typed(lexical.as_str(), datatype.clone()).unwrap());
+            }
+        }
+        for lexical in ["2011-11-16T16:05:33Z", "2011-11-16T16:05:33.25+01:00"] {
+            values.push(
+                Value::typed(lexical, crate::qname::well_known::XSD_DATETIME.clone()).unwrap(),
+            );
+        }
+        values
+    }
+
+    #[test]
+    fn whatever_the_writer_accepts_reads_back_equal() {
+        let chars = palette();
+        let locals = sample_texts();
         let (mut accepted, mut rejected) = (0, 0);
         for local in &locals {
             if written_reads_back(&every_position(local)) {
@@ -788,6 +831,20 @@ endDocument
             }
         }
         assert!(accepted > 1000 && rejected > 100, "{accepted} {rejected}");
+
+        // Every value the public constructors build is accepted, and reads
+        // back equal through PROV-JSON too.
+        for v in sample_values() {
+            let mut a = Attributes::new();
+            a.insert(ex("v"), v);
+            let d = document(vec![element(Kind::Entity, ex("e"), a)]);
+            assert!(written_reads_back(&d));
+            #[cfg(feature = "json")]
+            {
+                let text = crate::json::to_string(&d).unwrap();
+                assert_eq!(crate::json::read(&text).unwrap(), d, "{text}");
+            }
+        }
 
         // Namespace IRIs, minted and default, and declared prefixes.
         for &c in &chars {

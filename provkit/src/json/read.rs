@@ -3,9 +3,7 @@
 use indexmap::IndexMap;
 
 use super::wire::{JsonDocument, JsonRecord, JsonSection, JsonValue};
-use crate::qname::well_known::{
-    PROV_QUALIFIED_NAME, XSD_BOOLEAN, XSD_DOUBLE, XSD_INT, XSD_INTEGER, XSD_LONG, XSD_QNAME,
-};
+use crate::qname::well_known::{XSD_INT, XSD_INTEGER, XSD_LONG};
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
     Result, Scope, Sink, Value,
@@ -159,16 +157,10 @@ impl JsonValue {
 fn decode_value(v: &JsonValue, scope: &Scope<'_>) -> Result<Value> {
     Ok(match v {
         JsonValue::Str(s) => Value::Str(s.clone()),
-        JsonValue::Int(i) => integer(i.to_string(), i128::from(*i)),
-        JsonValue::UInt(u) => integer(u.to_string(), i128::from(*u)),
-        JsonValue::Float(f) => Value::Typed {
-            lexical: f.to_string(),
-            datatype: XSD_DOUBLE.clone(),
-        },
-        JsonValue::Bool(b) => Value::Typed {
-            lexical: b.to_string(),
-            datatype: XSD_BOOLEAN.clone(),
-        },
+        JsonValue::Int(i) => integer(i.to_string(), i128::from(*i))?,
+        JsonValue::UInt(u) => integer(u.to_string(), i128::from(*u))?,
+        JsonValue::Float(f) => Value::from(*f),
+        JsonValue::Bool(b) => Value::from(*b),
         JsonValue::Many(_) => return Err(structure("nested arrays are not allowed")),
         JsonValue::Typed {
             value,
@@ -184,14 +176,7 @@ fn decode_value(v: &JsonValue, scope: &Scope<'_>) -> Result<Value> {
             }
             match datatype {
                 None => Value::Str(value.clone()),
-                Some(dt) => {
-                    let dt = scope.resolve(dt)?;
-                    if dt == *XSD_QNAME || dt == *PROV_QUALIFIED_NAME {
-                        Value::QName(scope.resolve(value)?)
-                    } else {
-                        Value::typed(value.as_str(), dt)?
-                    }
-                }
+                Some(dt) => Value::typed_in(scope, value, scope.resolve(dt)?)?,
             }
         }
     })
@@ -199,7 +184,7 @@ fn decode_value(v: &JsonValue, scope: &Scope<'_>) -> Result<Value> {
 
 /// Raw JSON integers type by range. Integers beyond `i64` and within `u64`
 /// are `xsd:integer`; larger numbers arrive as floats and read as `xsd:double`.
-fn integer(lexical: String, n: i128) -> Value {
+fn integer(lexical: String, n: i128) -> Result<Value> {
     let datatype = if i32::try_from(n).is_ok() {
         XSD_INT.clone()
     } else if i64::try_from(n).is_ok() {
@@ -207,13 +192,13 @@ fn integer(lexical: String, n: i128) -> Value {
     } else {
         XSD_INTEGER.clone()
     };
-    Value::Typed { lexical, datatype }
+    Value::typed(lexical, datatype)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::qname::well_known::XSD_INTEGER;
+    use crate::qname::well_known::{XSD_BOOLEAN, XSD_DOUBLE};
     use crate::{Error, Record, Value};
 
     fn doc(json: &str) -> crate::Document {
@@ -244,41 +229,20 @@ mod tests {
         };
         let get = |l: &str| e.attributes.get(&ex(l)).cloned().collect::<Vec<_>>();
         assert_eq!(get("s"), [Value::Str("text".into())]);
-        assert_eq!(
-            get("i"),
-            [Value::Typed {
-                lexical: "5".into(),
-                datatype: XSD_INT.clone()
-            }]
-        );
+        assert_eq!(get("i"), [Value::typed("5", XSD_INT.clone()).unwrap()]);
         assert_eq!(
             get("l"),
-            [Value::Typed {
-                lexical: "3000000000".into(),
-                datatype: XSD_LONG.clone()
-            }]
+            [Value::typed("3000000000", XSD_LONG.clone()).unwrap()]
         );
         assert_eq!(
             get("b"),
-            [Value::Typed {
-                lexical: "18446744073709551615".into(),
-                datatype: XSD_INTEGER.clone()
-            }]
+            [Value::typed("18446744073709551615", XSD_INTEGER.clone()).unwrap()]
         );
         assert_eq!(get("b")[0].datatype().unwrap(), *XSD_INTEGER);
-        assert_eq!(
-            get("d"),
-            [Value::Typed {
-                lexical: "1.5".into(),
-                datatype: XSD_DOUBLE.clone()
-            }]
-        );
+        assert_eq!(get("d"), [Value::typed("1.5", XSD_DOUBLE.clone()).unwrap()]);
         assert_eq!(
             get("t"),
-            [Value::Typed {
-                lexical: "true".into(),
-                datatype: XSD_BOOLEAN.clone()
-            }]
+            [Value::typed("true", XSD_BOOLEAN.clone()).unwrap()]
         );
         assert_eq!(get("o"), [Value::Str("x".into())]);
         assert_eq!(get("xs"), [Value::Str("x".into())]);
@@ -286,13 +250,7 @@ mod tests {
         assert_eq!(get("qn"), [Value::QName(ex("q"))]);
         assert_eq!(get("legacy"), [Value::QName(ex("q"))]);
         assert!(matches!(get("dt")[0], Value::DateTime(_)));
-        assert_eq!(
-            get("ty"),
-            [Value::Typed {
-                lexical: "1".into(),
-                datatype: XSD_LONG.clone()
-            }]
-        );
+        assert_eq!(get("ty"), [Value::typed("1", XSD_LONG.clone()).unwrap()]);
         assert_eq!(get("many").len(), 2);
         assert_eq!(e.attributes.len(), 15);
     }
@@ -524,10 +482,7 @@ mod tests {
         assert!(a.end_time.is_some() && a.start_time.is_none());
         assert_eq!(
             a.attributes.get(&ex("f")).cloned().collect::<Vec<_>>(),
-            [Value::Typed {
-                lexical: "false".into(),
-                datatype: XSD_BOOLEAN.clone()
-            }]
+            [Value::typed("false", XSD_BOOLEAN.clone()).unwrap()]
         );
     }
 

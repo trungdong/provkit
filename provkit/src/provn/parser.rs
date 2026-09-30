@@ -5,7 +5,7 @@
 
 use super::Profile;
 use super::lexer::{Token, TokenKind};
-use crate::qname::well_known::{PROV_QUALIFIED_NAME, XSD_INT, XSD_QNAME};
+use crate::qname::well_known::XSD_INT;
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
     Result, Scope, Sink, Value,
@@ -473,21 +473,14 @@ impl<'t> Parser<'t> {
                         self.bump();
                         let datatype = self.name("a datatype")?;
                         let datatype = self.resolve(&datatype)?;
-                        if datatype == *XSD_QNAME || datatype == *PROV_QUALIFIED_NAME {
-                            Value::QName(self.scope().resolve(s)?)
-                        } else {
-                            Value::typed(s.as_str(), datatype)?
-                        }
+                        Value::typed_in(&self.scope(), s, datatype)?
                     }
                     _ => Value::Str(s.clone()),
                 }
             }
             TokenKind::Int(i) => {
                 self.bump();
-                Value::Typed {
-                    lexical: i.clone(),
-                    datatype: XSD_INT.clone(),
-                }
+                Value::typed(i.as_str(), XSD_INT.clone())?
             }
             TokenKind::QNameLiteral { prefix, local } => {
                 self.bump();
