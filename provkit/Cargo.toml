@@ -22,6 +22,10 @@ name = "corpus_provn"
 required-features = ["json", "provn"]
 
 [[test]]
+name = "corpus_probes"
+required-features = ["provn"]
+
+[[test]]
 name = "provn_round_trip"
 required-features = ["json", "provn"]
 

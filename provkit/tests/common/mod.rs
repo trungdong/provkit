@@ -69,6 +69,7 @@ impl Report {
     }
 
     /// Read `text` as PROV-JSON, recording a failure under `name` on error.
+    #[cfg(feature = "json")]
     pub fn read_json(&mut self, name: &str, text: &str) -> Option<provkit::Document> {
         match provkit::json::read(text) {
             Ok(document) => Some(document),
