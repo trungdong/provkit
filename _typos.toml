@@ -1,4 +1,17 @@
+[files]
+# The corpus is a submodule shared with ProvPy; its text is not ours to spell.
+extend-exclude = ["corpus/"]
+
 [default.extend-words]
+# British spellings.
 serialise = "serialise"
 serialisation = "serialisation"
 serialiser = "serialiser"
+# PN_PREFIX, PN_LOCAL and the `pn` module: the PROV-N name grammar.
+pn = "pn"
+# Text an ill-formed `xsd:int` keeps, beside "abc", in the Value tests.
+abd = "abd"
+# "café" spells "café" with an escape, in the lexer tests.
+caf = "caf"
+# A misspelt keyword that must be a syntax error, in the extension tests.
+entty = "entty"

@@ -10,8 +10,10 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-# These tests read the corpus submodule, which the published crate lacks.
-exclude = ["tests/corpus_*.rs", "tests/common/", "tests/data/"]
+# The corpus tests and their data read the corpus submodule, which the
+# published crate lacks. `tests/common/` ships, because `provn_round_trip`
+# declares it and must compile from the tarball.
+exclude = ["tests/corpus_*.rs", "tests/data/"]
 
 [[test]]
 name = "corpus_json"
