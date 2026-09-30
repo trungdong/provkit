@@ -1,10 +1,12 @@
 //! The PROV-JSON shape, as serde sees it. Private; the model never sees these types.
 
 use indexmap::IndexMap;
-use serde::de::{self, MapAccess, SeqAccess, Visitor};
+use serde::de::value::{MapAccessDeserializer, SeqAccessDeserializer};
+use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
+use std::marker::PhantomData;
 
 /// A record's attributes, key order kept.
 pub(super) type JsonRecord = IndexMap<String, JsonValue>;
@@ -12,6 +14,7 @@ pub(super) type JsonRecord = IndexMap<String, JsonValue>;
 pub(super) type JsonSection = IndexMap<String, OneOrMany<JsonRecord>>;
 
 #[derive(Serialize, Deserialize)]
+#[serde(expecting = "a PROV-JSON document, which must be a JSON object")]
 pub(super) struct JsonDocument {
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub prefix: IndexMap<String, String>,
@@ -22,6 +25,7 @@ pub(super) struct JsonDocument {
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(expecting = "a bundle, which must be a JSON object")]
 pub(super) struct JsonBundle {
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub prefix: IndexMap<String, String>,
@@ -30,11 +34,53 @@ pub(super) struct JsonBundle {
 }
 
 /// PROV-JSON lists several records under one identifier as an array.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 #[serde(untagged)]
 pub(super) enum OneOrMany<T> {
     One(T),
     Many(Vec<T>),
+}
+
+/// An object is one record and an array is many. Dispatching on the JSON
+/// shape, rather than trying each variant, keeps the inner error.
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for OneOrMany<T> {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct V<T>(PhantomData<T>);
+        impl<'de, T: Deserialize<'de>> Visitor<'de> for V<T> {
+            type Value = OneOrMany<T>;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a record object or an array of record objects")
+            }
+            fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
+                T::deserialize(MapAccessDeserializer::new(map)).map(OneOrMany::One)
+            }
+            fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
+                Vec::deserialize(SeqAccessDeserializer::new(seq)).map(OneOrMany::Many)
+            }
+        }
+        d.deserialize_any(V(PhantomData))
+    }
+}
+
+/// A string under a named key of a value object, with an error that names
+/// the key.
+struct StrAt(&'static str);
+
+impl<'de> DeserializeSeed<'de> for StrAt {
+    type Value = String;
+    fn deserialize<D: Deserializer<'de>>(self, d: D) -> Result<String, D::Error> {
+        struct V(&'static str);
+        impl Visitor<'_> for V {
+            type Value = String;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "a string as the `{}` of a value object", self.0)
+            }
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<String, E> {
+                Ok(v.to_owned())
+            }
+        }
+        d.deserialize_str(V(self.0))
+    }
 }
 
 impl<T> OneOrMany<T> {
@@ -89,6 +135,9 @@ impl<'de> Deserialize<'de> for JsonValue {
             fn visit_bool<E: de::Error>(self, v: bool) -> Result<JsonValue, E> {
                 Ok(JsonValue::Bool(v))
             }
+            fn visit_unit<E: de::Error>(self) -> Result<JsonValue, E> {
+                Err(E::custom("null is not an attribute value"))
+            }
             fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<JsonValue, A::Error> {
                 let mut items = Vec::new();
                 while let Some(item) = seq.next_element()? {
@@ -100,15 +149,19 @@ impl<'de> Deserialize<'de> for JsonValue {
                 let (mut value, mut datatype, mut lang) = (None, None, None);
                 while let Some(key) = map.next_key::<String>()? {
                     match key.as_str() {
-                        "$" => value = Some(map.next_value::<String>()?),
-                        "type" => datatype = Some(map.next_value::<String>()?),
-                        "lang" => lang = Some(map.next_value::<String>()?),
+                        "$" => value = Some(map.next_value_seed(StrAt("$"))?),
+                        "type" => datatype = Some(map.next_value_seed(StrAt("type"))?),
+                        "lang" => lang = Some(map.next_value_seed(StrAt("lang"))?),
                         other => {
-                            return Err(de::Error::unknown_field(other, &["$", "type", "lang"]));
+                            return Err(de::Error::custom(format!(
+                                "unknown key `{other}` in a value object, expected `$`, \
+                                 `type` or `lang`"
+                            )));
                         }
                     }
                 }
-                let value = value.ok_or_else(|| de::Error::missing_field("$"))?;
+                let value =
+                    value.ok_or_else(|| de::Error::custom("a value object needs a `$` key"))?;
                 Ok(JsonValue::Typed {
                     value,
                     datatype,

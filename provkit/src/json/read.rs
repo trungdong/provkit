@@ -412,6 +412,62 @@ mod tests {
     }
 
     #[test]
+    fn json_errors_name_the_problem() {
+        let message = |s: &str| crate::json::read(s).unwrap_err().to_string();
+        let ent = |body: &str| format!(r#"{{{PFX}, "entity": {{"ex:e": {{{body}}}}}}}"#);
+        let cases = [
+            (
+                ent(r#""ex:a": {"$": 1}"#),
+                "invalid type: integer `1`, expected a string as the `$` of a value object",
+            ),
+            (
+                ent(r#""ex:a": {"$": "1", "type": 2}"#),
+                "expected a string as the `type` of a value object",
+            ),
+            (
+                ent(r#""ex:a": {"$": "1", "datatype": "xsd:int"}"#),
+                "unknown key `datatype` in a value object, expected `$`, `type` or `lang`",
+            ),
+            (
+                ent(r#""ex:a": {"type": "xsd:int"}"#),
+                "a value object needs a `$` key",
+            ),
+            (ent(r#""ex:a": null"#), "null is not an attribute value"),
+            (
+                ent(r#""ex:a": ["x", null]"#),
+                "null is not an attribute value",
+            ),
+            (
+                format!(r#"{{{PFX}, "entity": {{"ex:e": null}}}}"#),
+                "invalid type: null, expected a record object or an array of record objects",
+            ),
+            (
+                format!(r#"{{{PFX}, "entity": {{"ex:e": [{{"ex:a": {{"$": 1}}}}]}}}}"#),
+                "expected a string as the `$` of a value object",
+            ),
+            (
+                "[]".to_owned(),
+                "invalid type: sequence, expected a PROV-JSON document, which must be a JSON object",
+            ),
+            (
+                "\"x\"".to_owned(),
+                "expected a PROV-JSON document, which must be a JSON object",
+            ),
+            (
+                r#"{"bundle": {"ex:b": 3}}"#.to_owned(),
+                "expected a bundle, which must be a JSON object",
+            ),
+        ];
+        for (text, needle) in cases {
+            let m = message(&text);
+            assert!(m.contains(needle), "{text}\n{m}");
+            for private in ["OneOrMany", "JsonValue", "JsonDocument", "untagged"] {
+                assert!(!m.contains(private), "{text}\n{m}");
+            }
+        }
+    }
+
+    #[test]
     fn bundles_scope_their_prefixes() {
         let d = doc(r#"{"prefix": {"ex": "http://example.org/"},
             "bundle": {"ex:b": {"prefix": {"b": "http://b.org/"}, "entity": {"b:e": {}, "ex:f": {}}}}}"#);
