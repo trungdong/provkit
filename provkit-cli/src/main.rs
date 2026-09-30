@@ -10,7 +10,7 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result, anyhow};
 use clap::{Args, Parser, Subcommand};
-use provkit::{Document, Record, json, provn};
+use provkit::{Document, FormalRef, Namespaces, QName, Record, Value, json, provn};
 
 use format::Format;
 
@@ -183,7 +183,7 @@ fn only_in<'a>(mine: &[&'a Record], theirs: &[&Record]) -> Vec<&'a Record> {
 }
 
 /// The records of every bundle in `document` named `id`.
-fn bundle_records<'a>(document: &'a Document, id: &provkit::QName) -> Vec<&'a Record> {
+fn bundle_records<'a>(document: &'a Document, id: &QName) -> Vec<&'a Record> {
     document
         .bundles
         .iter()
@@ -223,21 +223,67 @@ fn report_side(out: &mut String, name: &Path, this: &Document, other: &Document)
 
     writeln!(out, "only in {}:", name.display())?;
     for record in top {
-        writeln!(out, "  {}", provn::statement(record, &this.namespaces)?)?;
+        writeln!(out, "  {}", statement_line(record, &this.namespaces))?;
     }
     for (bundle, records) in bundles {
         // A bundle sees its own prefixes first, then the document's.
         let scope = bundle.namespaces.with_fallback(&this.namespaces);
-        writeln!(
-            out,
-            "  bundle {}:",
-            provn::statement_name(&bundle.id, &scope)?
-        )?;
+        match provn::statement_name(&bundle.id, &scope) {
+            Ok(id) => writeln!(out, "  bundle {id}:")?,
+            Err(_) => writeln!(out, "  bundle <{}>: {UNWRITABLE}", bundle.id)?,
+        }
         for record in records {
-            writeln!(out, "    {}", provn::statement(record, &scope)?)?;
+            writeln!(out, "    {}", statement_line(record, &scope))?;
         }
     }
     Ok(())
+}
+
+/// Marks a line whose record or bundle PROV-N cannot write.
+const UNWRITABLE: &str = "// not valid PROV-N";
+
+/// `record` as PROV-N, or, when PROV-N cannot write it, a heading that
+/// names it: the keyword, the identifier, and the first name PROV-N cannot
+/// write as `<full IRI>`, followed by [`UNWRITABLE`].
+fn statement_line(record: &Record, namespaces: &Namespaces) -> String {
+    if let Ok(line) = provn::statement(record, namespaces) {
+        return line;
+    }
+    let writable = |q: &QName| provn::statement_name(q, namespaces).is_ok();
+    let mut names: Vec<&QName> = record.id().into_iter().collect();
+    names.extend(record.formals().into_iter().filter_map(|(_, f)| match f {
+        FormalRef::Name(q) => Some(q),
+        FormalRef::Time(_) => None,
+    }));
+    for (n, v) in record.attributes().iter() {
+        names.push(n);
+        match v {
+            Value::QName(q) | Value::Typed { datatype: q, .. } => names.push(q),
+            _ => {}
+        }
+    }
+    let offending = names.into_iter().find(|q| !writable(q));
+
+    let mut parts = Vec::new();
+    if let Some(id) = record.id() {
+        parts.push(match provn::statement_name(id, namespaces) {
+            Ok(text) => text,
+            Err(_) => format!("<{id}>"),
+        });
+    }
+    if let Some(q) = offending.filter(|q| Some(*q) != record.id()) {
+        parts.push(format!("<{q}>"));
+    }
+    let separator = if record.kind().is_element() {
+        ", "
+    } else {
+        "; "
+    };
+    format!(
+        "{}({}) {UNWRITABLE}",
+        record.kind().provn_keyword(),
+        parts.join(separator)
+    )
 }
 
 #[cfg(test)]

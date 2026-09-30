@@ -63,6 +63,7 @@ Tests are in `provkit-cli/`.
 | Behaviour | Reason | Test |
 |---|---|---|
 | A leading UTF-8 byte-order mark (U+FEFF) is dropped from file and standard input before the format is sniffed and the text is read. The library readers do not drop it: `json::read` and `provn::read` take the text as given. | Editors on Windows often write a byte-order mark, and it is an encoding signature rather than content. The library takes `&str`, where the caller has already decoded the bytes. | `a_leading_byte_order_mark_is_ignored` (tests/cli.rs) |
+| `compare` prints a one-sided record or bundle that PROV-N cannot write (a name with a space, for example) as a heading instead: the keyword, the identifier, and the first name PROV-N cannot write as `<full IRI>`, ending in `// not valid PROV-N`. A bundle heading reads `bundle <IRI>: // not valid PROV-N`. The exit code stays 1. `provn::statement` still returns the error. | PROV-JSON can hold names PROV-N cannot, and a difference in such a record is still a difference, not a failure with exit code 2. | `compare_marks_records_prov_n_cannot_write` (tests/cli.rs) |
 | File extensions `.json` and `.provn` match in any letter case (`out.JSON`). | Case-insensitive file systems make `OUT.JSON` and `out.json` the same file. | `extensions_match_in_any_case` (tests/cli.rs), `extension_maps_to_format` (src/format.rs) |
 
 ## Not implemented in 0.1.0

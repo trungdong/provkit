@@ -472,3 +472,35 @@ fn compare_empty_bundle_against_none_prints_only_the_heading() {
         .stdout(format!("only in {}:\n  bundle ex:b:\n", a.display()))
         .stderr("");
 }
+
+#[test]
+fn compare_marks_records_prov_n_cannot_write() {
+    let dir = scratch("compare_marks_records_prov_n_cannot_write");
+    let a = dir.join("a.json");
+    let b = dir.join("b.json");
+    std::fs::write(
+        &a,
+        r#"{"prefix": {"ex": "http://example.org/"},
+            "entity": {"ex:my entity": {}, "ex:e": {"ex:my attr": "v"}},
+            "used": {"_:u": {"prov:activity": "ex:my activity"}},
+            "bundle": {"ex:my bundle": {"entity": {"ex:inner": {}}}}}"#,
+    )
+    .unwrap();
+    std::fs::write(&b, r#"{"prefix": {"ex": "http://example.org/"}}"#).unwrap();
+    provkit()
+        .args(["compare"])
+        .arg(&a)
+        .arg(&b)
+        .assert()
+        .code(1)
+        .stdout(format!(
+            "only in {}:\n  \
+             entity(<http://example.org/my entity>) // not valid PROV-N\n  \
+             entity(ex:e, <http://example.org/my attr>) // not valid PROV-N\n  \
+             used(<http://example.org/my activity>) // not valid PROV-N\n  \
+             bundle <http://example.org/my bundle>: // not valid PROV-N\n    \
+             entity(ex:inner)\n",
+            a.display()
+        ))
+        .stderr("");
+}
