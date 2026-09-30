@@ -244,13 +244,10 @@ impl FormalAttr {
 /// The formal of `kind` that `name` spells, when `name` is `prov:` plus the
 /// local name of one of the kind's formals.
 pub(crate) fn formal_named(kind: Kind, name: &QName) -> Option<FormalAttr> {
-    if &**name.namespace() != PROV {
-        return None;
-    }
     kind.formals()
         .iter()
         .copied()
-        .find(|f| f.local_name() == name.local())
+        .find(|f| name.is(PROV, f.local_name()))
 }
 
 /// The error for an attribute that spells one of the record's own formals.

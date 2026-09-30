@@ -476,4 +476,36 @@ mod tests {
         assert_eq!(u.bundles[0].records.len(), 1);
         assert_eq!(u.bundles[0].records[0].attributes().len(), 2);
     }
+
+    #[test]
+    fn two_spellings_of_one_iri_merge() {
+        let split = |ns: &str, local: &str| crate::QName::new(ns, local);
+        let mut d = Document::new();
+        for (ns, local, label) in [
+            ("http://example.org/", "foo/bar", "one"),
+            ("http://example.org/foo/", "bar", "two"),
+        ] {
+            let mut a = Attributes::new();
+            a.insert(PROV_LABEL.clone(), label.into());
+            d.records.push(
+                Record::from_parts(
+                    Kind::Generation,
+                    Some(split(ns, local)),
+                    vec![(F::Entity, Formal::Name(split(ns, "e")))],
+                    a,
+                )
+                .unwrap(),
+            );
+        }
+        // `e` differs between the two, so the merge must see a conflict
+        // rather than two unrelated records.
+        assert!(matches!(d.unified(), Err(Error::Unification { .. })));
+        let Record::Generation(g) = &mut d.records[1] else {
+            panic!()
+        };
+        g.entity = Some(split("http://example.org/", "e"));
+        let u = d.unified().unwrap();
+        assert_eq!(u.records.len(), 1);
+        assert_eq!(u.records[0].attributes().len(), 2);
+    }
 }

@@ -3,7 +3,6 @@
 use indexmap::IndexMap;
 
 use super::wire::{JsonDocument, JsonRecord, JsonSection, JsonValue};
-use crate::namespaces::PROV;
 use crate::qname::well_known::{
     PROV_QUALIFIED_NAME, XSD_BOOLEAN, XSD_DOUBLE, XSD_INT, XSD_INTEGER, XSD_LONG, XSD_QNAME,
 };
@@ -98,10 +97,7 @@ fn records_from(
     let mut attributes = Attributes::new();
     for (key, value) in body {
         let name = scope.resolve(key)?;
-        let formal = (&**name.namespace() == PROV)
-            .then(|| FormalAttr::from_local_name(name.local()))
-            .flatten()
-            .filter(|f| kind.formals().contains(f));
+        let formal = crate::record::formal_named(kind, &name);
         match formal {
             Some(FormalAttr::Entity) if kind == Kind::Membership => {
                 for v in value.items() {
@@ -556,5 +552,18 @@ mod tests {
             d.bundles[0].records[0].id(),
             Some(&QName::new("http://shadow.org/", "e"))
         );
+    }
+
+    #[test]
+    fn a_formal_spelled_with_another_split_is_the_formal() {
+        let d = doc(
+            r#"{"prefix": {"ex": "http://example.org/", "w3": "http://www.w3.org/ns/"},
+            "wasGeneratedBy": {"_:g": {"w3:prov#entity": "ex:e"}}}"#,
+        );
+        let Record::Generation(g) = &d.records[0] else {
+            panic!()
+        };
+        assert_eq!(g.entity, Some(ex("e")));
+        assert!(g.attributes.is_empty());
     }
 }
