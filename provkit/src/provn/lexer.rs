@@ -62,6 +62,8 @@ pub(crate) fn tokenize(text: &str) -> Result<Vec<Token>> {
         pos: 0,
         line: 1,
         line_start: 0,
+        column_at: 0,
+        column: 1,
         after_string: false,
     };
     let mut tokens = Vec::new();
@@ -83,6 +85,10 @@ struct Lexer<'a> {
     line: usize,
     /// Byte offset of the current line's first byte.
     line_start: usize,
+    /// Byte offset at which `column` was last computed.
+    column_at: usize,
+    /// 1-based column, in characters, of `column_at`.
+    column: usize,
     /// Whether the previous token was a string, the only place `@` may start a language tag.
     after_string: bool,
 }
@@ -92,8 +98,16 @@ impl<'a> Lexer<'a> {
         &self.text[self.pos..]
     }
 
-    fn column(&self) -> usize {
-        self.text[self.line_start..self.pos].chars().count() + 1
+    /// The 1-based column of `pos`. Counts only the characters since the
+    /// last call, so a long single line is scanned once, not once per token.
+    fn column(&mut self) -> usize {
+        if self.column_at < self.line_start {
+            self.column_at = self.line_start;
+            self.column = 1;
+        }
+        self.column += self.text[self.column_at..self.pos].chars().count();
+        self.column_at = self.pos;
+        self.column
     }
 
     fn error(&self, message: impl Into<String>) -> Error {
@@ -701,6 +715,19 @@ line""" "#,
                 local: "it's".into()
             }
         );
+    }
+
+    #[test]
+    fn columns_stay_right_across_many_tokens() {
+        let t = tokenize("é, é,\n  é , x").unwrap();
+        let columns = |line| {
+            t.iter()
+                .filter(|t| t.line == line)
+                .map(|t| t.column)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(columns(1), [1, 2, 4, 5]);
+        assert_eq!(columns(2), [3, 5, 7, 8]);
     }
 
     #[test]

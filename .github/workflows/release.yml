@@ -33,4 +33,5 @@ jobs:
           bin: provkit
           target: ${{ matrix.target }}
           manifest-path: provkit-cli/Cargo.toml
+          locked: true
           token: ${{ secrets.GITHUB_TOKEN }}

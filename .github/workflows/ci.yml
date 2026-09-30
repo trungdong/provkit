@@ -17,6 +17,15 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --workspace --all-features
+      - run: cargo check -p provkit --no-default-features --tests
+        env:
+          RUSTFLAGS: -D warnings
+      - run: cargo check -p provkit --no-default-features --features provn --tests
+        env:
+          RUSTFLAGS: -D warnings
+      - run: cargo check -p provkit --no-default-features --features json --tests
+        env:
+          RUSTFLAGS: -D warnings
       - run: cargo doc --workspace --no-deps
         env:
           RUSTDOCFLAGS: -D warnings

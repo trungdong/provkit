@@ -8,7 +8,7 @@ Status: 0.1.0, unreleased.
 ## Install
 
 ```sh
-cargo install provkit-cli
+cargo install --locked provkit-cli
 ```
 
 The binary is `provkit`. Prebuilt binaries are on the
