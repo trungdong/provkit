@@ -247,6 +247,24 @@ fn library_errors_name_the_file() {
 }
 
 #[test]
+fn positioned_errors_print_their_message_once() {
+    let dir = scratch("positioned_errors_print_their_message_once");
+    let bad = dir.join("bad.provn");
+    std::fs::write(&bad, "document\n  entity(ex:e1)\nendDocument\n").unwrap();
+    let assert = provkit().args(["convert"]).arg(&bad).assert().code(2);
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(
+        stderr.contains("line 2, column 10: undeclared prefix `ex`"),
+        "stderr was {stderr:?}"
+    );
+    assert_eq!(
+        stderr.matches("undeclared prefix `ex`").count(),
+        1,
+        "stderr was {stderr:?}"
+    );
+}
+
+#[test]
 fn stdin_errors_name_the_input_as_dash() {
     provkit()
         .args(["convert", "-"])

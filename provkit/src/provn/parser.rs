@@ -48,7 +48,7 @@ fn at(token: &Token, error: Error) -> Error {
         other => Error::At {
             line: token.line,
             column: token.column,
-            source: Box::new(other),
+            error: Box::new(other),
         },
     }
 }
@@ -584,8 +584,8 @@ mod tests {
             Error::At {
                 line,
                 column,
-                source,
-            } => ((line, column), *source),
+                error,
+            } => ((line, column), *error),
             other => panic!("expected Error::At, got {other:?}"),
         }
     }
@@ -601,17 +601,17 @@ mod tests {
             "line 3, column 1: wasGeneratedBy: prov:activity is given as an attribute; \
              its value belongs in the positional argument"
         );
-        let (position, source) = located(e);
+        let (position, inner) = located(e);
         assert_eq!(position, (3, 1));
         assert!(
             matches!(
-                source,
+                inner,
                 Error::InvalidRecord {
                     kind: Kind::Generation,
                     ..
                 }
             ),
-            "{source:?}"
+            "{inner:?}"
         );
         // prov:type and prov:label on a relation stay attributes.
         let d = doc(
@@ -811,11 +811,11 @@ mod tests {
             ("bundle zz:b\nendBundle", (3, 8)),
             ("entity(ex:e, [ex:k=\"zz:v\" %% xsd:QName])", (3, 20)),
         ] {
-            let (found, source) = read(body);
+            let (found, inner) = read(body);
             assert_eq!(found, position, "{body}");
             assert!(
-                matches!(&source, Error::UndeclaredPrefix(p) if p == "zz"),
-                "{body}: {source:?}"
+                matches!(&inner, Error::UndeclaredPrefix(p) if p == "zz"),
+                "{body}: {inner:?}"
             );
         }
         assert!(matches!(

@@ -29,8 +29,8 @@ pub enum Profile {
 ///
 /// - [`Error::Syntax`](crate::Error::Syntax) for text the grammar rejects.
 /// - [`Error::At`](crate::Error::At) for a name, literal or record that
-///   parses but that PROV does not allow. Its `source` is the error at that
-///   position, such as [`Error::UndeclaredPrefix`](crate::Error::UndeclaredPrefix)
+///   parses but that PROV does not allow. Its `error` field is the error at
+///   that position, such as [`Error::UndeclaredPrefix`](crate::Error::UndeclaredPrefix)
 ///   or [`Error::InvalidRecord`](crate::Error::InvalidRecord).
 pub fn read(text: &str) -> Result<Document> {
     read_with(text, Profile::Default)

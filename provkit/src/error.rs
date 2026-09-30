@@ -18,15 +18,15 @@ pub enum Error {
     },
     /// An error at a position in PROV-N text: a name, literal or record the
     /// reader could parse but not accept.
-    #[error("line {line}, column {column}: {source}")]
+    #[error("line {line}, column {column}: {error}")]
     At {
         /// 1-based line.
         line: usize,
         /// 1-based column, in characters.
         column: usize,
-        /// The error at that position.
-        #[source]
-        source: Box<Error>,
+        /// The error at that position. `Display` prints it, so it is not
+        /// also the `source()` of this error.
+        error: Box<Error>,
     },
     /// PROV-JSON that is valid JSON but not a PROV document.
     #[cfg(feature = "json")]
@@ -52,7 +52,7 @@ pub enum Error {
         reason: String,
     },
     /// A namespace declaration PROV-N cannot write.
-    #[error("PROV-N cannot declare prefix `{prefix}` for <{iri}>: {reason}")]
+    #[error("PROV-N cannot declare {}: {reason}", declaration(.prefix, .iri))]
     UnwritableNamespace {
         /// The prefix. The empty string stands for the default namespace.
         prefix: String,
@@ -116,5 +116,50 @@ pub enum Error {
     Io(#[from] std::io::Error),
 }
 
+/// A namespace declaration as [`Error::UnwritableNamespace`] names it. An
+/// empty `prefix` is the default namespace.
+fn declaration(prefix: &str, iri: &str) -> String {
+    if prefix.is_empty() {
+        format!("the default namespace <{iri}>")
+    } else {
+        format!("prefix `{prefix}` for <{iri}>")
+    }
+}
+
 /// `Result` with the crate's [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn at_prints_its_error_and_has_no_source() {
+        let e = Error::At {
+            line: 3,
+            column: 8,
+            error: Box::new(Error::UndeclaredPrefix("zz".into())),
+        };
+        assert_eq!(e.to_string(), "line 3, column 8: undeclared prefix `zz`");
+        assert!(std::error::Error::source(&e).is_none());
+    }
+
+    #[test]
+    fn unwritable_namespace_names_the_prefix_or_the_default_namespace() {
+        let error = |prefix: &str| Error::UnwritableNamespace {
+            prefix: prefix.into(),
+            iri: "http://x.org/>".into(),
+            reason: "the namespace IRI contains '>' (U+003E)".into(),
+        };
+        assert_eq!(
+            error("p").to_string(),
+            "PROV-N cannot declare prefix `p` for <http://x.org/>>: \
+             the namespace IRI contains '>' (U+003E)"
+        );
+        assert_eq!(
+            error("").to_string(),
+            "PROV-N cannot declare the default namespace <http://x.org/>>: \
+             the namespace IRI contains '>' (U+003E)"
+        );
+    }
+}
