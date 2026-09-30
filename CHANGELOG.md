@@ -25,6 +25,12 @@ follows [Semantic Versioning](https://semver.org/).
     (owned and by reference).
   - Strict name resolution with `QName` and `Namespaces`.
   - `Value` with plain, language-tagged, name, `dateTime` and typed literals.
+  - `DateTime` follows XSD 1.1: year `0000` exists and is a leap year, and
+    `-0000` is the same year. `DateTime::new` accepts only values whose
+    printed text `DateTime::parse` reads back, and its errors carry the text
+    of the rejected components. `DateTime` has the accessors `year`, `month`,
+    `day`, `hour`, `minute`, `second`, `nanosecond` and `offset_minutes`, and
+    implements `FromStr`.
   - PROV-JSON read and write (`json` module).
   - PROV-N read and write (`provn` module), with the `Strict` and `Default`
     read profiles.

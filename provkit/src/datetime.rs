@@ -1,8 +1,9 @@
 //! `xsd:dateTime`.
 
 use std::cmp::Ordering;
-use std::fmt;
+use std::fmt::{self, Write as _};
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
 
 use crate::{Error, Result};
 
@@ -13,8 +14,15 @@ use crate::{Error, Result};
 /// never compare equal. The text a value was parsed from is kept and printed
 /// back; a value built from components prints in canonical form.
 ///
+/// Years follow XSD 1.1: year 0000 exists, `-0000` is the same year, and year 0
+/// is a leap year. Years are proleptic Gregorian in astronomical numbering.
+///
 /// Fractional seconds are held to nanoseconds. Digits beyond the ninth are
 /// truncated for equality, ordering and hashing, and kept in the source text.
+///
+/// `DateTime` implements [`PartialOrd`] and not `Ord`. A zoned time and an
+/// unzoned time have no defined order, so [`PartialOrd::partial_cmp`] returns
+/// `None` for that pair and a total order does not exist.
 #[derive(Clone, Debug)]
 pub struct DateTime {
     year: i64,
@@ -32,6 +40,16 @@ pub struct DateTime {
 impl DateTime {
     /// Build from components. `hour` may be 24 only with zero minutes and
     /// seconds. `offset` is minutes from UTC, within ±14:00.
+    ///
+    /// The canonical text of a built value always parses back to an equal
+    /// value.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidLiteral`] when a component is out of range, when
+    /// the day does not exist in the month, or when the year is `i64::MIN` or
+    /// the hour-24 rollover moves past `i64::MAX`. The error's `lexical` is the
+    /// text of the rejected components.
     // One argument per XSD component; a parameter struct would only restate them.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -55,11 +73,22 @@ impl DateTime {
             offset,
             source: None,
         };
-        dt.validate("")?;
+        dt.validate()
+            .and_then(|()| dt.check_prints_back())
+            .map_err(|reason| invalid(&dt.text(false), reason))?;
         Ok(dt)
     }
 
-    /// Parse the XSD lexical form `-?YYYY(Y*)-MM-DDThh:mm:ss(.s+)?(Z|(+|-)hh:mm)?`.
+    /// Parse the XSD lexical form
+    /// `-?YYYY(Y*)-MM-DDThh:mm:ss(.s+)?(Z|(+|-)hh:mm)?`.
+    ///
+    /// A year of more than four digits has no leading zero, and `0000` and
+    /// `-0000` both denote year 0.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidLiteral`] when `text` does not match the form
+    /// or a component is out of range.
     pub fn parse(text: &str) -> Result<Self> {
         let (date, rest) = text
             .split_once('T')
@@ -142,33 +171,139 @@ impl DateTime {
             offset,
             source: Some(text.into()),
         };
-        dt.validate(text)?;
+        dt.validate().map_err(|reason| invalid(text, reason))?;
         Ok(dt)
     }
 
-    fn validate(&self, text: &str) -> Result<()> {
-        if self.year == 0 {
-            return Err(invalid(text, "year 0 does not exist"));
-        }
+    fn validate(&self) -> std::result::Result<(), &'static str> {
         if !(1..=12).contains(&self.month) {
-            return Err(invalid(text, "month out of range"));
+            return Err("month out of range");
         }
         if self.day == 0 || self.day > days_in_month(self.year, self.month) {
-            return Err(invalid(text, "day out of range"));
+            return Err("day out of range");
         }
         if self.hour > 24 || self.minute > 59 || self.second > 59 {
-            return Err(invalid(text, "time out of range"));
+            return Err("time out of range");
         }
         if self.hour == 24 && (self.minute != 0 || self.second != 0 || self.nanos != 0) {
-            return Err(invalid(text, "hour 24 needs 00:00:00"));
+            return Err("hour 24 needs 00:00:00");
         }
         if self.nanos >= 1_000_000_000 {
-            return Err(invalid(text, "fraction out of range"));
+            return Err("fraction out of range");
         }
         if self.offset.is_some_and(|o| !(-840..=840).contains(&o)) {
-            return Err(invalid(text, "offset outside -14:00..+14:00"));
+            return Err("offset outside -14:00..+14:00");
         }
         Ok(())
+    }
+
+    /// Fails when the canonical text would not parse back: `i64::MIN` has no
+    /// readable magnitude, and the hour-24 rollover can pass `i64::MAX`.
+    fn check_prints_back(&self) -> std::result::Result<(), &'static str> {
+        if self.year == i64::MIN {
+            return Err("year out of range");
+        }
+        if i64::try_from(self.canonical_date().0).is_err() {
+            return Err("year out of range after hour 24 rolls over");
+        }
+        Ok(())
+    }
+
+    /// The date and hour of the canonical form, where hour 24 becomes the next
+    /// day's midnight.
+    fn canonical_date(&self) -> (i128, i128, i128, i128) {
+        if self.hour == 24 {
+            let (y, m, d) = civil_from_days(days_from_civil(self.year, self.month, self.day) + 1);
+            (y, m, d, 0)
+        } else {
+            (
+                i128::from(self.year),
+                i128::from(self.month),
+                i128::from(self.day),
+                i128::from(self.hour),
+            )
+        }
+    }
+
+    /// The components in canonical layout, without validation. `roll` moves hour
+    /// 24 to the next day's midnight.
+    fn text(&self, roll: bool) -> String {
+        let (year, month, day, hour) = if roll {
+            self.canonical_date()
+        } else {
+            (
+                i128::from(self.year),
+                i128::from(self.month),
+                i128::from(self.day),
+                i128::from(self.hour),
+            )
+        };
+        let mut out = String::new();
+        if year < 0 {
+            let _ = write!(out, "-{:04}", year.unsigned_abs());
+        } else {
+            let _ = write!(out, "{year:04}");
+        }
+        let _ = write!(
+            out,
+            "-{month:02}-{day:02}T{hour:02}:{:02}:{:02}",
+            self.minute, self.second
+        );
+        if self.nanos != 0 {
+            let digits = format!("{:09}", self.nanos);
+            let _ = write!(out, ".{}", digits.trim_end_matches('0'));
+        }
+        match self.offset {
+            None => {}
+            Some(0) => out.push('Z'),
+            Some(o) => {
+                let sign = if o < 0 { '-' } else { '+' };
+                let minutes = o.unsigned_abs();
+                let _ = write!(out, "{sign}{:02}:{:02}", minutes / 60, minutes % 60);
+            }
+        }
+        out
+    }
+
+    /// The year, as written. `0000` and `-0000` both give 0.
+    pub fn year(&self) -> i64 {
+        self.year
+    }
+
+    /// The month, 1 to 12.
+    pub fn month(&self) -> u8 {
+        self.month
+    }
+
+    /// The day of the month, 1 to 31.
+    pub fn day(&self) -> u8 {
+        self.day
+    }
+
+    /// The hour, 0 to 24, as written. `24:00:00` gives 24.
+    pub fn hour(&self) -> u8 {
+        self.hour
+    }
+
+    /// The minute, 0 to 59.
+    pub fn minute(&self) -> u8 {
+        self.minute
+    }
+
+    /// The whole second, 0 to 59.
+    pub fn second(&self) -> u8 {
+        self.second
+    }
+
+    /// The fraction of a second in nanoseconds. Digits beyond the ninth are not
+    /// held.
+    pub fn nanosecond(&self) -> u32 {
+        self.nanos
+    }
+
+    /// The offset from UTC in minutes, or `None` for an unzoned time.
+    pub fn offset_minutes(&self) -> Option<i32> {
+        self.offset
     }
 
     /// Whether the value carries a timezone offset.
@@ -176,8 +311,9 @@ impl DateTime {
         self.offset.is_some()
     }
 
-    /// The comparison key, wide enough for any year `parse` accepts: seconds since 1970-01-01T00:00:00 (UTC when zoned,
-    /// local wall-clock when not) and nanoseconds. Hour 24 rolls over here.
+    /// The comparison key, wide enough for any year `parse` accepts: seconds
+    /// since 1970-01-01T00:00:00 (UTC when zoned, local wall-clock when not)
+    /// and nanoseconds. Hour 24 rolls over here.
     fn key(&self) -> (i128, u32) {
         let days = days_from_civil(self.year, self.month, self.day);
         let secs = days * 86_400
@@ -216,39 +352,21 @@ impl fmt::Display for DateTime {
             return f.write_str(source);
         }
         // Canonical form: hour 24 becomes the next day's midnight.
-        let (year, month, day, hour) = if self.hour == 24 {
-            let (y, m, d) = civil_from_days(days_from_civil(self.year, self.month, self.day) + 1);
-            (y, m, d, 0)
-        } else {
-            (
-                i128::from(self.year),
-                i128::from(self.month),
-                i128::from(self.day),
-                i128::from(self.hour),
-            )
-        };
-        if year < 0 {
-            write!(f, "-{:04}", -year)?;
-        } else {
-            write!(f, "{year:04}")?;
-        }
-        write!(
-            f,
-            "-{month:02}-{day:02}T{hour:02}:{:02}:{:02}",
-            self.minute, self.second
-        )?;
-        if self.nanos != 0 {
-            let digits = format!("{:09}", self.nanos);
-            write!(f, ".{}", digits.trim_end_matches('0'))?;
-        }
-        match self.offset {
-            None => Ok(()),
-            Some(0) => f.write_str("Z"),
-            Some(o) => {
-                let sign = if o < 0 { '-' } else { '+' };
-                write!(f, "{sign}{:02}:{:02}", o.abs() / 60, o.abs() % 60)
-            }
-        }
+        f.write_str(&self.text(true))
+    }
+}
+
+impl FromStr for DateTime {
+    type Err = Error;
+
+    /// Calls [`DateTime::parse`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidLiteral`] under the conditions of
+    /// [`DateTime::parse`].
+    fn from_str(text: &str) -> Result<Self> {
+        DateTime::parse(text)
     }
 }
 
@@ -444,11 +562,147 @@ mod tests {
         assert!(max > a);
         let min = DateTime::parse("-9223372036854775807-01-01T00:00:00").unwrap();
         assert_eq!(hash(&min), hash(&min.clone()));
-        let built = DateTime::new(i64::MAX, 12, 31, 24, 0, 0, 0, None).unwrap();
+        let max_year = DateTime::parse("9223372036854775807-01-01T00:00:00").unwrap();
+        assert_eq!(hash(&max_year), hash(&max_year.clone()));
+        assert!(min < max_year);
+        assert!(max_year > min);
+        assert!(DateTime::new(i64::MAX, 12, 31, 24, 0, 0, 0, None).is_err());
+    }
+
+    #[test]
+    fn year_zero_exists_and_is_a_leap_year() {
+        let zero = DateTime::parse("0000-02-29T00:00:00Z").unwrap();
+        assert_eq!(zero.year(), 0);
+        assert_eq!(DateTime::parse("-0000-02-29T00:00:00Z").unwrap(), zero);
+        assert!(DateTime::parse("-0001-02-29T00:00:00Z").is_err());
         assert!(
-            built
-                .to_string()
-                .starts_with("9223372036854775808-01-01T00:00:00")
+            DateTime::parse("0000-01-01T00:00:00").unwrap()
+                < DateTime::parse("0001-01-01T00:00:00").unwrap()
         );
+        assert_eq!(
+            DateTime::parse("0000-01-01T00:00:00").unwrap(),
+            DateTime::parse("-0000-01-01T00:00:00").unwrap()
+        );
+    }
+
+    #[test]
+    fn timeline_is_continuous_across_year_zero() {
+        let before = DateTime::parse("-0001-12-31T23:59:59Z").unwrap();
+        let start = DateTime::parse("0000-01-01T00:00:00Z").unwrap();
+        assert!(before < start);
+        let diff = |a: &DateTime, b: &DateTime| a.key().0 - b.key().0;
+        assert_eq!(diff(&start, &before), 1);
+        assert_eq!(
+            DateTime::parse("0000-12-31T24:00:00Z").unwrap(),
+            DateTime::parse("0001-01-01T00:00:00Z").unwrap()
+        );
+        assert_eq!(
+            diff(&DateTime::parse("0001-01-01T00:00:00Z").unwrap(), &start),
+            366 * 86_400
+        );
+    }
+
+    #[test]
+    fn year_text_follows_the_xsd_1_1_year_frag() {
+        for text in [
+            "00000-01-01T00:00:00",
+            "02012-01-01T00:00:00",
+            "-00000-01-01T00:00:00",
+            "012-01-01T00:00:00",
+        ] {
+            assert!(
+                matches!(DateTime::parse(text), Err(Error::InvalidLiteral { .. })),
+                "{text}"
+            );
+        }
+        assert!(DateTime::parse("10000-01-01T00:00:00").is_ok());
+    }
+
+    #[test]
+    fn whatever_new_accepts_prints_and_parses_back() {
+        for year in [
+            i64::MIN,
+            i64::MIN + 1,
+            -1,
+            0,
+            1,
+            9999,
+            10_000,
+            i64::MAX - 1,
+            i64::MAX,
+        ] {
+            for (month, day, hour) in [(1, 1, 0), (12, 31, 23), (12, 31, 24)] {
+                for offset in [None, Some(0), Some(-840), Some(330)] {
+                    if let Ok(value) = DateTime::new(year, month, day, hour, 0, 0, 7, offset) {
+                        let back: DateTime = value.to_string().parse().unwrap();
+                        assert_eq!(back, value, "{value}");
+                    }
+                }
+            }
+        }
+        assert!(DateTime::new(i64::MAX, 12, 31, 24, 0, 0, 0, None).is_err());
+        assert!(DateTime::new(i64::MIN, 1, 1, 0, 0, 0, 0, None).is_err());
+        assert!(DateTime::new(i64::MAX, 12, 31, 23, 0, 0, 0, None).is_ok());
+    }
+
+    #[test]
+    fn new_errors_name_the_components() {
+        let lexical = |result: Result<DateTime>| match result {
+            Err(Error::InvalidLiteral { lexical, .. }) => lexical,
+            other => panic!("expected InvalidLiteral, got {other:?}"),
+        };
+        assert_eq!(
+            lexical(DateTime::new(2012, 13, 1, 0, 0, 0, 0, None)),
+            "2012-13-01T00:00:00"
+        );
+        assert_eq!(
+            lexical(DateTime::new(-5, 2, 30, 1, 2, 3, 500_000_000, Some(-90))),
+            "-0005-02-30T01:02:03.5-01:30"
+        );
+        assert_eq!(
+            lexical(DateTime::new(2012, 1, 1, 0, 0, 0, 0, Some(i32::MIN))),
+            "2012-01-01T00:00:00-35791394:08"
+        );
+        assert_eq!(
+            lexical(DateTime::new(i64::MAX, 12, 31, 24, 0, 0, 0, Some(0))),
+            "9223372036854775807-12-31T24:00:00Z"
+        );
+    }
+
+    #[test]
+    fn accessors_return_components_as_written() {
+        let d = DateTime::parse("-0000-02-29T24:00:00-05:30").unwrap();
+        assert_eq!(
+            (
+                d.year(),
+                d.month(),
+                d.day(),
+                d.hour(),
+                d.minute(),
+                d.second()
+            ),
+            (0, 2, 29, 24, 0, 0)
+        );
+        assert_eq!(d.nanosecond(), 0);
+        assert_eq!(d.offset_minutes(), Some(-330));
+        assert_eq!(
+            DateTime::parse("2011-11-16T16:05:33")
+                .unwrap()
+                .offset_minutes(),
+            None
+        );
+        assert_eq!(
+            DateTime::parse("2011-11-16T16:05:33Z")
+                .unwrap()
+                .offset_minutes(),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn from_str_parses() {
+        let d: DateTime = "2011-11-16T16:05:33Z".parse().unwrap();
+        assert_eq!(d, DateTime::parse("2011-11-16T16:05:33Z").unwrap());
+        assert!("nope".parse::<DateTime>().is_err());
     }
 }
