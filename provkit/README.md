@@ -31,8 +31,9 @@ namespace tables and the spelling of a number, boolean or `dateTime`.
 `Document::unified()` merges records that share an identifier and kind, and
 fails where PROV-CONSTRAINTS 53 to 55 forbid the sharing or where formal
 attributes conflict. `provn::read_with` takes a `provn::Profile`: `Strict`
-accepts the whole PROV-N grammar and the MUST statements of its prose, and
-`Default` also accepts what ProvToolbox and ProvPy write.
+accepts the whole PROV-N grammar and the MUST statements of its prose, with
+the departures the repository's CONFORMANCE.md records, and `Default` also
+accepts what ProvToolbox and ProvPy write.
 
 ## Features
 

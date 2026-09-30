@@ -34,8 +34,8 @@ provkit compare --unified a.json b.provn
 ```
 
 Input format comes from `-f json|provn`, else the file extension, else the
-content. `document` followed by whitespace or the end of input marks PROV-N,
-and `{` marks PROV-JSON. Output format comes from `-t`, else the `-o`
+content. `document` followed by whitespace, a comment or the end of input
+marks PROV-N, and `{` marks PROV-JSON. Output format comes from `-t`, else the `-o`
 extension (`.json` or `.provn`, in any letter case). PROV-N is the default on
 standard output only, so `-o out.txt` needs `-t json` or `-t provn`. `-` means
 standard input or output.
@@ -75,17 +75,18 @@ Document equality is set-based. `Document::unified()` merges records that
 share an identifier and kind, and fails where PROV-CONSTRAINTS 53 to 55 forbid
 the sharing or where formal attributes conflict. `provn::read_with` takes a
 `provn::Profile`. `Strict` accepts the whole PROV-N grammar and the MUST
-statements of its prose, and `Default` (the profile `provn::read` uses) also
-accepts what ProvToolbox and ProvPy write. `provn::read_report` also lists the
+statements of its prose, with the departures CONFORMANCE.md records, and
+`Default` (the profile `provn::read` uses) also accepts what ProvToolbox and
+ProvPy write. `provn::read_report` also lists the
 extensibility expressions the reader left out. API documentation:
 `cargo doc --open -p provkit`.
 
 ## Conformance
 
-[CONFORMANCE.md](CONFORMANCE.md) lists where provkit departs from the PROV
+[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md) lists where provkit departs from the PROV
 Recommendations, where it differs from ProvPy 3.2.2 (with the ProvPy issue
 number) and its implementation limits, each with its reason and test.
-[CHANGELOG.md](CHANGELOG.md) lists the releases.
+[CHANGELOG.md](https://github.com/trungdong/provkit/blob/main/CHANGELOG.md) lists the releases.
 
 ## Tests and CI
 
@@ -104,5 +105,5 @@ target with `rustup target add wasm32-unknown-unknown`.
 
 ## Licence
 
-MIT OR Apache-2.0, at your option. See [LICENSE-MIT](LICENSE-MIT) and
-[LICENSE-APACHE](LICENSE-APACHE).
+MIT OR Apache-2.0, at your option. See [LICENSE-MIT](https://github.com/trungdong/provkit/blob/main/LICENSE-MIT) and
+[LICENSE-APACHE](https://github.com/trungdong/provkit/blob/main/LICENSE-APACHE).

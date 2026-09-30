@@ -6,8 +6,9 @@
 //! Every error carries a position. A grammar error is [`Error::Syntax`], and
 //! an error from the name, value or record layer is wrapped by [`at`].
 //!
-//! Extensibility expressions (section 5) are parsed by the methods in
-//! `extension.rs` and recorded in [`Parser::ignored`] instead of the sink.
+//! Extensibility expressions (section 5) are parsed by the methods in the
+//! `extension` module and recorded in [`Parser::ignored`] instead of the
+//! document.
 
 use super::lexer::{Token, TokenKind};
 use super::{Ignored, Profile};

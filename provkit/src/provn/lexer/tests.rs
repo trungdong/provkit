@@ -252,6 +252,35 @@ fn escapes_are_the_eleven_of_production_55() {
     }
 }
 
+/// `/` and `*` are name characters ([53] and [54]), so `//` or `/*` glued to
+/// a name joins it; a comment starts after whitespace or punctuation.
+#[test]
+fn a_comment_glued_to_a_name_is_part_of_the_name() {
+    assert_eq!(kinds("ex:b//c"), [name("ex", "b//c"), TokenKind::Eof]);
+    assert_eq!(
+        kinds("endDocument//c"),
+        [name("", "endDocument//c"), TokenKind::Eof]
+    );
+    assert_eq!(
+        kinds("document/*c*/"),
+        [name("", "document/*c*/"), TokenKind::Eof]
+    );
+    assert_eq!(
+        kinds("entity(ex:e)//c"),
+        [
+            name("", "entity"),
+            TokenKind::LParen,
+            name("ex", "e"),
+            TokenKind::RParen,
+            TokenKind::Eof
+        ]
+    );
+    assert_eq!(
+        kinds("endDocument //c"),
+        [name("", "endDocument"), TokenKind::Eof]
+    );
+}
+
 #[test]
 fn a_block_comment_needs_both_delimiters() {
     assert_eq!(syntax_at("/*/"), (1, 1));

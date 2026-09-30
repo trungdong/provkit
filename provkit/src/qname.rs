@@ -33,11 +33,13 @@ impl QName {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidQName`] if PROV-N cannot write `local`, even with an
-    /// escape: a space, a control character, one of `{ } < > " | ^ \`
-    /// or a backtick, a `%` not followed by two hex digits, or a first
-    /// character that may only continue a name (`·`, `‿`, `⁀` or a
-    /// combining mark). An empty local part is valid. The error carries `local`.
+    /// [`Error::InvalidQName`] if `local` holds a character that `PN_LOCAL`
+    /// admits nowhere, bare or after `\`: a space or another separator, a
+    /// control character, a symbol outside `PN_CHARS` such as `£` or `×`,
+    /// one of `{ } < > " | ^ \` or a backtick, a `%` not followed by two hex
+    /// digits, or a first character that may only continue a name (`·`,
+    /// `‿`, `⁀` or a combining mark). An empty local part is valid. The
+    /// error carries `local`.
     pub fn new(namespace: &str, local: &str) -> Result<Self> {
         Self::in_namespace(Arc::from(namespace), local)
     }
@@ -250,8 +252,31 @@ mod tests {
     fn a_local_part_provn_cannot_write_is_invalid() {
         let new = |local: &str| QName::new("http://example.org/", local);
         for local in [
-            "a b", "a\tb", "a\u{7}b", "a{b", "a}b", "a<b", "a>b", "a\"b", "a|b", "a^b", "a\\b",
-            "a`b", "a%", "a%4", "a%zz", "\u{301}a", "\u{B7}a", "\u{2028}",
+            "a b",
+            "a\tb",
+            "a\u{7}b",
+            "a{b",
+            "a}b",
+            "a<b",
+            "a>b",
+            "a\"b",
+            "a|b",
+            "a^b",
+            "a\\b",
+            "a`b",
+            "a%",
+            "a%4",
+            "a%zz",
+            "\u{301}a",
+            "\u{B7}a",
+            "\u{2028}",
+            "£",
+            "a×b",
+            "a÷b",
+            "a\u{A0}b",
+            "\u{E000}",
+            "\u{FFFE}",
+            "\u{F0000}",
         ] {
             assert!(
                 matches!(new(local), Err(Error::InvalidQName(l)) if l == local),

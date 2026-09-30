@@ -6,6 +6,9 @@ follows [Semantic Versioning](https://semver.org/).
 
 ## [0.1.0] - 2026-09-30
 
+The first release. It has no `lenient` PROV-N profile, fluent builder API,
+index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
+
 ### Added
 
 - `provkit` library:
@@ -28,10 +31,15 @@ follows [Semantic Versioning](https://semver.org/).
     and `into_iter` returns `AttributesIntoIter`; both are the crate's own
     types, so no dependency is part of the public API.
   - Strict name resolution with `QName` and `Namespaces`. `QName::new`
-    returns `Result` and rejects a local part PROV-N cannot write, even
-    with an escape (a space, a control character, one of `{ } < > " | ^ \`
-    or a backtick, a `%` not followed by two hex digits, or a first
-    character that may only continue a name), with `Error::InvalidQName`.
+    returns `Result`, and both readers reject a name whose local part PROV-N
+    cannot write wherever a name appears (a PROV-JSON record, bundle or
+    attribute key, a name formal, a member of `hadMember`, a datatype, and
+    the text of a qualified-name literal), with `Error::InvalidQName`. A
+    local part is unwritable when it holds a character that `PN_LOCAL`
+    admits nowhere, bare or after `\`: a space or another separator, a
+    control character, a symbol outside `PN_CHARS` such as `£` or `×`, one
+    of `{ } < > " | ^ \` or a backtick, a `%` not followed by two hex digits,
+    or a first character that may only continue a name.
     `Namespaces::resolve` puts the whole text it was given in
     `Error::InvalidQName`, for example `ex:a b`; `QName::new` puts the local
     part there.
@@ -54,13 +62,8 @@ follows [Semantic Versioning](https://semver.org/).
     datatypes are never equal.
   - Both readers resolve every qualified-name literal (`xsd:QName`,
     `prov:QUALIFIED_NAME`) to a `Value::QName`. Text that spells no
-    qualified name, or one whose local part PROV-N cannot write, is
-    `Error::InvalidQName`; an undeclared prefix or a bare name with no
-    default namespace is an error.
-  - Both readers reject a name whose local part PROV-N cannot write
-    wherever a name appears: a PROV-JSON record, bundle or attribute key, a
-    name formal, a member of `hadMember`, a datatype, and the text of a
-    qualified-name literal.
+    qualified name is `Error::InvalidQName`; an undeclared prefix or a bare
+    name with no default namespace is an error.
   - The PROV-JSON reader reads a formal written as a value object only when
     it has no `lang` and its `type` resolves to `xsd:QName` or
     `prov:QUALIFIED_NAME` for a name, or to `xsd:dateTime` for a time. Any
@@ -72,7 +75,7 @@ follows [Semantic Versioning](https://semver.org/).
     `XSD_DECIMAL`, `XSD_SHORT`, `XSD_BYTE`, `XSD_NON_NEGATIVE_INTEGER`,
     `XSD_POSITIVE_INTEGER`, `XSD_NON_POSITIVE_INTEGER`,
     `XSD_NEGATIVE_INTEGER`, `XSD_UNSIGNED_LONG`, `XSD_UNSIGNED_INT`,
-    `XSD_UNSIGNED_SHORT` and `XSD_UNSIGNED_BYTE` among them.
+    `XSD_UNSIGNED_SHORT` and `XSD_UNSIGNED_BYTE`.
   - `DateTime` follows XSD 1.1: year `0000` exists and is a leap year, and
     `-0000` is the same year. `DateTime::new` accepts only values whose
     printed text `DateTime::parse` reads back, and its errors carry the text
@@ -90,7 +93,8 @@ follows [Semantic Versioning](https://semver.org/).
     `10000`. A surrogate, a value above `10FFFF`, a `\U` below `10000` or a
     character `IRI_REF` forbids is a syntax error.
   - `Profile::Strict` accepts the whole PROV-N grammar and the MUST
-    statements of its prose. It rejects `default` after `prefix` (production
+    statements of its prose, with the departures `CONFORMANCE.md` records.
+    It rejects `default` after `prefix` (production
     [45]), a statement after a bundle (production [1]), an identifier or
     attributes on `alternateOf`, `specializationOf` and `hadMember`
     (productions [24] to [26]), an identifier on `mentionOf`, a declaration
@@ -145,10 +149,9 @@ follows [Semantic Versioning](https://semver.org/).
     name, literal or record. `Error::DuplicateBundle` reports two bundles
     with one identifier in either reader.
   - Public modules `json`, `provn` and `well_known`. Every other public item
-    has one path, at the crate root, and `provn::Profile` and `provn::Ignored`
-    live under `provn`.
-    `well_known` holds the `QName` statics and the `PROV` and `XSD`
-    namespace IRIs.
+    has one path: at the crate root, except `provn::Profile` and
+    `provn::Ignored`, which live under `provn`. `well_known` holds the
+    `QName` statics and the `PROV` and `XSD` namespace IRIs.
   - Namespace arguments and results are `&str`.
   - Cargo features `json` and `provn`, both on by default.
 - `provkit` binary (crate `provkit-cli`):
@@ -183,10 +186,5 @@ follows [Semantic Versioning](https://semver.org/).
 - Corpus tests over prov-corpus v2.1.0, including the 204 shared PROV-N
   probes read under both profiles, and a CI build for
   `wasm32-unknown-unknown`.
-
-### Not included
-
-- `lenient` PROV-N profile, fluent builder API, index, query and store.
-- PROV-JSONLD, PROV-XML, PROV-O and validation.
 
 [0.1.0]: https://github.com/trungdong/provkit/releases/tag/v0.1.0
