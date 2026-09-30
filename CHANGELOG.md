@@ -56,6 +56,14 @@ follows [Semantic Versioning](https://semver.org/).
   - PROV-JSON read and write (`json` module).
   - PROV-N read and write (`provn` module), with the `Strict` and `Default`
     read profiles.
+  - The PROV-N reader lexes the terminals of the Recommendation and SPARQL
+    1.0. A name may start with `@`, a `\` in a local part escapes only the
+    eleven characters of `PN_CHARS_ESC`, and `/*/` opens a comment that is
+    not closed. `\uXXXX` and `\UXXXXXXXX` (upper-case hex digits) decode to a
+    code point in string literals and IRIs, and a surrogate, a value above
+    `10FFFF` or a character `IRI_REF` forbids is a syntax error.
+  - `json::read`, `provn::read` and `provn::read_with` ignore one leading
+    byte-order mark.
   - Set-based `Document` equality.
   - `Document::unified()`, which merges records by identifier and kind and
     reports conflicts as `Error::Unification`.

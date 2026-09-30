@@ -5,9 +5,8 @@
 //! keyword. The one context-sensitive rule is the language tag, which only
 //! follows a string.
 
-use crate::pn::{
-    PN_CHARS_ESC, is_iri_forbidden, is_pn_chars, is_pn_chars_u, is_pn_local_other, prefix_len,
-};
+use super::chars::is_iri_forbidden;
+use crate::pn::{PN_CHARS_ESC, is_pn_chars, is_pn_chars_u, is_pn_local_other, prefix_len};
 use crate::{Error, Result};
 
 /// A token's class and payload.
@@ -45,6 +44,10 @@ pub(crate) enum TokenKind {
     Semicolon,
     /// `=`.
     Equals,
+    /// `{`.
+    LBrace,
+    /// `}`.
+    RBrace,
     /// End of input.
     Eof,
 }
@@ -160,11 +163,12 @@ impl<'a> Lexer<'a> {
             } else if rest.starts_with("//") {
                 let len = rest.find(['\n', '\r']).unwrap_or(rest.len());
                 self.advance(len);
-            } else if rest.starts_with("/*") {
-                let len = rest
+            } else if let Some(body) = rest.strip_prefix("/*") {
+                // The search starts after the opening `/*`, so `/*/` stays open.
+                let len = body
                     .find("*/")
                     .ok_or_else(|| self.error("unterminated comment"))?
-                    + 2;
+                    + 4;
                 self.advance(len);
             } else {
                 return Ok(());
@@ -190,13 +194,12 @@ impl<'a> Lexer<'a> {
             ',' => self.emit(1, TokenKind::Comma),
             ';' => self.emit(1, TokenKind::Semicolon),
             '=' => self.emit(1, TokenKind::Equals),
+            '{' => self.emit(1, TokenKind::LBrace),
+            '}' => self.emit(1, TokenKind::RBrace),
             '<' => self.iri()?,
             '"' => self.string()?,
             '\'' => self.qname_literal()?,
             '@' if self.after_string => self.lang_tag()?,
-            '@' => {
-                return Err(self.error("unexpected '@': a language tag must follow a string"));
-            }
             _ if rest.starts_with("%%") => self.emit(2, TokenKind::Typed),
             _ => self.literal_or_name()?,
         };
@@ -250,6 +253,13 @@ impl<'a> Lexer<'a> {
                 '\\' => {
                     let Some((_, e)) = chars.next() else { break };
                     out.push(match e {
+                        'u' | 'U' => {
+                            let (decoded, digits) = decode_code_point(&rest[at + 1..])
+                                .map_err(|m| self.error_at(self.pos + at, m))?;
+                            // The digits are ASCII, one byte each.
+                            chars.nth(digits - 1);
+                            decoded
+                        }
                         't' => '\t',
                         'b' => '\u{8}',
                         'n' => '\n',
@@ -273,11 +283,26 @@ impl<'a> Lexer<'a> {
     /// `IRI_REF`, without the angle brackets.
     fn iri(&mut self) -> Result<TokenKind> {
         let rest = self.rest();
-        for (i, c) in rest.char_indices().skip(1) {
+        let mut out = String::new();
+        let mut chars = rest.char_indices().skip(1);
+        while let Some((i, c)) = chars.next() {
             match c {
                 '>' => {
                     self.advance(i + 1);
-                    return Ok(TokenKind::Iri(rest[1..i].to_owned()));
+                    return Ok(TokenKind::Iri(out));
+                }
+                '\\' if matches!(rest[i + 1..].chars().next(), Some('u' | 'U')) => {
+                    let at = self.pos + i;
+                    let (decoded, digits) =
+                        decode_code_point(&rest[i + 1..]).map_err(|m| self.error_at(at, m))?;
+                    if is_iri_forbidden(decoded) {
+                        return Err(
+                            self.error_at(at, format!("invalid character {decoded:?} in IRI"))
+                        );
+                    }
+                    // The letter and the digits are ASCII, one byte each.
+                    chars.nth(digits);
+                    out.push(decoded);
                 }
                 // Whitespace and control characters end the scan: the IRI never closed.
                 '\0'..=' ' => return Err(self.error("unterminated IRI")),
@@ -286,7 +311,7 @@ impl<'a> Lexer<'a> {
                         self.error_at(self.pos + i, format!("invalid character {c:?} in IRI"))
                     );
                 }
-                _ => {}
+                _ => out.push(c),
             }
         }
         Err(self.error("unterminated IRI"))
@@ -340,6 +365,28 @@ impl<'a> Lexer<'a> {
         }
         Ok(self.emit(end, TokenKind::LangTag(rest[1..end].to_owned())))
     }
+}
+
+/// Decode the `uXXXX` or `UXXXXXXXX` after a backslash in a string or IRI.
+/// The digits are upper-case hexadecimal and name a Unicode scalar value.
+/// Returns the character and the number of hex digits.
+fn decode_code_point(s: &str) -> std::result::Result<(char, usize), String> {
+    let letter = s.chars().next().unwrap_or_default();
+    let digits = if letter == 'u' { 4 } else { 8 };
+    let invalid = || {
+        format!(
+            "invalid escape '\\{letter}': expected {digits} upper-case hex digits naming a Unicode scalar value"
+        )
+    };
+    let hex = s
+        .get(1..=digits)
+        .filter(|h| h.bytes().all(|b| matches!(b, b'0'..=b'9' | b'A'..=b'F')))
+        .ok_or_else(invalid)?;
+    u32::from_str_radix(hex, 16)
+        .ok()
+        .and_then(char::from_u32)
+        .map(|c| (c, digits))
+        .ok_or_else(invalid)
 }
 
 /// Update `line` and `line_start` for the bytes in `from..to`. A `\n` after
@@ -582,7 +629,6 @@ line""" "#,
         assert_eq!(t[1].kind, TokenKind::LangTag("en".into()));
         assert_eq!(t[3].kind, TokenKind::LangTag("fr-CA".into()));
         assert_eq!(t[4].kind, TokenKind::Str("multi\nline".into()));
-        assert!(matches!(tokenize("@en"), Err(Error::Syntax { .. })));
         assert!(matches!(
             tokenize(r#""open"#),
             Err(Error::Syntax {
@@ -596,8 +642,9 @@ line""" "#,
 
     #[test]
     fn language_tag_only_after_a_string() {
-        assert!(matches!(tokenize("ex:a @en"), Err(Error::Syntax { .. })));
-        assert!(matches!(tokenize("\"x\", @en"), Err(Error::Syntax { .. })));
+        assert_eq!(kinds("ex:a @en")[1], name("", "@en"));
+        assert_eq!(kinds("\"x\", @en")[2], name("", "@en"));
+        assert!(syntax_message("\"x\" @1").contains("language tag"));
         assert!(matches!(&kinds("ex:a@b")[0], TokenKind::Name { local, .. } if local == "a@b"));
     }
 
@@ -694,15 +741,170 @@ line""" "#,
             name("ex", "a/b@c~d&e+f*g?h#i$j!k")
         );
         assert_eq!(kinds(r"ex:a\:b\[c\]d")[0], name("ex", "a:b[c]d"));
-        // Every escape in PN_CHARS_ESC round-trips.
-        for e in "_~.-!$&'()*+,;=/?#@%".chars() {
-            let src = format!("ex:a\\{e}b");
-            assert_eq!(kinds(&src)[0], name("ex", &format!("a{e}b")), "{src}");
-        }
         // An escaped dot may end a local part; a bare one may not.
         assert_eq!(kinds(r"ex:a\.")[0], name("ex", "a."));
         assert!(matches!(tokenize(r"ex:a\q"), Err(Error::Syntax { .. })));
         assert_eq!(kinds("ex:a%2Fb")[0], name("ex", "a%2Fb"));
+    }
+
+    #[test]
+    fn a_bare_name_may_start_with_an_at_sign() {
+        assert_eq!(kinds("@foo"), [name("", "@foo"), TokenKind::Eof]);
+        assert_eq!(
+            kinds("\"x\"@en"),
+            [
+                TokenKind::Str("x".into()),
+                TokenKind::LangTag("en".into()),
+                TokenKind::Eof
+            ]
+        );
+        assert_eq!(
+            kinds("\"x\" @en"),
+            [
+                TokenKind::Str("x".into()),
+                TokenKind::LangTag("en".into()),
+                TokenKind::Eof
+            ]
+        );
+        assert_eq!(kinds("ex:@foo"), [name("ex", "@foo"), TokenKind::Eof]);
+    }
+
+    #[test]
+    fn an_at_sign_before_a_bad_escape_is_reported_at_the_escape() {
+        match tokenize("ex:a @\\q") {
+            Err(Error::Syntax { line, column, .. }) => assert_eq!((line, column), (1, 7)),
+            other => panic!("unexpected {other:?}"),
+        }
+        match tokenize(", @\\") {
+            Err(Error::Syntax { line, column, .. }) => assert_eq!((line, column), (1, 4)),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn escapes_are_the_eleven_of_production_55() {
+        assert_eq!(
+            kinds(r"ex:a\=\'\(\)\,\-\:\;\[\]\."),
+            [name("ex", "a='(),-:;[]."), TokenKind::Eof]
+        );
+        for c in "_~!$&*+/?#@%".chars() {
+            assert!(tokenize(&format!("ex:a\\{c}b")).is_err(), "\\{c}");
+        }
+    }
+
+    #[test]
+    fn a_block_comment_needs_both_delimiters() {
+        assert_eq!(syntax_message("/*/"), "unterminated comment");
+        assert_eq!(syntax_message("x /*/ y"), "unterminated comment");
+        assert_eq!(kinds("/**/ x"), [name("", "x"), TokenKind::Eof]);
+        assert_eq!(kinds("/***/ x"), [name("", "x"), TokenKind::Eof]);
+    }
+
+    #[test]
+    fn braces_are_tokens() {
+        assert_eq!(
+            kinds("{a}"),
+            [
+                TokenKind::LBrace,
+                name("", "a"),
+                TokenKind::RBrace,
+                TokenKind::Eof
+            ]
+        );
+    }
+
+    #[test]
+    fn code_point_escapes_decode_in_strings_and_iris() {
+        assert_eq!(
+            kinds("\"caf\\u00E9\""),
+            [TokenKind::Str("café".into()), TokenKind::Eof]
+        );
+        assert_eq!(
+            kinds("\"\\U0001F600!\""),
+            [TokenKind::Str("\u{1F600}!".into()), TokenKind::Eof]
+        );
+        assert_eq!(
+            kinds("\"\"\"a\\u000Ab\"\"\""),
+            [TokenKind::Str("a\nb".into()), TokenKind::Eof]
+        );
+        assert_eq!(
+            kinds("<http://e/\\u00E9\\U0001F600x>"),
+            [
+                TokenKind::Iri("http://e/é\u{1F600}x".into()),
+                TokenKind::Eof
+            ]
+        );
+        // Names take no code point escapes.
+        assert!(tokenize("ex:a\\u00E9").is_err());
+    }
+
+    #[test]
+    fn a_bad_code_point_escape_is_reported_at_its_backslash() {
+        for (src, column) in [
+            ("\"a\\u00e9\"", 3),
+            ("\"a\\uD800\"", 3),
+            ("\"a\\UDFFF0000\"", 3),
+            ("\"a\\U00110000\"", 3),
+            ("\"a\\u12\"", 3),
+            ("\"a\\u12G4\"", 3),
+            ("\"a\\U0001F60\"", 3),
+            ("<a\\u00e9>", 3),
+            ("<a\\uD800>", 3),
+            ("<a\\u0020>", 3),
+            ("<a\\u003E>", 3),
+            ("<a\\u005C>", 3),
+            ("<a\\u007B>", 3),
+        ] {
+            match tokenize(src) {
+                Err(Error::Syntax {
+                    line, column: c, ..
+                }) => {
+                    assert_eq!((line, c), (1, column), "{src:?}");
+                }
+                other => panic!("expected an error for {src:?}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn a_bare_carriage_return_ends_a_line() {
+        let t = tokenize("a\rb // c\rd /* e\r*/ f\r\rg").unwrap();
+        let at = |i: usize| (t[i].line, t[i].column);
+        assert_eq!(at(1), (2, 1));
+        assert_eq!(at(2), (3, 1));
+        assert_eq!(at(3), (4, 4));
+        assert_eq!(at(4), (6, 1));
+        assert!(tokenize("\"a\rb\"").is_err());
+    }
+
+    #[test]
+    fn crlf_inside_a_comment_and_a_long_string_counts_once() {
+        let t = tokenize("a // x\r\nb /* y\r\nz */ c \"\"\"p\r\nq\"\"\" d").unwrap();
+        assert_eq!((t[1].line, t[1].column), (2, 1));
+        assert_eq!((t[2].line, t[2].column), (3, 6));
+        assert_eq!(t[3].kind, TokenKind::Str("p\r\nq".into()));
+        assert_eq!((t[4].line, t[4].column), (4, 6));
+        match tokenize("\"\"\"p\r\nq\\x\"\"\"") {
+            Err(Error::Syntax { line, column, .. }) => assert_eq!((line, column), (2, 2)),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_qualified_name_literal_left_open_is_reported_at_its_quote() {
+        for src in ["x 'ex:a", "x 'ex:a\ny'", "x 'ex:a\r", "x 'ex:a\\"] {
+            match tokenize(src) {
+                Err(Error::Syntax {
+                    line,
+                    column,
+                    message,
+                }) => {
+                    assert_eq!((line, column), (1, 3), "{src:?}");
+                    assert!(message.contains("unterminated"), "{src:?}");
+                }
+                other => panic!("expected an error for {src:?}, got {other:?}"),
+            }
+        }
     }
 
     #[test]

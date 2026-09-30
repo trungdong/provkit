@@ -67,3 +67,9 @@ pub use record::{
     Membership, Mention, Record, Specialization, Start, Usage,
 };
 pub use value::{LangStr, Value};
+
+/// `text` without one leading byte-order mark.
+#[cfg(any(feature = "json", feature = "provn"))]
+pub(crate) fn strip_bom(text: &str) -> &str {
+    text.strip_prefix('\u{FEFF}').unwrap_or(text)
+}

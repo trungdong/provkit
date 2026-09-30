@@ -534,6 +534,8 @@ fn describe(kind: &TokenKind) -> String {
         TokenKind::Comma => "','".to_owned(),
         TokenKind::Semicolon => "';'".to_owned(),
         TokenKind::Equals => "'='".to_owned(),
+        TokenKind::LBrace => "'{'".to_owned(),
+        TokenKind::RBrace => "'}'".to_owned(),
         TokenKind::Eof => "end of input".to_owned(),
     }
 }

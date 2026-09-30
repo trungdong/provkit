@@ -3,6 +3,7 @@
 use std::fmt::Write as _;
 use std::io;
 
+use super::chars;
 use super::lexer::{Token, TokenKind, tokenize};
 use crate::document::merged_bundles;
 use crate::pn;
@@ -122,7 +123,7 @@ fn show(c: char) -> String {
 
 /// Why PROV-N cannot write the namespace IRI `iri`, if it cannot.
 fn iri_problem(iri: &str) -> Option<String> {
-    pn::iri_forbidden(iri).map(|c| format!("the namespace IRI contains {}", show(c)))
+    chars::iri_forbidden(iri).map(|c| format!("the namespace IRI contains {}", show(c)))
 }
 
 /// Check that PROV-N can write a declaration of `iri`: under `prefix`, or as

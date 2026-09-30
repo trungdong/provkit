@@ -1,11 +1,12 @@
 //! PROV-N (W3C Recommendation, 2013) read and write.
 
+mod chars;
 mod lexer;
 mod parser;
 mod write;
 
 use crate::sink::{DocumentBuilder, Sink};
-use crate::{Document, Result};
+use crate::{Document, Result, strip_bom};
 
 pub use write::{statement, statement_name, to_string, write};
 
@@ -43,7 +44,7 @@ pub fn read(text: &str) -> Result<Document> {
 /// As [`read`].
 pub fn read_with(text: &str, profile: Profile) -> Result<Document> {
     let mut builder = DocumentBuilder::new();
-    read_into_with(text, profile, &mut builder)?;
+    read_into_with(strip_bom(text), profile, &mut builder)?;
     Ok(builder.finish())
 }
 
@@ -52,4 +53,32 @@ pub fn read_with(text: &str, profile: Profile) -> Result<Document> {
 pub(crate) fn read_into_with(text: &str, profile: Profile, sink: &mut impl Sink) -> Result<()> {
     let tokens = lexer::tokenize(text)?;
     parser::Parser::new(&tokens, profile).document(sink)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_leading_byte_order_mark_is_ignored() {
+        let with_bom = "\u{FEFF}document prefix ex <http://e/> entity(ex:e) endDocument";
+        assert_eq!(read(with_bom).unwrap().records.len(), 1);
+        assert_eq!(
+            read_with(with_bom, Profile::Strict).unwrap().records.len(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_byte_order_mark_elsewhere_is_not_stripped() {
+        // U+FEFF is a name character, so a second mark or a mark after
+        // whitespace spoils the `document` keyword.
+        for text in [
+            "\u{FEFF}\u{FEFF}document endDocument",
+            " \u{FEFF}document endDocument",
+            "document \u{FEFF}endDocument",
+        ] {
+            assert!(read(text).is_err(), "{text:?}");
+        }
+    }
 }

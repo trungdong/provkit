@@ -2,13 +2,9 @@
 //! 3.8, with `PN_PREFIX`, `PN_CHARS_BASE`, `PN_CHARS_U` and `PN_CHARS` from
 //! SPARQL).
 
-/// Characters that may follow `\` in a local part: `PN_CHARS_ESC` [55] plus
-/// the SPARQL escapes `_ ~ ! $ & * + / ? # @ %`.
-pub(crate) const PN_CHARS_ESC: &str = "_~.-!$&'()*+,;=/?#@%:[]";
-
-/// The Recommendation's `PN_CHARS_ESC` [55], which a local part holds only
-/// after `\`.
-const ALWAYS_ESCAPED: &str = "='(),-:;[].";
+/// `PN_CHARS_ESC` [55]: the characters that may follow `\` in a local part,
+/// and that a local part holds only after one.
+pub(crate) const PN_CHARS_ESC: &str = "='(),-:;[].";
 
 /// `PN_CHARS_BASE`.
 pub(crate) fn is_pn_chars_base(c: char) -> bool {
@@ -75,7 +71,7 @@ pub(crate) enum LocalChar {
 /// digits, because the reader keeps `%XX` verbatim.
 pub(crate) fn local_char(local: &str, at: usize, c: char) -> Option<LocalChar> {
     let first = at == 0;
-    if ALWAYS_ESCAPED.contains(c) {
+    if PN_CHARS_ESC.contains(c) {
         Some(LocalChar::Escaped)
     } else if c == '%' {
         let hex = local.as_bytes().get(at + 1..at + 3);
@@ -87,8 +83,6 @@ pub(crate) fn local_char(local: &str, at: usize, c: char) -> Option<LocalChar> {
         || (!first && is_pn_chars(c))
     {
         Some(LocalChar::Bare)
-    } else if PN_CHARS_ESC.contains(c) {
-        Some(LocalChar::Escaped)
     } else {
         None
     }
@@ -107,17 +101,4 @@ pub(crate) fn is_qualified_name(text: &str) -> bool {
     local
         .char_indices()
         .all(|(at, c)| local_char(local, at, c).is_some())
-}
-
-/// Whether `IRI_REF` forbids `c` between its angle brackets: a control
-/// character, a space, or one of `< > " { } | ^ ` \`.
-#[cfg_attr(not(feature = "provn"), allow(dead_code))]
-pub(crate) fn is_iri_forbidden(c: char) -> bool {
-    c <= ' ' || matches!(c, '<' | '>' | '"' | '{' | '}' | '|' | '^' | '`' | '\\')
-}
-
-/// The first character of `iri` that [`is_iri_forbidden`].
-#[cfg_attr(not(feature = "provn"), allow(dead_code))]
-pub(crate) fn iri_forbidden(iri: &str) -> Option<char> {
-    iri.chars().find(|&c| is_iri_forbidden(c))
 }
