@@ -20,7 +20,7 @@ The binary is `provkit`. Prebuilt binaries are on the
 # PROV-JSON to PROV-N on standard output (the default output format)
 provkit convert doc.json
 
-# PROV-N to PROV-JSON, by the output extension
+# PROV-N to PROV-JSON, by the output extension (.json or .provn)
 provkit convert doc.provn -o doc.json
 
 # Standard input to standard output, with the output format named
@@ -34,14 +34,22 @@ provkit compare --unified a.json b.provn
 ```
 
 Input format comes from `-f json|provn`, else the file extension, else the
-content. Output format comes from `-t`, else the `-o` extension, else PROV-N
-on standard output. `-` means standard input or output.
+content. `document` followed by whitespace or the end of input marks PROV-N,
+and `{` marks PROV-JSON. Output format comes from `-t`, else the `-o`
+extension (`.json` or `.provn`). PROV-N is the default on standard output
+only, so `-o out.txt` needs `-t json` or `-t provn`. `-` means standard input
+or output.
+
+`compare` declares the `nsN` prefixes it mints for names with no declared
+prefix, with a `prefix nsN <IRI>` line after the records of each scope. A PROV-N
+file with extensibility expressions prints one warning on standard error and
+the exit code does not change. A closed output pipe ends the program quietly.
 
 | Exit code | Meaning |
 |---|---|
 | 0 | `convert` succeeded, or `compare` found the documents equal |
 | 1 | `compare` found a difference |
-| 2 | A read or write error, or with `--unified` a unification failure |
+| 2 | A read or write error, an output format that cannot be told, or with `--unified` a unification failure |
 
 ## Library
 

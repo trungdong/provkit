@@ -140,7 +140,16 @@ follows [Semantic Versioning](https://semver.org/).
     resolution (`-f`, `-t`, extension, content sniffing) and `-` for
     standard input and output.
   - `provkit compare`, with `--unified`, exit codes 0, 1 and 2, and one-sided
-    records printed as PROV-N.
+    records printed as PROV-N. Each scope renders against one namespace
+    table and declares the `nsN` prefixes it minted, after its records.
+  - A PROV-N file with ignored extensibility expressions prints one warning
+    on standard error. The exit code does not change.
+  - `-o` with an extension other than `.json` or `.provn` needs `-t`. PROV-N
+    is the default on standard output only.
+  - A closed output pipe ends the program quietly, with the exit code the
+    command had reached.
+  - Content sniffing takes `document` only as a whole word, so `documentary`
+    is not PROV-N.
 - `CONFORMANCE.md`, listing every departure from the Recommendations, ProvPy
   and ProvToolbox.
 - Corpus tests over prov-corpus v2.0.0, and a CI build for

@@ -26,10 +26,11 @@ impl Format {
         }
     }
 
-    /// From the text itself: `{` is PROV-JSON and `document` is PROV-N,
-    /// after leading whitespace and PROV-N comments.
+    /// From the text itself: `{` is PROV-JSON and `document` as a whole
+    /// word is PROV-N, after leading whitespace and PROV-N comments.
     pub fn sniff(text: &str) -> Option<Format> {
-        let mut rest = text;
+        // The readers drop a leading byte-order mark, so sniffing skips it too.
+        let mut rest = text.strip_prefix('\u{FEFF}').unwrap_or(text);
         loop {
             rest = rest.trim_start();
             if let Some(r) = rest.strip_prefix("//") {
@@ -42,7 +43,10 @@ impl Format {
         }
         if rest.starts_with('{') {
             Some(Format::Json)
-        } else if rest.starts_with("document") {
+        } else if rest
+            .strip_prefix("document")
+            .is_some_and(|tail| tail.is_empty() || tail.starts_with(char::is_whitespace))
+        {
             Some(Format::Provn)
         } else {
             None
@@ -64,6 +68,11 @@ mod tests {
         assert_eq!(Format::sniff("// only a comment"), None);
         assert_eq!(Format::sniff("/* unterminated"), None);
         assert_eq!(Format::sniff("hello"), None);
+        assert_eq!(Format::sniff("\u{FEFF}{}"), Some(Format::Json));
+        assert_eq!(Format::sniff("document"), Some(Format::Provn));
+        assert_eq!(Format::sniff("document\n"), Some(Format::Provn));
+        assert_eq!(Format::sniff("documentary"), None);
+        assert_eq!(Format::sniff("document("), None);
     }
 
     #[test]

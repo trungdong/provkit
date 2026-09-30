@@ -10,7 +10,7 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result, anyhow};
 use clap::{Args, Parser, Subcommand};
-use provkit::{Document, FormalRef, Namespaces, QName, Record, Value, json, provn};
+use provkit::{Document, Error, FormalRef, Namespaces, QName, Record, json, provn};
 
 use format::Format;
 
@@ -18,7 +18,8 @@ use format::Format;
 ///
 /// Formats are taken from -f/-t when given, else from the file extension
 /// (.json, .provn), else by looking at the content. Standard output defaults
-/// to PROV-N. Use `-` for standard input or output.
+/// to PROV-N, and a file named with -o needs -t unless its extension is .json
+/// or .provn. Use `-` for standard input or output.
 #[derive(Parser)]
 #[command(name = "provkit", version, about, long_about)]
 struct Cli {
@@ -32,11 +33,14 @@ enum Command {
     ///
     /// Formats are taken from -f/-t when given, else from the file extension
     /// (.json, .provn), else by looking at the content. Standard output
-    /// defaults to PROV-N. Use `-` for standard input or output.
+    /// defaults to PROV-N, and a file named with -o needs -t unless its
+    /// extension is .json or .provn. Use `-` for standard input or output.
     Convert(ConvertArgs),
     /// Compare two documents and print the records found on one side only.
     ///
-    /// Exit codes: 0 when the documents are equal (nothing is printed), 1
+    /// Formats come from the file extension (.json, .provn), else from the
+    /// content. Names the output cannot write with a declared prefix get an
+    /// `nsN` prefix, declared after the records of their scope. Exit codes: 0 when the documents are equal (nothing is printed), 1
     /// when they differ, 2 on a read error or, with --unified, a unification
     /// failure.
     Compare(CompareArgs),
@@ -52,8 +56,9 @@ struct ConvertArgs {
     /// Input format; otherwise the extension, then the content, decide.
     #[arg(short = 'f', long = "from", value_enum)]
     from: Option<Format>,
-    /// Output format; otherwise the output extension decides, or PROV-N on
-    /// standard output.
+    /// Output format; otherwise the output extension decides (.json or
+    /// .provn), or PROV-N on standard output. Required for a file with any
+    /// other extension.
     #[arg(short = 't', long = "to", value_enum)]
     to: Option<Format>,
 }
@@ -84,19 +89,25 @@ fn main() -> ExitCode {
     }
 }
 
+/// How a failure to tell the format is worded.
+#[derive(Clone, Copy)]
+enum Hint {
+    /// The command has `-f`, so the message names it.
+    FromFlag,
+    /// The command has no `-f`.
+    None,
+}
+
 /// Reads `path` (or standard input for `-`) and parses it with the resolved
-/// format.
-fn read_document(path: &Path, from: Option<Format>) -> Result<Document> {
+/// format. Extensibility expressions the PROV-N reader ignores are reported
+/// once on standard error.
+fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Document> {
     let is_stdin = path == Path::new("-");
-    let mut text = if is_stdin {
+    let text = if is_stdin {
         io::read_to_string(io::stdin()).context("-")?
     } else {
         fs::read_to_string(path).with_context(|| path.display().to_string())?
     };
-    // A leading byte-order mark is an encoding signature, not content.
-    if text.starts_with('\u{FEFF}') {
-        text.drain(..'\u{FEFF}'.len_utf8());
-    }
     let format = from
         .or_else(|| {
             if is_stdin {
@@ -106,26 +117,59 @@ fn read_document(path: &Path, from: Option<Format>) -> Result<Document> {
             }
         })
         .or_else(|| Format::sniff(&text))
-        .ok_or_else(|| {
-            anyhow!(
+        .ok_or_else(|| match (is_stdin, hint) {
+            (true, Hint::None) => anyhow!("cannot tell the format of standard input"),
+            (false, Hint::None) => anyhow!("{}: cannot tell the format", path.display()),
+            (_, Hint::FromFlag) => anyhow!(
                 "{}: cannot tell the format; use -f json or -f provn",
                 path.display()
-            )
+            ),
         })?;
-    let parsed = match format {
+    let document = match format {
         Format::Json => json::read(&text),
-        Format::Provn => provn::read(&text),
+        Format::Provn => provn::read_report(&text, provn::Profile::Default).map(|(document, ignored)| {
+            if let Some(first) = ignored.first() {
+                let file = if is_stdin {
+                    "standard input".to_owned()
+                } else {
+                    path.display().to_string()
+                };
+                eprintln!(
+                    "provkit: warning: {file}: ignored {} extensibility expression(s), first {} at line {}, column {}",
+                    ignored.len(),
+                    first.name,
+                    first.line,
+                    first.column
+                );
+            }
+            document
+        }),
     };
-    parsed.with_context(|| path.display().to_string())
+    document.with_context(|| path.display().to_string())
+}
+
+/// Writes `bytes` to standard output. A closed pipe is a normal end.
+fn write_stdout(bytes: &[u8]) -> io::Result<()> {
+    let mut stdout = io::stdout().lock();
+    match stdout.write_all(bytes).and_then(|()| stdout.flush()) {
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        other => other,
+    }
 }
 
 fn convert(args: &ConvertArgs) -> Result<()> {
-    let doc = read_document(&args.input, args.from)?;
     let file = args.output.as_deref().filter(|p| *p != Path::new("-"));
-    let format = args
-        .to
-        .or_else(|| file.and_then(Format::from_path))
-        .unwrap_or(Format::Provn);
+    let format = match (args.to, file) {
+        (Some(format), _) => format,
+        (None, None) => Format::Provn,
+        (None, Some(path)) => Format::from_path(path).ok_or_else(|| {
+            anyhow!(
+                "cannot tell the output format from '{}'; use -t json or -t provn",
+                path.display()
+            )
+        })?,
+    };
+    let doc = read_document(&args.input, args.from, Hint::FromFlag)?;
     let name = file.map_or_else(|| "-".to_owned(), |p| p.display().to_string());
 
     // Serialise first, so a library error never leaves a partial file.
@@ -136,13 +180,7 @@ fn convert(args: &ConvertArgs) -> Result<()> {
     }
     .with_context(|| name.clone())?;
     match file {
-        None => {
-            let mut stdout = io::stdout().lock();
-            stdout
-                .write_all(&buf)
-                .and_then(|()| stdout.flush())
-                .with_context(|| name)?;
-        }
+        None => write_stdout(&buf).with_context(|| name)?,
         Some(path) => fs::write(path, &buf).with_context(|| name)?,
     }
     Ok(())
@@ -150,8 +188,8 @@ fn convert(args: &ConvertArgs) -> Result<()> {
 
 /// Exits 0 when the documents are equal, 1 when they differ.
 fn compare(args: &CompareArgs) -> Result<ExitCode> {
-    let mut a = read_document(&args.a, None)?;
-    let mut b = read_document(&args.b, None)?;
+    let mut a = read_document(&args.a, None, Hint::None)?;
+    let mut b = read_document(&args.b, None, Hint::None)?;
     if args.unified {
         a = a.unified().with_context(|| args.a.display().to_string())?;
         b = b.unified().with_context(|| args.b.display().to_string())?;
@@ -164,11 +202,7 @@ fn compare(args: &CompareArgs) -> Result<ExitCode> {
     let mut report = String::new();
     report_side(&mut report, &args.a, &a, &b)?;
     report_side(&mut report, &args.b, &b, &a)?;
-    let mut stdout = io::stdout().lock();
-    stdout
-        .write_all(report.as_bytes())
-        .and_then(|()| stdout.flush())
-        .context("-")?;
+    write_stdout(report.as_bytes()).context("-")?;
     Ok(ExitCode::from(1))
 }
 
@@ -182,18 +216,9 @@ fn only_in<'a>(mine: &[&'a Record], theirs: &[&Record]) -> Vec<&'a Record> {
         .collect()
 }
 
-/// The records of every bundle in `document` named `id`.
-fn bundle_records<'a>(document: &'a Document, id: &QName) -> Vec<&'a Record> {
-    document
-        .bundles
-        .iter()
-        .filter(|b| b.id == *id)
-        .flat_map(|b| &b.records)
-        .collect()
-}
-
 /// Appends the records of `this` that `other` lacks: top-level records first,
-/// then each bundle under its heading. Names use the table of `this`.
+/// then each bundle under its heading. Each scope renders against one table
+/// and declares the prefixes it minted after its records.
 fn report_side(out: &mut String, name: &Path, this: &Document, other: &Document) -> Result<()> {
     use std::fmt::Write as _;
 
@@ -203,17 +228,16 @@ fn report_side(out: &mut String, name: &Path, this: &Document, other: &Document)
     );
 
     // Bundles sharing an identifier are one bundle, as in `Document` equality.
-    let mut seen_ids = HashSet::new();
+    let this_bundles = this.merged_bundles();
+    let other_bundles = other.merged_bundles();
     let mut bundles = Vec::new();
-    for bundle in &this.bundles {
-        if !seen_ids.insert(&bundle.id) {
-            continue;
-        }
+    for bundle in this_bundles.iter() {
+        let theirs = other_bundles.iter().find(|b| b.id == bundle.id);
         let records = only_in(
-            &bundle_records(this, &bundle.id),
-            &bundle_records(other, &bundle.id),
+            &bundle.records.iter().collect::<Vec<_>>(),
+            &theirs.map_or_else(Vec::new, |b| b.records.iter().collect()),
         );
-        if !records.is_empty() || other.bundle(&bundle.id).is_none() {
+        if !records.is_empty() || theirs.is_none() {
             bundles.push((bundle, records));
         }
     }
@@ -222,62 +246,86 @@ fn report_side(out: &mut String, name: &Path, this: &Document, other: &Document)
     }
 
     writeln!(out, "only in {}:", name.display())?;
+    let mut table = this.namespaces.clone();
+    let declared = table.iter().count();
     for record in top {
-        writeln!(out, "  {}", statement_line(record, &this.namespaces))?;
+        writeln!(out, "  {}", statement_line(record, &mut table)?)?;
     }
+    declare_minted(out, "  ", &table, declared)?;
     for (bundle, records) in bundles {
         // A bundle sees its own prefixes first, then the document's.
-        let scope = bundle.namespaces.with_fallback(&this.namespaces);
-        match provn::name(&bundle.id, &mut scope.clone()) {
-            Ok(id) => writeln!(out, "  bundle {id}:")?,
-            Err(_) => writeln!(out, "  bundle <{}>: {UNWRITABLE}", bundle.id)?,
+        let mut scope = bundle.namespaces.with_fallback(&this.namespaces);
+        let declared = scope.iter().count();
+        match written_name(&bundle.id, &mut scope) {
+            Some(id) => writeln!(out, "  bundle {id}:")?,
+            None => writeln!(out, "  bundle <{}>: {UNWRITABLE}", bundle.id)?,
         }
         for record in records {
-            writeln!(out, "    {}", statement_line(record, &scope))?;
+            writeln!(out, "    {}", statement_line(record, &mut scope)?)?;
         }
+        declare_minted(out, "    ", &scope, declared)?;
     }
     Ok(())
+}
+
+/// Prints a `prefix` line for each binding `table` gained after its first
+/// `declared` ones.
+fn declare_minted(
+    out: &mut String,
+    indent: &str,
+    table: &Namespaces,
+    declared: usize,
+) -> std::fmt::Result {
+    use std::fmt::Write as _;
+
+    for (prefix, iri) in table.iter().skip(declared) {
+        writeln!(out, "{indent}prefix {prefix} <{iri}>")?;
+    }
+    Ok(())
+}
+
+/// `name` as PROV-N text, or `None` when PROV-N cannot write it. A minted
+/// prefix stays in `namespaces` only when the name is written.
+fn written_name(name: &QName, namespaces: &mut Namespaces) -> Option<String> {
+    let mut trial = namespaces.clone();
+    let text = provn::name(name, &mut trial).ok()?;
+    *namespaces = trial;
+    Some(text)
 }
 
 /// Marks a line whose record or bundle PROV-N cannot write.
 const UNWRITABLE: &str = "// not valid PROV-N";
 
-/// `record` as PROV-N, or, when PROV-N cannot write it, a heading that
-/// names it: the keyword, the identifier, and the first name PROV-N cannot
+/// `record` as PROV-N, or, when PROV-N cannot write a name in it, a heading
+/// that names it: the keyword, the identifier, and the name PROV-N cannot
 /// write as `<full IRI>` (inside `[...]` when it belongs to an attribute),
-/// followed by [`UNWRITABLE`].
-fn statement_line(record: &Record, namespaces: &Namespaces) -> String {
-    if let Ok(line) = provn::statement(record, &mut namespaces.clone()) {
-        return line;
-    }
-    let writable = |q: &QName| provn::name(q, &mut namespaces.clone()).is_ok();
-    let mut names: Vec<(&QName, bool)> = record.id().into_iter().map(|q| (q, false)).collect();
-    names.extend(record.formals().into_iter().filter_map(|(_, f)| match f {
-        FormalRef::Name(q) => Some((q, false)),
-        FormalRef::Time(_) => None,
-    }));
-    for (n, v) in record.attributes().iter() {
-        names.push((n, true));
-        match v {
-            Value::QName(q) | Value::Typed { datatype: q, .. } => names.push((q, true)),
-            _ => {}
+/// followed by [`UNWRITABLE`]. Prefixes minted for the line stay in
+/// `namespaces`.
+fn statement_line(record: &Record, namespaces: &mut Namespaces) -> Result<String> {
+    let mut trial = namespaces.clone();
+    let offending = match provn::statement(record, &mut trial) {
+        Ok(line) => {
+            *namespaces = trial;
+            return Ok(line);
         }
-    }
-    let offending = names.into_iter().find(|(q, _)| !writable(q));
+        Err(Error::Unwritable { name, .. }) => name,
+        Err(e) => return Err(e.into()),
+    };
 
     let mut parts = Vec::new();
     if let Some(id) = record.id() {
-        parts.push(match provn::name(id, &mut namespaces.clone()) {
-            Ok(text) => text,
-            Err(_) => format!("<{id}>"),
-        });
+        parts.push(written_name(id, namespaces).unwrap_or_else(|| format!("<{id}>")));
     }
-    // Attribute-side names sit inside the attribute brackets, as in PROV-N.
-    if let Some((q, in_attributes)) = offending.filter(|(q, _)| Some(*q) != record.id()) {
-        parts.push(if in_attributes {
-            format!("[<{q}>]")
+    if Some(&offending) != record.id() {
+        // Attribute-side names sit inside the attribute brackets, as in PROV-N.
+        let is_formal = record
+            .formals()
+            .into_iter()
+            .any(|(_, f)| matches!(f, FormalRef::Name(q) if *q == offending));
+        parts.push(if is_formal {
+            format!("<{offending}>")
         } else {
-            format!("<{q}>")
+            format!("[<{offending}>]")
         });
     }
     let separator = if record.kind().is_element() {
@@ -285,11 +333,11 @@ fn statement_line(record: &Record, namespaces: &Namespaces) -> String {
     } else {
         "; "
     };
-    format!(
+    Ok(format!(
         "{}({}) {UNWRITABLE}",
         record.kind().name(),
         parts.join(separator)
-    )
+    ))
 }
 
 #[cfg(test)]

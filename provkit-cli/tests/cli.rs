@@ -525,3 +525,181 @@ fn compare_marks_records_prov_n_cannot_write() {
         ))
         .stderr("");
 }
+
+#[test]
+fn compare_declares_the_prefixes_it_mints() {
+    let dir = scratch("minted");
+    let a = dir.join("a.json");
+    let b = dir.join("b.json");
+    std::fs::write(
+        &a,
+        r#"{"prefix": {"default": "http://one.org/"}, "entity": {"12": {}},
+        "bundle": {"b": {"prefix": {"default": "http://two.org/"}, "entity": {"34": {}}}}}"#,
+    )
+    .unwrap();
+    std::fs::write(&b, r#"{"prefix": {"default": "http://one.org/"}}"#).unwrap();
+    let out = provkit()
+        .args(["compare"])
+        .arg(&a)
+        .arg(&b)
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let out = String::from_utf8(out).unwrap();
+    assert!(out.contains("entity(ns1:12)"), "{out}");
+    assert!(out.contains("prefix ns1 <http://one.org/>"), "{out}");
+    assert!(
+        out.contains("prefix ns1 <http://two.org/>")
+            || out.contains("prefix ns2 <http://two.org/>"),
+        "{out}"
+    );
+}
+
+#[test]
+fn compare_does_not_redeclare_a_declared_prefix() {
+    let dir = scratch("compare_does_not_redeclare_a_declared_prefix");
+    let a = dir.join("a.provn");
+    let b = dir.join("b.provn");
+    std::fs::write(&a, PROVN).unwrap();
+    std::fs::write(
+        &b,
+        "document\n  prefix ex <http://example.org/>\nendDocument\n",
+    )
+    .unwrap();
+    provkit()
+        .args(["compare"])
+        .arg(&a)
+        .arg(&b)
+        .assert()
+        .code(1)
+        .stdout(predicate::str::contains("  prefix ").not());
+}
+
+#[test]
+fn compare_with_unrecognisable_standard_input_offers_no_flag() {
+    provkit()
+        .args(["compare", "-", "-"])
+        .write_stdin("hello")
+        .assert()
+        .code(2)
+        .stderr("provkit: cannot tell the format of standard input\n");
+    provkit()
+        .args(["convert", "-"])
+        .write_stdin("hello")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("use -f json or -f provn"));
+}
+
+#[test]
+fn a_closed_output_pipe_ends_quietly() {
+    use std::io::Read;
+    use std::process::Stdio;
+
+    // A document large enough to fill the pipe buffer before the reader closes.
+    let dir = scratch("a_closed_output_pipe_ends_quietly");
+    let big = dir.join("big.provn");
+    let entities = "  entity(ex:e)\n".repeat(50_000);
+    let text = format!("document\n  prefix ex <http://example.org/>\n{entities}endDocument\n");
+    std::fs::write(&big, text).unwrap();
+
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_provkit"))
+        .arg("convert")
+        .arg(&big)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdout = child.stdout.take().unwrap();
+    let mut first = [0u8; 8];
+    stdout.read_exact(&mut first).unwrap();
+    drop(stdout);
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    let status = child.wait().unwrap();
+    assert_eq!(stderr, "");
+    assert_eq!(status.code(), Some(0));
+}
+
+#[test]
+fn an_output_file_with_an_unknown_extension_needs_a_format() {
+    let dir = scratch("an_output_file_with_an_unknown_extension_needs_a_format");
+    let out = dir.join("out.txt");
+    provkit()
+        .args(["convert"])
+        .arg(corpus("json/entity1.json"))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .code(2)
+        .stderr(format!(
+            "provkit: cannot tell the output format from '{}'; use -t json or -t provn\n",
+            out.display()
+        ));
+    assert!(!out.exists());
+    provkit()
+        .args(["convert", "-t", "provn"])
+        .arg(corpus("json/entity1.json"))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+    assert!(
+        std::fs::read_to_string(&out)
+            .unwrap()
+            .starts_with("document")
+    );
+}
+
+#[test]
+fn ignored_extensibility_expressions_warn_once_on_standard_error() {
+    let dir = scratch("ignored_extensibility_expressions_warn_once");
+    let path = dir.join("ext.provn");
+    std::fs::write(
+        &path,
+        "document\n  prefix ex <http://example.org/>\n  prefix dictExt <http://example.org/dict#>\n  entity(ex:e1)\n  dictExt:hadMembers(ex:e1, ex:a)\n  dictExt:hadMembers(ex:e1, ex:b)\nendDocument\n",
+    )
+    .unwrap();
+    provkit()
+        .args(["convert"])
+        .arg(&path)
+        .assert()
+        .success()
+        .stderr(format!(
+            "provkit: warning: {}: ignored 2 extensibility expression(s), first dictExt:hadMembers at line 5, column 3\n",
+            path.display()
+        ));
+    provkit()
+        .args(["convert", "-"])
+        .write_stdin(std::fs::read_to_string(&path).unwrap())
+        .assert()
+        .success()
+        .stderr(predicate::str::starts_with(
+            "provkit: warning: standard input: ignored 2",
+        ));
+    provkit()
+        .args(["compare"])
+        .arg(&path)
+        .arg(&path)
+        .assert()
+        .success()
+        .stdout("")
+        .stderr(predicate::str::contains("ignored 2").count(2));
+}
+
+#[test]
+fn a_word_starting_with_document_is_not_provn() {
+    provkit()
+        .args(["convert", "-"])
+        .write_stdin("documentary\n")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("cannot tell the format"));
+}
