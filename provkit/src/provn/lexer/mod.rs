@@ -6,7 +6,7 @@
 //! follows a string.
 
 use super::chars::is_iri_forbidden;
-use crate::pn::{PN_CHARS_ESC, is_pn_chars, is_pn_chars_u, is_pn_local_other, prefix_len};
+use crate::pn::{PN_CHARS_ESC, hex_pair_follows, is_bare_local_char, prefix_len};
 use crate::{Error, Result};
 
 /// A token's class and payload.
@@ -517,8 +517,9 @@ fn scan_name(s: &str) -> std::result::Result<Option<NameMatch>, NameError> {
 }
 
 /// `PN_LOCAL` [53] at the start of `s`, unescaped, and the bytes it spans.
-/// `base` is `s`'s offset in the scanned text, for error positions. Trailing
-/// bare dots are left unconsumed.
+/// The character classes are [`pn`](crate::pn)'s; this function adds escape
+/// decoding and error positions. `base` is `s`'s offset in the scanned text.
+/// Trailing bare dots are left unconsumed.
 fn scan_local(s: &str, base: usize) -> std::result::Result<(String, usize), NameError> {
     let mut out = String::new();
     // Length of `out` and offset in `s` after the last non-dot character.
@@ -544,25 +545,18 @@ fn scan_local(s: &str, base: usize) -> std::result::Result<(String, usize), Name
                 out.push(e);
                 1 + e.len_utf8()
             }
-            '%' => {
-                let hex = s.as_bytes().get(i + 1..i + 3);
-                if !hex.is_some_and(|h| h.iter().all(u8::is_ascii_hexdigit)) {
-                    break;
-                }
+            '%' if hex_pair_follows(s, i) => {
                 chars.next();
                 chars.next();
                 out.push_str(&s[i..i + 3]);
                 3
             }
+            // A bare dot may continue a local part but not end it.
             '.' if !first => {
                 out.push('.');
                 continue;
             }
-            _ if is_pn_chars_u(c) || c.is_ascii_digit() || is_pn_local_other(c) => {
-                out.push(c);
-                c.len_utf8()
-            }
-            _ if !first && is_pn_chars(c) => {
+            _ if is_bare_local_char(c, first) => {
                 out.push(c);
                 c.len_utf8()
             }

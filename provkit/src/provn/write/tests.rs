@@ -396,20 +396,6 @@ fn unwritable(d: &Document) -> (QName, String) {
 }
 
 #[test]
-fn a_prefix_that_is_not_a_pn_prefix_cannot_be_written() {
-    // `Namespaces::declare` already refuses such prefixes, so the
-    // writer's check is a guard and is exercised directly.
-    for bad in ["", "a b", "1a", "a."] {
-        let e = super::check_declaration(Some(bad), "http://x/").unwrap_err();
-        assert!(
-            matches!(&e, Error::UnwritableNamespace { prefix, iri, .. } if prefix == bad && iri == "http://x/"),
-            "{bad:?}: {e:?}"
-        );
-    }
-    assert!(super::check_declaration(Some("a.b"), "http://x/").is_ok());
-}
-
-#[test]
 fn unrepresentable_iris_are_errors() {
     let name_in = |iri: &str| {
         element(

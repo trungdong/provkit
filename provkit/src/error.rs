@@ -43,22 +43,24 @@ pub enum Error {
         /// What was wrong.
         message: String,
     },
-    /// A name PROV-N cannot write.
+    /// A name PROV-N cannot write, because its namespace IRI holds a
+    /// character `IRI_REF` forbids.
     #[error("PROV-N cannot write the name {name}: {reason}")]
     Unwritable {
         /// The name, which displays as its IRI.
         name: QName,
-        /// The character or rule that prevents it.
+        /// The character that prevents it.
         reason: String,
     },
-    /// A namespace declaration PROV-N cannot write.
+    /// A namespace declaration PROV-N cannot write, because the IRI holds a
+    /// character `IRI_REF` forbids.
     #[error("PROV-N cannot declare {}: {reason}", declaration(.prefix, .iri))]
     UnwritableNamespace {
         /// The prefix. The empty string stands for the default namespace.
         prefix: String,
         /// The namespace IRI.
         iri: String,
-        /// The character or rule that prevents it.
+        /// The character that prevents it.
         reason: String,
     },
     /// A prefix was used without a declaration.

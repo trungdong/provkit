@@ -189,7 +189,7 @@ fn merge(kind: Kind, id: &QName, members: &[&Record]) -> Result<Record> {
             let Some(value) = record.formal(attr) else {
                 continue;
             };
-            let value = value.to_owned();
+            let value = value.to_formal();
             match &chosen {
                 None => chosen = Some(value),
                 Some(existing) if *existing == value => {}

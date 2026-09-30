@@ -108,29 +108,6 @@ fn table_rows_match_prov_dm() {
     );
 }
 
-/// The storage type of each formal (`@value_type` in the table macro) and
-/// `FormalAttr::is_time` name the same three formals.
-#[test]
-fn stored_formal_types_agree_with_is_time() {
-    for &kind in Kind::ALL {
-        for &attr in kind.formals() {
-            let value = if attr.is_time() {
-                Formal::Time(t())
-            } else {
-                Formal::Name(ex("n"))
-            };
-            let record =
-                Record::from_parts(kind, Some(ex("x")), vec![(attr, value)], Attributes::new())
-                    .unwrap();
-            assert_eq!(
-                matches!(record.formal(attr), Some(FormalRef::Time(_))),
-                attr.is_time(),
-                "{kind:?} {attr:?}"
-            );
-        }
-    }
-}
-
 #[test]
 fn formal_tables_match_the_spec() {
     let table: Vec<(Kind, &[&str], &[usize])> = vec![
@@ -257,7 +234,7 @@ fn formals_round_trip_through_from_parts_for_every_kind() {
         let attrs: Vec<_> = formals.iter().map(|(a, _)| *a).collect();
         assert_eq!(attrs, kind.formals(), "{kind:?} order");
         for (a, v) in &formals {
-            assert_eq!(v.to_owned(), formal_for(*a), "{kind:?} {a:?}");
+            assert_eq!(v.to_formal(), formal_for(*a), "{kind:?} {a:?}");
             assert_eq!(r.formal(*a), Some(*v), "{kind:?} {a:?}");
         }
 
@@ -266,7 +243,7 @@ fn formals_round_trip_through_from_parts_for_every_kind() {
             r.id().cloned(),
             formals
                 .into_iter()
-                .map(|(a, v)| (a, v.to_owned()))
+                .map(|(a, v)| (a, v.to_formal()))
                 .collect(),
             r.attributes().clone(),
         )
@@ -387,7 +364,7 @@ fn records_compare_and_hash_by_value() {
         None,
         r.formals()
             .into_iter()
-            .map(|(a, v)| (a, v.to_owned()))
+            .map(|(a, v)| (a, v.to_formal()))
             .collect(),
         Attributes::new(),
     )
@@ -430,13 +407,13 @@ fn formal_reads_one_value() {
 }
 
 #[test]
-fn formal_ref_to_owned_copies_the_value() {
+fn formal_ref_to_formal_copies_the_value() {
     let (name, time) = (ex("e1"), t());
-    assert_eq!(FormalRef::Name(&name).to_owned(), Formal::Name(ex("e1")));
-    assert_eq!(FormalRef::Time(&time).to_owned(), Formal::Time(t()));
+    assert_eq!(FormalRef::Name(&name).to_formal(), Formal::Name(ex("e1")));
+    assert_eq!(FormalRef::Time(&time).to_formal(), Formal::Time(t()));
+    assert_eq!(Formal::from(FormalRef::Name(&name)), Formal::Name(ex("e1")));
 }
 
-#[cfg(any(feature = "json", feature = "provn"))]
 #[test]
 fn check_attributes_rejects_a_hand_built_own_formal() {
     let prov = |l: &str| QName::new(PROV, l).unwrap();

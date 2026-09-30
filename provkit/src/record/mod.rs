@@ -1,5 +1,6 @@
 //! Records: the eighteen PROV-DM types and the enum that holds them.
 
+#[macro_use]
 mod formal;
 
 pub use formal::{Formal, FormalAttr, FormalRef};
@@ -36,7 +37,8 @@ impl Record {
     }
 
     /// An error if an attribute is named after one of this record's own formals.
-    #[cfg(any(feature = "json", feature = "provn"))]
+    // Only the writers call this, and both are feature-gated.
+    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
     pub(crate) fn check_attributes(&self) -> Result<()> {
         self.kind().check_attributes(self.attributes())
     }
@@ -48,8 +50,8 @@ impl Record {
 /// A row is `Variant "keyword" shape [arities] { field: FormalAttr, .. }`,
 /// under the struct's doc line. The shape is `element` or `relation`, and
 /// `relation bare` marks a relation PROV-DM gives no identifier. The arities
-/// are the argument counts PROV-N allows after the identifier. Each field
-/// carries its own doc line.
+/// are the argument counts PROV-N allows after the identifier. Each field's
+/// type and doc line come from the `formals!` table.
 macro_rules! records {
     // The identifier is mandatory on an element and optional on a relation.
     (@is_element element) => { true };
@@ -65,16 +67,10 @@ macro_rules! records {
     (@id element $record:ident) => { Some(&$record.id) };
     (@id relation $record:ident) => { $record.id.as_ref() };
 
-    // A formal that `FormalAttr::is_time` names holds a time; the rest hold names.
-    (@value_type Time) => { DateTime };
-    (@value_type StartTime) => { DateTime };
-    (@value_type EndTime) => { DateTime };
-    (@value_type $attr:ident) => { QName };
-
     ($(
         $(#[$doc:meta])*
         $name:ident $keyword:literal $shape:ident $($bare:ident)? [$($arity:literal),*] {
-            $($(#[$field_doc:meta])* $field:ident: $attr:ident,)*
+            $($field:ident: $attr:ident,)*
         }
     )*) => {
         /// The PROV-DM type of a record.
@@ -142,7 +138,7 @@ macro_rules! records {
             pub struct $name {
                 /// The identifier.
                 pub id: records!(@id_type $shape),
-                $($(#[$field_doc])* pub $field: Option<records!(@value_type $attr)>,)*
+                $(#[doc = formal_doc!($attr)] pub $field: Option<formal_type!($attr)>,)*
                 /// Non-formal attributes.
                 pub attributes: Attributes,
             }
@@ -222,9 +218,7 @@ records! {
 
     /// An activity.
     Activity "activity" element [0, 2] {
-        /// `prov:startTime`.
         start_time: StartTime,
-        /// `prov:endTime`.
         end_time: EndTime,
     }
 
@@ -233,147 +227,104 @@ records! {
 
     /// A generation (`wasGeneratedBy`).
     Generation "wasGeneratedBy" relation [1, 3] {
-        /// `prov:entity`.
         entity: Entity,
-        /// `prov:activity`.
         activity: Activity,
-        /// `prov:time`.
         time: Time,
     }
 
     /// A usage (`used`).
     Usage "used" relation [1, 3] {
-        /// `prov:activity`.
         activity: Activity,
-        /// `prov:entity`.
         entity: Entity,
-        /// `prov:time`.
         time: Time,
     }
 
     /// A communication (`wasInformedBy`).
     Communication "wasInformedBy" relation [2] {
-        /// `prov:informed`.
         informed: Informed,
-        /// `prov:informant`.
         informant: Informant,
     }
 
     /// A start (`wasStartedBy`).
     Start "wasStartedBy" relation [1, 4] {
-        /// `prov:activity`.
         activity: Activity,
-        /// `prov:trigger`.
         trigger: Trigger,
-        /// `prov:starter`.
         starter: Starter,
-        /// `prov:time`.
         time: Time,
     }
 
     /// An end (`wasEndedBy`).
     End "wasEndedBy" relation [1, 4] {
-        /// `prov:activity`.
         activity: Activity,
-        /// `prov:trigger`.
         trigger: Trigger,
-        /// `prov:ender`.
         ender: Ender,
-        /// `prov:time`.
         time: Time,
     }
 
     /// An invalidation (`wasInvalidatedBy`).
     Invalidation "wasInvalidatedBy" relation [1, 3] {
-        /// `prov:entity`.
         entity: Entity,
-        /// `prov:activity`.
         activity: Activity,
-        /// `prov:time`.
         time: Time,
     }
 
     /// A derivation (`wasDerivedFrom`).
     Derivation "wasDerivedFrom" relation [2, 5] {
-        /// `prov:generatedEntity`.
         generated_entity: GeneratedEntity,
-        /// `prov:usedEntity`.
         used_entity: UsedEntity,
-        /// `prov:activity`.
         activity: Activity,
-        /// `prov:generation`.
         generation: Generation,
-        /// `prov:usage`.
         usage: Usage,
     }
 
     /// An attribution (`wasAttributedTo`).
     Attribution "wasAttributedTo" relation [2] {
-        /// `prov:entity`.
         entity: Entity,
-        /// `prov:agent`.
         agent: Agent,
     }
 
     /// An association (`wasAssociatedWith`).
     Association "wasAssociatedWith" relation [1, 3] {
-        /// `prov:activity`.
         activity: Activity,
-        /// `prov:agent`.
         agent: Agent,
-        /// `prov:plan`.
         plan: Plan,
     }
 
     /// A delegation (`actedOnBehalfOf`).
     Delegation "actedOnBehalfOf" relation [2, 3] {
-        /// `prov:delegate`.
         delegate: Delegate,
-        /// `prov:responsible`.
         responsible: Responsible,
-        /// `prov:activity`.
         activity: Activity,
     }
 
     /// An influence (`wasInfluencedBy`).
     Influence "wasInfluencedBy" relation [2] {
-        /// `prov:influencee`.
         influencee: Influencee,
-        /// `prov:influencer`.
         influencer: Influencer,
     }
 
     /// A specialisation (`specializationOf`).
     Specialization "specializationOf" relation bare [2] {
-        /// `prov:specificEntity`.
         specific_entity: SpecificEntity,
-        /// `prov:generalEntity`.
         general_entity: GeneralEntity,
     }
 
     /// An alternate (`alternateOf`).
     Alternate "alternateOf" relation bare [2] {
-        /// `prov:alternate1`.
         alternate1: Alternate1,
-        /// `prov:alternate2`.
         alternate2: Alternate2,
     }
 
     /// A mention (`mentionOf`).
     Mention "mentionOf" relation bare [3] {
-        /// `prov:specificEntity`.
         specific_entity: SpecificEntity,
-        /// `prov:generalEntity`.
         general_entity: GeneralEntity,
-        /// `prov:bundle`.
         bundle: Bundle,
     }
 
     /// A membership (`hadMember`).
     Membership "hadMember" relation bare [2] {
-        /// `prov:collection`.
         collection: Collection,
-        /// `prov:entity`.
         entity: Entity,
     }
 }

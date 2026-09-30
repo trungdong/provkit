@@ -4,139 +4,89 @@
 use super::{Kind, invalid};
 use crate::{DateTime, QName, Result};
 
-/// A formal attribute name (PROV-DM's positional arguments).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum FormalAttr {
-    /// `prov:entity`.
-    Entity,
-    /// `prov:activity`.
-    Activity,
-    /// `prov:agent`.
-    Agent,
-    /// `prov:plan`.
-    Plan,
-    /// `prov:trigger`.
-    Trigger,
-    /// `prov:starter`.
-    Starter,
-    /// `prov:ender`.
-    Ender,
-    /// `prov:informed`.
-    Informed,
-    /// `prov:informant`.
-    Informant,
-    /// `prov:delegate`.
-    Delegate,
-    /// `prov:responsible`.
-    Responsible,
-    /// `prov:influencee`.
-    Influencee,
-    /// `prov:influencer`.
-    Influencer,
-    /// `prov:generatedEntity`.
-    GeneratedEntity,
-    /// `prov:usedEntity`.
-    UsedEntity,
-    /// `prov:generation`.
-    Generation,
-    /// `prov:usage`.
-    Usage,
-    /// `prov:specificEntity`.
-    SpecificEntity,
-    /// `prov:generalEntity`.
-    GeneralEntity,
-    /// `prov:alternate1`.
-    Alternate1,
-    /// `prov:alternate2`.
-    Alternate2,
-    /// `prov:collection`.
-    Collection,
-    /// `prov:bundle`.
-    Bundle,
-    /// `prov:time`.
-    Time,
-    /// `prov:startTime`.
-    StartTime,
-    /// `prov:endTime`.
-    EndTime,
+/// Generates [`FormalAttr`] and its tables, and the `formal_type!` and
+/// `formal_doc!` macros that the `records!` table consumes, from one list.
+///
+/// A row is `Variant: Type "localName"`, where the type is `QName` for a
+/// name-valued formal and `DateTime` for a time-valued one.
+macro_rules! formals {
+    (@is_time DateTime) => { true };
+    (@is_time QName) => { false };
+
+    ($($name:ident: $ty:ident $local:literal,)*) => {
+        /// A formal attribute name (PROV-DM's positional arguments).
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        pub enum FormalAttr {
+            $(#[doc = concat!("`prov:", $local, "`.")] $name,)*
+        }
+
+        impl FormalAttr {
+            /// Every formal attribute.
+            pub const ALL: &'static [FormalAttr] = &[$(FormalAttr::$name),*];
+
+            /// The local name under `prov:` (`entity`, `generatedEntity`, `startTime`, ...).
+            pub fn local_name(self) -> &'static str {
+                match self {
+                    $(FormalAttr::$name => $local,)*
+                }
+            }
+
+            /// Whether the value is a dateTime rather than a name.
+            pub fn is_time(self) -> bool {
+                match self {
+                    $(FormalAttr::$name => formals!(@is_time $ty),)*
+                }
+            }
+        }
+
+        // The type a record's field holds for the formal.
+        macro_rules! formal_type {
+            $(($name) => { $ty };)*
+        }
+
+        // The doc line of a record's field for the formal.
+        macro_rules! formal_doc {
+            $(($name) => { concat!("`prov:", $local, "`.") };)*
+        }
+    };
 }
 
-use FormalAttr as F;
+formals! {
+    Entity: QName "entity",
+    Activity: QName "activity",
+    Agent: QName "agent",
+    Plan: QName "plan",
+    Trigger: QName "trigger",
+    Starter: QName "starter",
+    Ender: QName "ender",
+    Informed: QName "informed",
+    Informant: QName "informant",
+    Delegate: QName "delegate",
+    Responsible: QName "responsible",
+    Influencee: QName "influencee",
+    Influencer: QName "influencer",
+    GeneratedEntity: QName "generatedEntity",
+    UsedEntity: QName "usedEntity",
+    Generation: QName "generation",
+    Usage: QName "usage",
+    SpecificEntity: QName "specificEntity",
+    GeneralEntity: QName "generalEntity",
+    Alternate1: QName "alternate1",
+    Alternate2: QName "alternate2",
+    Collection: QName "collection",
+    Bundle: QName "bundle",
+    Time: DateTime "time",
+    StartTime: DateTime "startTime",
+    EndTime: DateTime "endTime",
+}
 
 impl FormalAttr {
-    /// Every formal attribute.
-    pub const ALL: &'static [FormalAttr] = &[
-        F::Entity,
-        F::Activity,
-        F::Agent,
-        F::Plan,
-        F::Trigger,
-        F::Starter,
-        F::Ender,
-        F::Informed,
-        F::Informant,
-        F::Delegate,
-        F::Responsible,
-        F::Influencee,
-        F::Influencer,
-        F::GeneratedEntity,
-        F::UsedEntity,
-        F::Generation,
-        F::Usage,
-        F::SpecificEntity,
-        F::GeneralEntity,
-        F::Alternate1,
-        F::Alternate2,
-        F::Collection,
-        F::Bundle,
-        F::Time,
-        F::StartTime,
-        F::EndTime,
-    ];
-
-    /// The local name under `prov:` (`entity`, `generatedEntity`, `startTime`, ...).
-    pub fn local_name(self) -> &'static str {
-        match self {
-            F::Entity => "entity",
-            F::Activity => "activity",
-            F::Agent => "agent",
-            F::Plan => "plan",
-            F::Trigger => "trigger",
-            F::Starter => "starter",
-            F::Ender => "ender",
-            F::Informed => "informed",
-            F::Informant => "informant",
-            F::Delegate => "delegate",
-            F::Responsible => "responsible",
-            F::Influencee => "influencee",
-            F::Influencer => "influencer",
-            F::GeneratedEntity => "generatedEntity",
-            F::UsedEntity => "usedEntity",
-            F::Generation => "generation",
-            F::Usage => "usage",
-            F::SpecificEntity => "specificEntity",
-            F::GeneralEntity => "generalEntity",
-            F::Alternate1 => "alternate1",
-            F::Alternate2 => "alternate2",
-            F::Collection => "collection",
-            F::Bundle => "bundle",
-            F::Time => "time",
-            F::StartTime => "startTime",
-            F::EndTime => "endTime",
-        }
-    }
-
     /// The formal for a `prov:` local name.
     pub fn from_local_name(name: &str) -> Option<FormalAttr> {
         FormalAttr::ALL
             .iter()
             .copied()
             .find(|f| f.local_name() == name)
-    }
-
-    /// Whether the value is a dateTime rather than a name.
-    pub fn is_time(self) -> bool {
-        matches!(self, F::Time | F::StartTime | F::EndTime)
     }
 }
 
@@ -159,13 +109,18 @@ pub enum FormalRef<'a> {
 }
 
 impl FormalRef<'_> {
-    /// An owned [`Formal`] copy. This inherent method takes precedence over
-    /// [`ToOwned::to_owned`], which would return another `FormalRef`.
-    pub fn to_owned(&self) -> Formal {
-        match *self {
+    /// An owned [`Formal`] with a copy of the value.
+    pub fn to_formal(self) -> Formal {
+        match self {
             FormalRef::Name(q) => Formal::Name(q.clone()),
             FormalRef::Time(t) => Formal::Time(t.clone()),
         }
+    }
+}
+
+impl From<FormalRef<'_>> for Formal {
+    fn from(formal: FormalRef<'_>) -> Formal {
+        formal.to_formal()
     }
 }
 

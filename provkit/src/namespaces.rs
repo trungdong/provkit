@@ -169,8 +169,6 @@ impl Namespaces {
     /// # Errors
     ///
     /// As [`resolve`](Self::resolve).
-    // Only the PROV-N reader calls this, and it is feature-gated.
-    #[cfg_attr(not(feature = "provn"), allow(dead_code))]
     pub(crate) fn resolve_parts(&self, prefix: &str, local: &str) -> Result<QName> {
         if prefix.is_empty() {
             if local.is_empty() {

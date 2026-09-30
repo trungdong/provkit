@@ -180,7 +180,7 @@ impl Value {
     /// `xsd:long` or `xsd:integer` by range, keeping the text. The range
     /// follows the digits alone, so leading zeros do not change the type and
     /// a number beyond `i64` is an `xsd:integer`.
-    // Only the readers call this, and both are feature-gated.
+    // The readers and the PROV-N writer call this, all feature-gated.
     #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
     pub(crate) fn integer(lexical: &str) -> Value {
         let datatype = match lexical.parse::<i64>() {
@@ -243,7 +243,7 @@ impl Value {
 
 /// `lexical` without the space, tab, CR and LF that XSD collapses around a
 /// number, a boolean or a dateTime.
-fn trim_xsd_space(lexical: &str) -> &str {
+pub(crate) fn trim_xsd_space(lexical: &str) -> &str {
     lexical.trim_matches([' ', '\t', '\r', '\n'])
 }
 

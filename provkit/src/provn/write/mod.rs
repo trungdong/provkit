@@ -36,7 +36,7 @@ pub fn write(document: &Document, out: &mut impl io::Write) -> Result<()> {
 /// `IRI_REF` forbids.
 ///
 /// [`Error::UnwritableNamespace`] for a `prefix` or `default` declaration
-/// with such an IRI, or with a prefix that is not a `PN_PREFIX`.
+/// with such an IRI.
 ///
 /// [`Error::InvalidRecord`] for an attribute that spells one of the record's
 /// own formals.
@@ -140,13 +140,10 @@ fn iri_problem(iri: &str) -> Option<String> {
 }
 
 /// Check that PROV-N can write a declaration of `iri`: under `prefix`, or as
-/// the default namespace when `prefix` is `None`.
+/// the default namespace when `prefix` is `None`. The prefix needs no check,
+/// because `Namespaces` holds only `PN_PREFIX` prefixes.
 fn check_declaration(prefix: Option<&str>, iri: &str) -> Result<()> {
-    let reason = match prefix {
-        Some(p) if !pn::is_pn_prefix(p) => Some("the prefix is not a PN_PREFIX".to_owned()),
-        _ => iri_problem(iri),
-    };
-    match reason {
+    match iri_problem(iri) {
         Some(reason) => Err(Error::UnwritableNamespace {
             prefix: prefix.unwrap_or_default().to_owned(),
             iri: iri.to_owned(),

@@ -4,7 +4,8 @@ use indexmap::IndexMap;
 
 use super::wire::{JsonDocument, JsonRecord, JsonSection, JsonValue};
 use crate::sink::Sink;
-use crate::well_known::{PROV_QUALIFIED_NAME, XSD_DATETIME, XSD_QNAME};
+use crate::value::trim_xsd_space;
+use crate::well_known::XSD_DATETIME;
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
     Result, Value,
@@ -89,7 +90,7 @@ fn records_from(
     scope: &Namespaces,
 ) -> Result<Vec<Record>> {
     let mut formals: Vec<(FormalAttr, Formal)> = Vec::new();
-    let mut members: Vec<QName> = Vec::new();
+    let mut members: Vec<Formal> = Vec::new();
     let mut attributes = Attributes::new();
     for (key, value) in body {
         let name = scope.resolve(key)?;
@@ -97,17 +98,10 @@ fn records_from(
         match formal {
             Some(FormalAttr::Entity) if kind == Kind::Membership => {
                 for v in value.items() {
-                    members.push(scope.resolve(formal_text(v, key, false, scope)?)?);
+                    members.push(formal_value(v, key, false, scope)?);
                 }
             }
-            Some(f) if f.is_time() => {
-                let text = formal_text(value, key, true, scope)?;
-                formals.push((f, Formal::Time(DateTime::parse(text)?)));
-            }
-            Some(f) => {
-                let text = formal_text(value, key, false, scope)?;
-                formals.push((f, Formal::Name(scope.resolve(text)?)));
-            }
+            Some(f) => formals.push((f, formal_value(value, key, f.is_time(), scope)?)),
             None => {
                 for v in value.items() {
                     attributes.insert(name.clone(), decode_value(v, scope)?);
@@ -120,7 +114,7 @@ fn records_from(
             .into_iter()
             .map(|m| {
                 let mut f = formals.clone();
-                f.push((FormalAttr::Entity, Formal::Name(m)));
+                f.push((FormalAttr::Entity, m));
                 Record::from_parts(kind, id.cloned(), f, attributes.clone())
             })
             .collect();
@@ -133,40 +127,44 @@ fn records_from(
     )?])
 }
 
-/// The text of the formal under `key`. A plain string is the text. A value
-/// object gives its `$` when it has no `lang` and its `type` resolves to
-/// `xsd:dateTime` for a time, or to `xsd:QName` or `prov:QUALIFIED_NAME`
-/// for a name. Anything else is not a formal value.
-fn formal_text<'a>(
-    value: &'a JsonValue,
-    key: &str,
-    time: bool,
-    scope: &Namespaces,
-) -> Result<&'a str> {
+/// The value of the formal under `key`, a time when `time` and a name
+/// otherwise. A plain string is the text: a time parses after the space,
+/// tab, CR and LF around it are trimmed, and a name resolves in `scope`. A
+/// value object with no `lang` goes through the rule both readers use for
+/// typed literals and must give a `Value::QName` for a name; for a time its
+/// `type` must resolve to `xsd:dateTime`. Anything else is not a formal
+/// value.
+fn formal_value(value: &JsonValue, key: &str, time: bool, scope: &Namespaces) -> Result<Formal> {
     let expected = if time { "a dateTime" } else { "a name" };
     let wrong = |found: &str| structure(format!("`{key}` must be {expected}, not {found}"));
-    match value {
-        JsonValue::Str(s) => Ok(s),
-        JsonValue::Typed { lang: Some(_), .. } => Err(wrong("a language-tagged string")),
-        JsonValue::Typed { datatype: None, .. } => Err(wrong("an untyped value object")),
+    let (text, datatype) = match value {
+        JsonValue::Str(s) => (s, None),
+        JsonValue::Typed { lang: Some(_), .. } => return Err(wrong("a language-tagged string")),
+        JsonValue::Typed { datatype: None, .. } => return Err(wrong("an untyped value object")),
         JsonValue::Typed {
             value,
             datatype: Some(datatype),
             ..
-        } => {
-            let datatype = scope.resolve(datatype)?;
-            let fits = if time {
-                datatype == *XSD_DATETIME
-            } else {
-                datatype == *XSD_QNAME || datatype == *PROV_QUALIFIED_NAME
-            };
-            if fits {
-                Ok(value)
-            } else {
-                Err(wrong(&format!("a value typed <{datatype}>")))
-            }
+        } => (value, Some(scope.resolve(datatype)?)),
+        _ => return Err(wrong("a number, boolean or array")),
+    };
+    if time {
+        if let Some(datatype) = datatype
+            && datatype != *XSD_DATETIME
+        {
+            return Err(wrong(&format!("a value typed <{datatype}>")));
         }
-        _ => Err(wrong("a number, boolean or array")),
+        return DateTime::parse(trim_xsd_space(text)).map(Formal::Time);
+    }
+    match datatype {
+        None => scope.resolve(text).map(Formal::Name),
+        Some(datatype) => match Value::typed_in(scope, text, datatype)? {
+            Value::QName(name) => Ok(Formal::Name(name)),
+            other => match other.datatype() {
+                Some(datatype) => Err(wrong(&format!("a value typed <{datatype}>"))),
+                None => Err(wrong("a language-tagged string")),
+            },
+        },
     }
 }
 
@@ -577,6 +575,28 @@ mod tests {
         assert_eq!(m.id, Some(ex("m")));
         assert_eq!(m.collection, Some(ex("c")));
         assert_eq!(m.entity, None);
+    }
+
+    #[test]
+    fn a_padded_time_formal_reads_as_the_trimmed_time() {
+        let generation = |time: &str| {
+            format!(
+                r#"{{{PFX}, "wasGeneratedBy": {{"ex:g": {{"prov:entity": "ex:e", "prov:time": {time}}}}}}}"#
+            )
+        };
+        let plain = doc(&generation(r#""2011-11-16T16:05:33Z""#));
+        for padded in [
+            r#"" 2011-11-16T16:05:33Z""#,
+            r#""\t2011-11-16T16:05:33Z\r\n""#,
+            r#"{"$": " 2011-11-16T16:05:33Z ", "type": "xsd:dateTime"}"#,
+        ] {
+            assert_eq!(doc(&generation(padded)), plain, "{padded}");
+        }
+        // Other white space is not trimmed.
+        assert!(matches!(
+            json::read(&generation("\"\u{A0}2011-11-16T16:05:33Z\"")),
+            Err(Error::InvalidLiteral { .. })
+        ));
     }
 
     #[test]

@@ -16,8 +16,9 @@ follows [Semantic Versioning](https://semver.org/).
     the eighteen kinds in PROV-DM order. `Kind::is_element` tells an element
     (`entity`, `activity`, `agent`) from a relation.
   - `Record::formal` reads one formal attribute and `Record::formals` lists
-    those present. `FormalRef::to_owned` gives an owned `Formal`, and
-    `FormalAttr::ALL` lists every formal attribute.
+    those present. `FormalRef::to_formal`, and `From<FormalRef>` for
+    `Formal`, give an owned `Formal`, and `FormalAttr::ALL` lists every
+    formal attribute.
   - `Kind` and `Record` are `#[non_exhaustive]`, so a `match` on either in
     another crate needs a wildcard arm.
   - `Attributes` clones share one allocation and copy it on the first write.
@@ -40,8 +41,9 @@ follows [Semantic Versioning](https://semver.org/).
     refuses a qualified-name datatype, because the value must resolve to a
     `Value::QName`.
   - `Value::typed` trims the space, tab, CR and LF around an `xsd:dateTime`
-    before parsing it, as XSD does for numbers. A padded well-formed
-    `dateTime` is a `Value::DateTime` and is written without the padding.
+    before parsing it, as XSD does for numbers, and the PROV-JSON reader
+    trims a time formal the same way. A padded well-formed `dateTime` is a
+    `Value::DateTime` and is written without the padding.
   - `Value` compares and hashes by value under one datatype. Spellings of
     one integer (`"5"`, `" 5 "`, `"+5"`, `"005"`), decimal, `xsd:double`,
     `xsd:float` or `xsd:boolean` are equal, so `Attributes` keeps one pair
