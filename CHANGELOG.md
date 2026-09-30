@@ -62,6 +62,21 @@ follows [Semantic Versioning](https://semver.org/).
     not closed. `\uXXXX` and `\UXXXXXXXX` (upper-case hex digits) decode to a
     code point in string literals and IRIs, and a surrogate, a value above
     `10FFFF` or a character `IRI_REF` forbids is a syntax error.
+  - `Profile::Strict` accepts exactly the PROV-N grammar. It rejects `default`
+    after `prefix` (production [45]), a statement after a bundle (production
+    [1]), an identifier or attributes on `alternateOf`, `specializationOf`
+    and `hadMember` (productions [24] to [26]), and a redeclaration of the
+    predeclared `prov` and `xsd` prefixes (section 3.7.4), as well as bare
+    `mentionOf` and `-` in a required position. `Profile::Default` reads all
+    of these.
+  - A datatype of digits, as in `"x" %% 123`, reads as a name in the default
+    namespace.
+  - Both readers type an integer by range: `xsd:int` within `i32`, `xsd:long`
+    within `i64`, `xsd:integer` beyond, keeping the text. This departs from
+    PROV-N section 3.7.3, which calls an integer literal `xsd:int`, and makes
+    `[ex:k=3000000000]` equal to the PROV-JSON `{"ex:k": 3000000000}`. The
+    PROV-N writer writes a value bare when its text is `-?[0-9]+` and reads
+    back as the same datatype, so `"5" %% xsd:long` is written quoted.
   - `json::read`, `provn::read` and `provn::read_with` ignore one leading
     byte-order mark.
   - Set-based `Document` equality.

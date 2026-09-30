@@ -7,7 +7,7 @@ use super::chars;
 use super::lexer::{Token, TokenKind, tokenize};
 use crate::document::merged_bundles;
 use crate::pn;
-use crate::well_known::{XSD_DATETIME, XSD_INT};
+use crate::well_known::XSD_DATETIME;
 use crate::{
     Bundle, Document, Error, FormalAttr, FormalRef, Kind, Namespaces, QName, Record, Result, Value,
 };
@@ -327,11 +327,14 @@ fn string(s: &str) -> String {
     out
 }
 
-/// An `xsd:int` is written bare only when it fits the grammar's `INT_LITERAL`:
-/// an optional minus sign and at least one digit.
+/// A value is written bare when its text is an `INT_LITERAL`, an optional
+/// minus sign and at least one digit, and reading that text back gives the
+/// same datatype.
 fn bare_int(lexical: &str, datatype: &QName) -> bool {
     let digits = lexical.strip_prefix('-').unwrap_or(lexical);
-    *datatype == *XSD_INT && !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+    !digits.is_empty()
+        && digits.bytes().all(|b| b.is_ascii_digit())
+        && matches!(Value::integer(lexical), Value::Typed { datatype: read, .. } if read == *datatype)
 }
 
 fn value(v: &Value, names: &mut Namespaces) -> Result<String> {
@@ -354,7 +357,7 @@ fn value(v: &Value, names: &mut Namespaces) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT, XSD_QNAME};
+    use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT, XSD_INTEGER, XSD_LONG, XSD_QNAME};
     use crate::{
         Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, LangStr,
         Namespaces, QName, Record, Value, provn,
@@ -531,6 +534,36 @@ endDocument
             "entity(ex:e, [ex:q='ex:name', ex:i=1, ex:neg=-42, ex:zeros=005, \
              ex:l=\"7\" %% xsd:long, ex:c=\"x\" %% ex:dt])"
         );
+    }
+
+    #[test]
+    fn an_integer_is_bare_only_when_it_reads_back_the_same() {
+        let cases = [
+            ("5", &XSD_INT, true),
+            ("-2147483648", &XSD_INT, true),
+            ("2147483648", &XSD_INT, false),
+            ("3000000000", &XSD_LONG, true),
+            ("5", &XSD_LONG, false),
+            ("-2147483649", &XSD_LONG, true),
+            ("9223372036854775808", &XSD_LONG, false),
+            ("99999999999999999999", &XSD_INTEGER, true),
+            ("5", &XSD_INTEGER, false),
+            ("3000000000", &XSD_INTEGER, false),
+        ];
+        for (text, datatype, bare) in cases {
+            let mut a = Attributes::new();
+            a.insert(ex("i"), Value::typed(text, QName::clone(datatype)).unwrap());
+            let shown = if bare {
+                text.to_owned()
+            } else {
+                format!("\"{text}\" %% xsd:{}", datatype.local())
+            };
+            assert_eq!(
+                line(element(Kind::Entity, ex("e"), a)),
+                format!("entity(ex:e, [ex:i={shown}])"),
+                "{text} as {datatype:?}"
+            );
+        }
     }
 
     #[test]
@@ -812,7 +845,7 @@ endDocument
         ];
         let datatypes = [
             XSD_INT.clone(),
-            crate::well_known::XSD_LONG.clone(),
+            XSD_LONG.clone(),
             crate::well_known::XSD_STRING.clone(),
             crate::well_known::XSD_DATETIME.clone(),
             crate::well_known::XSD_DOUBLE.clone(),

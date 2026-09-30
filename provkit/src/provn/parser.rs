@@ -9,7 +9,7 @@
 use super::Profile;
 use super::lexer::{Token, TokenKind};
 use crate::sink::Sink;
-use crate::well_known::XSD_INT;
+use crate::well_known::{PROV, XSD};
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
     Result, Value,
@@ -26,6 +26,15 @@ fn classify(prefix: &str, local: &str, profile: Profile) -> Option<Kind> {
         prefix.is_empty()
     };
     accepted.then_some(kind)
+}
+
+/// Whether the grammar gives `kind` neither an identifier nor attributes:
+/// productions [24] to [26].
+fn is_bare_relation(kind: Kind) -> bool {
+    matches!(
+        kind,
+        Kind::Specialization | Kind::Alternate | Kind::Membership
+    )
 }
 
 /// Attach `token`'s position to an error that has none.
@@ -190,13 +199,26 @@ impl<'t> Parser<'t> {
         self.keyword("document")?;
         self.document_ns = self.namespace_declarations()?;
         sink.start_document(self.document_ns.clone())?;
+        let mut after_bundle = false;
         while !self.is_keyword("endDocument") {
             if self.peek().kind == TokenKind::Eof {
                 return Err(self.expected("'endDocument'"));
             }
             if self.is_keyword("bundle") {
                 self.bundle(sink)?;
+                after_bundle = true;
             } else {
+                // Expressions come before bundles: production [1].
+                if after_bundle && self.profile == Profile::Strict {
+                    return Err(Self::error_at(
+                        self.peek(),
+                        format!(
+                            "expected 'bundle' or 'endDocument' after a bundle under the \
+                             strict profile, found {}",
+                            describe(&self.peek().kind)
+                        ),
+                    ));
+                }
                 let record = self.expression()?;
                 sink.record(record)?;
             }
@@ -224,6 +246,15 @@ impl<'t> Parser<'t> {
                             .to_owned(),
                     ));
                 }
+                // `default` comes before every `prefix`: production [45].
+                if !seen.is_empty() && self.profile == Profile::Strict {
+                    return Err(Self::error_at(
+                        self.peek(),
+                        "expected 'default' before every 'prefix' under the strict profile, \
+                         found 'default' after a prefix"
+                            .to_owned(),
+                    ));
+                }
                 has_default = true;
                 self.bump();
                 let iri = self.iri()?;
@@ -247,6 +278,19 @@ impl<'t> Parser<'t> {
                     ));
                 }
                 let iri = self.iri()?;
+                // `prov` and `xsd` are predeclared: section 3.7.4.
+                let predeclared =
+                    (name.local == "prov" && iri == PROV) || (name.local == "xsd" && iri == XSD);
+                if predeclared && self.profile == Profile::Strict {
+                    return Err(Self::error_at(
+                        name.token,
+                        format!(
+                            "expected a prefix other than the predeclared '{}' under the \
+                             strict profile, found 'prefix {} <{iri}>'",
+                            name.local, name.local
+                        ),
+                    ));
+                }
                 ns.declare(&name.local, &iri)
                     .map_err(|e| at(name.token, e))?;
                 seen.push(name.local);
@@ -326,6 +370,16 @@ impl<'t> Parser<'t> {
                         ));
                     }
                 };
+                if self.profile == Profile::Strict && is_bare_relation(kind) {
+                    return Err(Self::error_at(
+                        first.0,
+                        format!(
+                            "expected no identifier in {} under the strict profile, found {}",
+                            kind.name(),
+                            describe(&first.0.kind)
+                        ),
+                    ));
+                }
                 self.bump();
                 args.push(self.argument()?);
             } else {
@@ -338,6 +392,15 @@ impl<'t> Parser<'t> {
         while self.peek().kind == TokenKind::Comma {
             self.bump();
             if self.peek().kind == TokenKind::LBracket {
+                if self.profile == Profile::Strict && is_bare_relation(kind) {
+                    return Err(Self::error_at(
+                        self.peek(),
+                        format!(
+                            "expected no attributes in {} under the strict profile, found '['",
+                            kind.name()
+                        ),
+                    ));
+                }
                 attributes = Some(self.attribute_value_pairs()?);
                 break;
             }
@@ -485,7 +548,7 @@ impl<'t> Parser<'t> {
                     }
                     TokenKind::Typed => {
                         self.bump();
-                        let datatype = self.name("a datatype")?;
+                        let datatype = self.identifier("a datatype")?;
                         let datatype = self.resolve(&datatype)?;
                         Value::typed_in(self.names(), s, datatype)
                     }
@@ -494,7 +557,7 @@ impl<'t> Parser<'t> {
             }
             TokenKind::Int(i) => {
                 self.bump();
-                Value::typed(i.as_str(), XSD_INT.clone())
+                Ok(Value::integer(i))
             }
             TokenKind::QNameLiteral { prefix, local } => {
                 self.bump();
@@ -701,28 +764,127 @@ mod tests {
     }
 
     #[test]
-    fn strict_enforces_three_rules_only() {
+    fn strict_rejects_extensions_and_keeps_mention_attributes() {
         // Extensibility expressions are rejected under both profiles.
         assert!(matches!(
             err("ex:custom(ex:a)", Profile::Strict),
             Error::Syntax { .. }
         ));
-        // Attributes on alternateOf, specializationOf, hadMember and
-        // mentionOf are accepted.
-        for text in [
-            "alternateOf(ex:a, ex:b)",
-            "specializationOf(ex:a, ex:b)",
-            "hadMember(ex:c, ex:e)",
-            "prov:mentionOf(ex:a, ex:b, ex:c)",
-        ] {
-            let with_attrs = text.replace(')', ", [ex:k=\"v\"])");
-            assert!(read(&with_attrs, Profile::Strict).is_ok(), "{with_attrs}");
+        // `mentionOf` takes attributes.
+        assert!(
+            read(
+                "prov:mentionOf(ex:a, ex:b, ex:c, [ex:k=\"v\"])",
+                Profile::Strict
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn strict_is_the_whole_grammar() {
+        let p = "prefix ex <http://example.org/>\n";
+        let cases = [
+            (
+                format!("document\n{p}default <http://d/>\nentity(e)\nendDocument\n"),
+                (3, 1),
+            ),
+            (
+                format!("document\n{p}bundle ex:b\nendBundle\nentity(ex:f)\nendDocument\n"),
+                (5, 1),
+            ),
+            (
+                format!("document\n{p}hadMember(ex:m; ex:c, ex:e)\nendDocument\n"),
+                (3, 11),
+            ),
+            (
+                format!("document\n{p}alternateOf(ex:a; ex:b, ex:c)\nendDocument\n"),
+                (3, 13),
+            ),
+            (
+                format!("document\n{p}specializationOf(ex:a, ex:b, [ex:k=\"x\"])\nendDocument\n"),
+                (3, 30),
+            ),
+            (
+                format!(
+                    "document\n{p}prefix prov <http://www.w3.org/ns/prov#>\nentity(ex:e)\nendDocument\n"
+                ),
+                (3, 8),
+            ),
+            (
+                format!(
+                    "document\n{p}prefix xsd <http://www.w3.org/2001/XMLSchema#>\nentity(ex:e)\nendDocument\n"
+                ),
+                (3, 8),
+            ),
+        ];
+        for (text, position) in cases {
+            assert!(provn::read_with(&text, Profile::Default).is_ok(), "{text}");
+            match provn::read_with(&text, Profile::Strict) {
+                Err(Error::Syntax { line, column, .. }) => {
+                    assert_eq!((line, column), position, "{text}");
+                }
+                other => panic!("{text}: expected a syntax error, got {other:?}"),
+            }
         }
-        // Identifiers on those relations are accepted.
-        assert!(read("alternateOf(ex:i; ex:a, ex:b)", Profile::Strict).is_ok());
-        // A bundle may come before a top-level record.
-        let text = "document\nprefix ex <http://e/>\nbundle ex:b\nentity(ex:x)\nendBundle\nentity(ex:e)\nendDocument";
-        assert!(provn::read_with(text, Profile::Strict).is_ok());
+    }
+
+    #[test]
+    fn a_second_default_and_a_moved_reserved_prefix_fail_under_both_profiles() {
+        let twice = "document\ndefault <http://a/>\ndefault <http://b/>\nendDocument\n";
+        let moved = "document\nprefix prov <http://other/>\nendDocument\n";
+        for profile in [Profile::Strict, Profile::Default] {
+            assert!(matches!(
+                provn::read_with(twice, profile),
+                Err(Error::Syntax {
+                    line: 3,
+                    column: 1,
+                    ..
+                })
+            ));
+            let (position, inner) = located(provn::read_with(moved, profile).unwrap_err());
+            assert_eq!(position, (2, 8));
+            assert!(matches!(inner, Error::ReservedPrefix { .. }), "{inner:?}");
+        }
+    }
+
+    #[test]
+    fn integer_literals_type_by_range() {
+        let d = doc(
+            "entity(ex:e, [ex:a=42, ex:b=3000000000, ex:c=99999999999999999999, \
+             ex:d=-2147483649, ex:e=007])",
+            Profile::Strict,
+        );
+        let datatypes: Vec<_> = values(&d)
+            .iter()
+            .map(|v| v.datatype().unwrap().local().to_owned())
+            .collect();
+        assert_eq!(datatypes, ["int", "long", "integer", "long", "int"]);
+        let texts: Vec<_> = values(&d)
+            .iter()
+            .map(|v| match v {
+                Value::Typed { lexical, .. } => lexical.as_str(),
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            texts,
+            [
+                "42",
+                "3000000000",
+                "99999999999999999999",
+                "-2147483649",
+                "007"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_datatype_may_be_all_digits() {
+        let d = doc(r#"entity(ex:e, [ex:k="x" %% 123])"#, Profile::Strict);
+        assert_eq!(
+            values(&d)[0].datatype().unwrap().iri(),
+            "http://default.org/123"
+        );
     }
 
     #[test]
@@ -895,15 +1057,11 @@ mod tests {
     }
 
     #[test]
-    fn prefixes_and_datatypes_are_not_integers() {
+    fn a_prefix_is_not_an_integer() {
         let text = "document\n prefix 123 <http://a/>\nendDocument";
         assert!(matches!(
             provn::read(text),
             Err(Error::Syntax { line: 2, .. })
-        ));
-        assert!(matches!(
-            err(r#"entity(ex:e, [ex:a="1" %% 42])"#, Profile::Default),
-            Error::Syntax { .. }
         ));
     }
 
@@ -1097,7 +1255,7 @@ mod tests {
     fn bundle_identifier_resolves_in_its_own_scope() {
         let d = doc(
             "bundle ex:b\n  prefix ex <http://bundle.org/>\n  entity(ex:e)\nendBundle\nentity(ex:e)",
-            Profile::Strict,
+            Profile::Default,
         );
         assert_eq!(d.bundles[0].id, QName::new("http://bundle.org/", "b"));
         assert_eq!(

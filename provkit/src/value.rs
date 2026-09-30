@@ -174,6 +174,24 @@ impl Value {
         }
     }
 
+    /// An integer written as digits, with an optional sign: `xsd:int`,
+    /// `xsd:long` or `xsd:integer` by range, keeping the text. The range
+    /// follows the digits alone, so leading zeros do not change the type and
+    /// a number beyond `i64` is an `xsd:integer`.
+    // Only the readers call this, and both are feature-gated.
+    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
+    pub(crate) fn integer(lexical: &str) -> Value {
+        let datatype = match lexical.parse::<i64>() {
+            Ok(n) if i32::try_from(n).is_ok() => XSD_INT.clone(),
+            Ok(_) => XSD_LONG.clone(),
+            Err(_) => XSD_INTEGER.clone(),
+        };
+        Value::Typed {
+            lexical: lexical.to_owned(),
+            datatype,
+        }
+    }
+
     /// The rule both readers use for `"lexical" %% datatype` and
     /// `{"$": lexical, "type": datatype}`. Under a qualified-name datatype,
     /// text that spells a qualified name resolves in `names` to a

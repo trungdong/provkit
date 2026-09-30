@@ -4,7 +4,6 @@ use indexmap::IndexMap;
 
 use super::wire::{JsonDocument, JsonRecord, JsonSection, JsonValue};
 use crate::sink::Sink;
-use crate::well_known::{XSD_INT, XSD_INTEGER, XSD_LONG};
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
     Result, Value,
@@ -151,12 +150,12 @@ impl JsonValue {
     }
 }
 
-/// The design note's reading table.
+/// The reading table for JSON values.
 fn decode_value(v: &JsonValue, scope: &Namespaces) -> Result<Value> {
     Ok(match v {
         JsonValue::Str(s) => Value::Str(s.clone()),
-        JsonValue::Int(i) => integer(i.to_string(), i128::from(*i))?,
-        JsonValue::UInt(u) => integer(u.to_string(), i128::from(*u))?,
+        JsonValue::Int(i) => Value::integer(&i.to_string()),
+        JsonValue::UInt(u) => Value::integer(&u.to_string()),
         JsonValue::Float(f) => Value::from(*f),
         JsonValue::Bool(b) => Value::from(*b),
         JsonValue::Many(_) => return Err(structure("nested arrays are not allowed")),
@@ -180,23 +179,10 @@ fn decode_value(v: &JsonValue, scope: &Namespaces) -> Result<Value> {
     })
 }
 
-/// Raw JSON integers type by range. Integers beyond `i64` and within `u64`
-/// are `xsd:integer`; larger numbers arrive as floats and read as `xsd:double`.
-fn integer(lexical: String, n: i128) -> Result<Value> {
-    let datatype = if i32::try_from(n).is_ok() {
-        XSD_INT.clone()
-    } else if i64::try_from(n).is_ok() {
-        XSD_LONG.clone()
-    } else {
-        XSD_INTEGER.clone()
-    };
-    Value::typed(lexical, datatype)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::well_known::{XSD_BOOLEAN, XSD_DOUBLE};
+    use crate::well_known::{XSD_BOOLEAN, XSD_DOUBLE, XSD_INT, XSD_INTEGER, XSD_LONG};
     use crate::{Error, Record, Value};
 
     fn doc(json: &str) -> crate::Document {

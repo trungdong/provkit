@@ -14,10 +14,27 @@ pub use write::{statement, statement_name, to_string, write};
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Profile {
-    /// The formal grammar only.
+    /// The formal grammar only. `Strict` rejects:
+    ///
+    /// - `mentionOf` without the `prov:` prefix.
+    /// - `-` in a required position of a relation.
+    /// - `default` after a `prefix` (production \[45\]).
+    /// - A statement after a bundle at document level (production \[1\]).
+    /// - An identifier or attributes on `alternateOf`, `specializationOf` and
+    ///   `hadMember` (productions \[24\] to \[26\]).
+    /// - A declaration of `prov` or `xsd` at its predeclared IRI (section
+    ///   3.7.4).
     Strict,
-    /// The grammar plus bare `mentionOf` and `-` in required positions,
-    /// which is what `ProvToolbox` and `ProvPy` write.
+    /// The grammar plus these extensions, which `ProvToolbox` and `ProvPy`
+    /// write:
+    ///
+    /// - Bare `mentionOf`.
+    /// - `-` in a required position of a relation.
+    /// - `default` after a `prefix`.
+    /// - A statement after a bundle at document level.
+    /// - An identifier or attributes on `alternateOf`, `specializationOf` and
+    ///   `hadMember`.
+    /// - A declaration of `prov` or `xsd` at its predeclared IRI.
     #[default]
     Default,
 }
