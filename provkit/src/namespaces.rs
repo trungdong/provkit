@@ -122,10 +122,16 @@ impl Namespaces {
         if let Some(p) = self.prefix_for(namespace) {
             return p.to_owned();
         }
+        self.mint_prefix(namespace, |_| true)
+    }
+
+    /// Bind the first `nsN` that this table does not use and that `accept`
+    /// takes to `namespace`, even when `namespace` already has a prefix.
+    pub(crate) fn mint_prefix(&mut self, namespace: &str, accept: impl Fn(&str) -> bool) -> String {
         let mut n = 1;
         loop {
             let candidate = format!("ns{n}");
-            if !self.prefixes.contains_key(candidate.as_str()) {
+            if !self.prefixes.contains_key(candidate.as_str()) && accept(&candidate) {
                 self.prefixes
                     .insert(candidate.clone().into(), Arc::from(namespace));
                 return candidate;

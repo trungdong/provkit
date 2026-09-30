@@ -57,7 +57,7 @@ fn to_wire(document: &Document) -> Result<JsonDocument> {
     let sections = sections(&document.records, &mut table, &mut next_blank)?;
     let mut bundles = IndexMap::new();
     for bundle in merged_bundles(&document.bundles) {
-        let (key, wire) = bundle_wire(&bundle, &table, &mut next_blank)?;
+        let (key, wire) = bundle_wire(&bundle, &table, &bundles, &mut next_blank)?;
         bundles.insert(key, wire);
     }
     Ok(JsonDocument {
@@ -69,9 +69,14 @@ fn to_wire(document: &Document) -> Result<JsonDocument> {
 
 /// A bundle and its key, both written against the bundle's table over the
 /// document's: bundle declarations win, undeclared prefixes fall back.
+///
+/// Bundles with different identifiers can render to one key when each
+/// bundle binds the prefix differently. The later bundle then gets a fresh
+/// `nsN` prefix, declared in its own `prefix` block, for its key.
 fn bundle_wire(
     bundle: &Bundle,
     outer: &Namespaces,
+    written: &IndexMap<String, JsonBundle>,
     next_blank: &mut usize,
 ) -> Result<(String, JsonBundle)> {
     let mut table = outer.clone();
@@ -81,7 +86,14 @@ fn bundle_wire(
     if let Some(default) = bundle.namespaces.default_namespace() {
         table.set_default(default.clone());
     }
-    let key = table.render(&bundle.id);
+    let mut key = table.render(&bundle.id);
+    if written.contains_key(&key) {
+        let local = bundle.id.local();
+        let prefix = table.mint_prefix(bundle.id.namespace(), |p| {
+            !written.contains_key(&format!("{p}:{local}"))
+        });
+        key = format!("{prefix}:{local}");
+    }
     let sections = sections(&bundle.records, &mut table, next_blank)?;
     // Entries the document already declares are inherited, not repeated.
     let inherited = |prefix: &str, iri: &str| outer.lookup(prefix).is_some_and(|o| *o == *iri);
@@ -500,5 +512,77 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&text).unwrap();
         assert_eq!(v["bundle"].as_object().unwrap().len(), 1);
         assert_eq!(json::read(&text).unwrap(), d);
+    }
+
+    /// Two bundles whose identifiers differ but whose own tables spell both
+    /// as `ex:b`.
+    fn colliding_bundles() -> Document {
+        let bundle = |iri: &str| {
+            let mut ns = Namespaces::new();
+            ns.declare("ex", iri).unwrap();
+            Bundle {
+                id: QName::new(iri, "b"),
+                namespaces: ns,
+                records: vec![entity_in(QName::new(iri, "e"))],
+            }
+        };
+        let mut d = Document::new();
+        d.bundles.push(bundle("http://a.org/"));
+        d.bundles.push(bundle("http://c.org/"));
+        d
+    }
+
+    #[test]
+    fn colliding_bundle_keys_get_a_fresh_prefix_and_round_trip() {
+        let d = colliding_bundles();
+        let text = json::to_string(&d).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let bundles = v["bundle"].as_object().unwrap();
+        assert_eq!(bundles.len(), 2, "{text}");
+        assert!(bundles.contains_key("ex:b"), "{text}");
+        assert_eq!(
+            v["bundle"]["ns1:b"]["prefix"],
+            serde_json::json!({"ex": "http://c.org/", "ns1": "http://c.org/"}),
+            "{text}"
+        );
+        assert_eq!(json::read(&text).unwrap(), d);
+
+        // A minted key never lands on a key an earlier bundle already owns.
+        let mut d = colliding_bundles();
+        let mut third = Namespaces::new();
+        third.declare("ns1", "http://x.org/").unwrap();
+        d.bundles.insert(
+            1,
+            Bundle {
+                id: QName::new("http://x.org/", "b"),
+                namespaces: third,
+                records: vec![],
+            },
+        );
+        let text = json::to_string(&d).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let keys: Vec<_> = v["bundle"].as_object().unwrap().keys().cloned().collect();
+        assert_eq!(keys, ["ex:b", "ns1:b", "ns2:b"], "{text}");
+        assert_eq!(json::read(&text).unwrap(), d);
+    }
+
+    #[cfg(feature = "provn")]
+    #[test]
+    fn colliding_bundles_read_from_provn_survive_json() {
+        let text = "document
+  bundle ex:b
+    prefix ex <http://a.org/>
+    entity(ex:e)
+  endBundle
+  bundle ex:b
+    prefix ex <http://c.org/>
+    entity(ex:e)
+  endBundle
+endDocument
+";
+        let d = crate::provn::read(text).unwrap();
+        assert_eq!(d, colliding_bundles());
+        let json = json::to_string(&d).unwrap();
+        assert_eq!(json::read(&json).unwrap(), d, "{json}");
     }
 }
