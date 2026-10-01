@@ -1379,6 +1379,19 @@ fn errors_in_a_record_are_reported_in_the_order_of_the_text() {
             r#""ex:a": {"$": "x", "lang": "en", "lang": "fr"}"#,
             "duplicate field `lang`",
         ),
+        // A repeated member with more members after it.
+        (
+            r#""ex:a": {"$": 1, "$": "x", "lang": "en"}"#,
+            "expected a string as the `$` of a value object at line 1 column 77",
+        ),
+        (
+            r#""ex:a": {"type": 5, "type": "x", "$": "y"}"#,
+            "expected a string as the `type` of a value object at line 1 column 80",
+        ),
+        (
+            r#""ex:a": {"$": "x", "lang": "en", "lang": "fr", "type": "xsd:string"}"#,
+            "duplicate field `lang`",
+        ),
     ] {
         let (_, _, message) = record_structure(&one_record("entity", "ex:e", body));
         assert!(message.starts_with(first), "{body}\n{message}");
@@ -1409,4 +1422,15 @@ fn of_several_invalid_members_the_dollar_comes_first() {
         message.starts_with("expected a string as the `type` of a value object"),
         "{message}"
     );
+}
+
+#[test]
+fn an_unknown_member_of_a_value_object_is_placed_at_its_key() {
+    let text = one_record("entity", "ex:e", r#""ex:a": {"$": "x", "zz": 2 }"#);
+    let (_, _, message) = record_structure(&text);
+    let column = column_after(&text, r#""zz""#) - 1;
+    let expected = format!(
+        "unknown key `zz` in a value object, expected `$`, `type` or `lang` at line 1 column {column}"
+    );
+    assert_eq!(message, expected);
 }

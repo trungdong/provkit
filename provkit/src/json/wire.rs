@@ -495,12 +495,17 @@ impl<'de> Visitor<'de> for ValueVisitor {
                 *member = Some(member_string(&key, text));
                 continue;
             }
-            // A member given twice. An invalid member read before it comes
-            // first in the text, so it is reported instead, by the order
-            // below.
+            // The member is given twice. An invalid member read before it
+            // comes first in the text, so that one is reported, with `$`
+            // before `type` before `lang` as below. The rest of the object
+            // is read first, because the parser refuses an object left half
+            // read.
             let mut earlier = [value, datatype, lang].into_iter().flatten();
             return match earlier.find_map(Result::err) {
-                Some(invalid) => Ok(JsonValue::Invalid(invalid)),
+                Some(invalid) => {
+                    while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
+                    Ok(JsonValue::Invalid(invalid))
+                }
                 None => Err(de::Error::custom(duplicate(&key))),
             };
         }

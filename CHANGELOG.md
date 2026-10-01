@@ -134,13 +134,14 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
   - `json::read` returns `Error::Json` for text the JSON parser rejects, and
     `Error::JsonStructure` for JSON that is not a PROV document. An error
     found while reading the JSON carries the line and column of the
-    offending token. For a key the reader refuses (an unknown section, a
-    key given twice in one object other than a bundle's, a `bundle` inside
-    a bundle) the position is where `serde_json` puts an error raised once
-    the key's value has been read: past the white space after the value,
-    and past a closing brace that follows it. An attribute value the reader cannot
-    decode is such an error, a string with a `\u` escape that names a lone
-    surrogate included. An error found while building a record (a formal of
+    offending token. An attribute value the reader cannot decode is such an
+    error, a string with a `\u` escape that names a lone surrogate included.
+    For a key the reader refuses (an unknown section, a key given twice in
+    one object other than a bundle's, a `bundle` inside a bundle) the
+    position is where `serde_json` puts an error raised once the key's
+    value has been read: past the white space after the value, and past a
+    closing brace that follows it. An unknown member of a value object is
+    placed at its key. An error found while building a record (a formal of
     the wrong form, a blank identifier on an element or bundle, a name or
     literal PROV does not allow) carries no position. An error inside a
     record, of either sort, is wrapped in `Error::InRecord`, which names the
