@@ -14,9 +14,9 @@ use crate::{Hint, read_document, write_stdout};
 /// Arguments of `provkit compare`.
 #[derive(Args)]
 pub struct CompareArgs {
-    /// First document.
+    /// First document, or - for standard input.
     a: PathBuf,
-    /// Second document.
+    /// Second document, or - for standard input. Only one of the two may be -.
     b: PathBuf,
     /// Merge records that share an identifier on each side before comparing.
     #[arg(long)]
@@ -25,6 +25,10 @@ pub struct CompareArgs {
 
 /// Exits 0 when the documents are equal, 1 when they differ.
 pub fn run(args: &CompareArgs) -> Result<ExitCode> {
+    let stdin = Path::new("-");
+    if args.a == stdin && args.b == stdin {
+        anyhow::bail!("standard input can be read once; give one document as a file");
+    }
     let mut a = read_document(&args.a, None, Hint::None)?;
     let mut b = read_document(&args.b, None, Hint::None)?;
     if args.unified {

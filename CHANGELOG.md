@@ -187,6 +187,8 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     command had reached.
   - Content sniffing takes `document` only as a whole word, so `documentary`
     is not PROV-N.
+  - A PROV-N error is printed as `file:line:column: message`. `compare` takes
+    `-` for standard input on one side.
 - Prebuilt `provkit` binaries on each GitHub release, one archive per target:
   - `provkit-x86_64-apple-darwin.tar.gz`
   - `provkit-aarch64-apple-darwin.tar.gz`

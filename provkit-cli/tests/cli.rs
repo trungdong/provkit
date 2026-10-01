@@ -125,6 +125,20 @@ fn extensions_match_in_any_case() {
         .assert()
         .success()
         .stdout(predicate::str::starts_with("{"));
+
+    // Content that sniffs as PROV-JSON is still read as PROV-N: the
+    // upper-case extension decides.
+    let json_looking = dir.join("json-looking.PROVN");
+    std::fs::write(&json_looking, "{}").unwrap();
+    provkit()
+        .arg("convert")
+        .arg(&json_looking)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::starts_with(format!(
+            "provkit: {}:1:1: ",
+            json_looking.display()
+        )));
 }
 
 #[test]
@@ -241,7 +255,7 @@ fn library_errors_name_the_file() {
     std::fs::write(&bad, "document\n  entity(ex:e1)\nendDocument\n").unwrap();
     let assert = provkit().args(["convert"]).arg(&bad).assert().code(2);
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
-    let prefix = format!("provkit: {}: ", bad.display());
+    let prefix = format!("provkit: {}:", bad.display());
     assert!(stderr.starts_with(&prefix), "stderr was {stderr:?}");
     assert!(stderr.len() > prefix.len() + 1);
 }
@@ -254,7 +268,7 @@ fn positioned_errors_print_their_message_once() {
     let assert = provkit().args(["convert"]).arg(&bad).assert().code(2);
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert!(
-        stderr.contains("line 2, column 10: undeclared prefix `ex`"),
+        stderr.contains(&format!("{}:2:10: undeclared prefix `ex`", bad.display())),
         "stderr was {stderr:?}"
     );
     assert_eq!(
@@ -265,30 +279,27 @@ fn positioned_errors_print_their_message_once() {
 }
 
 #[test]
-fn stdin_errors_name_the_input_as_dash() {
+fn stdin_errors_name_the_input_as_stdin() {
     provkit()
         .args(["convert", "-"])
         .write_stdin("hello")
         .assert()
         .code(2)
-        .stderr(predicate::str::starts_with("provkit: -: "));
+        .stderr(predicate::str::starts_with(
+            "provkit: cannot tell the format of standard input",
+        ));
     provkit()
         .args(["convert", "-f", "json", "-"])
         .write_stdin("{")
         .assert()
         .code(2)
-        .stderr(predicate::str::starts_with("provkit: -: "));
+        .stderr(predicate::str::starts_with("provkit: <stdin>: "));
 }
 
 const PRECEDENCE: &str = "taken from -f/-t when given, else from the file extension";
 
 #[test]
 fn help_states_the_precedence_rule() {
-    provkit()
-        .arg("--help")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains(PRECEDENCE));
     provkit()
         .args(["convert", "--help"])
         .assert()
@@ -325,7 +336,7 @@ fn unknown_format_values_are_rejected() {
         provkit()
             .args(["convert", flag, "xml", "-"])
             .assert()
-            .failure()
+            .code(2)
             .stderr(predicate::str::contains("invalid value 'xml'"));
     }
 }
@@ -462,7 +473,7 @@ fn compare_help_names_the_exit_codes() {
         .stdout(
             predicate::str::contains("0 when the documents are equal")
                 .and(predicate::str::contains("1 when they differ"))
-                .and(predicate::str::contains("2 on a read error")),
+                .and(predicate::str::contains("2 on any error")),
         );
 }
 
@@ -612,17 +623,158 @@ fn compare_does_not_redeclare_a_declared_prefix() {
 #[test]
 fn compare_with_unrecognisable_standard_input_offers_no_flag() {
     provkit()
-        .args(["compare", "-", "-"])
+        .args(["compare", "-"])
+        .arg(corpus("json/activity1.json"))
         .write_stdin("hello")
         .assert()
         .code(2)
-        .stderr("provkit: cannot tell the format of standard input\n");
+        .stderr("provkit: cannot tell the format of standard input: it starts with neither `{` nor `document`\n");
     provkit()
         .args(["convert", "-"])
         .write_stdin("hello")
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("use -f json or -f provn"));
+        .stderr("provkit: cannot tell the format of standard input; use -f json or -f provn\n");
+}
+
+#[test]
+fn compare_reads_standard_input_once() {
+    provkit()
+        .args(["compare", "-", "-"])
+        .write_stdin(std::fs::read_to_string(corpus("json/activity1.json")).unwrap())
+        .assert()
+        .code(2)
+        .stderr("provkit: standard input can be read once; give one document as a file\n");
+}
+
+#[test]
+fn a_provn_error_is_printed_as_file_line_column() {
+    let dir = scratch("a_provn_error_is_printed_as_file_line_column");
+    let bad = dir.join("bad.provn");
+    std::fs::write(
+        &bad,
+        "document\nprefix ex <http://example.org/>\nentity(ex:a ex:b)\nendDocument\n",
+    )
+    .unwrap();
+    provkit()
+        .arg("convert")
+        .arg(&bad)
+        .assert()
+        .code(2)
+        .stderr(format!(
+            "provkit: {}:3:13: expected ',' or ')', found 'ex:b'\n",
+            bad.display()
+        ));
+    let undeclared = dir.join("undeclared.provn");
+    std::fs::write(&undeclared, "document\nentity(zz:a)\nendDocument\n").unwrap();
+    provkit()
+        .arg("convert")
+        .arg(&undeclared)
+        .assert()
+        .code(2)
+        .stderr(format!(
+            "provkit: {}:2:8: undeclared prefix `zz`\n",
+            undeclared.display()
+        ));
+    provkit()
+        .args(["convert", "-f", "provn", "-"])
+        .write_stdin("document\nentity(zz:a)\nendDocument\n")
+        .assert()
+        .code(2)
+        .stderr("provkit: <stdin>:2:8: undeclared prefix `zz`\n");
+}
+
+#[test]
+fn a_document_that_cannot_be_written_names_the_input() {
+    let dir = scratch("a_document_that_cannot_be_written_names_the_input");
+    let input = dir.join("in.json");
+    std::fs::write(
+        &input,
+        r#"{"prefix": {"ex": "http://x.org/my ns/"}, "entity": {"ex:e": {}}}"#,
+    )
+    .unwrap();
+    let output = dir.join("out.provn");
+    provkit()
+        .arg("convert")
+        .arg(&input)
+        .arg("-o")
+        .arg(&output)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::starts_with(format!(
+            "provkit: {}: PROV-N cannot write",
+            input.display()
+        )));
+    assert!(!output.exists());
+}
+
+#[test]
+fn only_grammar_whitespace_is_skipped_when_sniffing() {
+    for lead in ["\u{2003}", "\u{c}", "\u{a0}"] {
+        provkit()
+            .args(["convert", "-"])
+            .write_stdin(format!("{lead}document\nendDocument\n"))
+            .assert()
+            .code(2)
+            .stderr(predicate::str::contains("cannot tell the format"));
+    }
+    provkit()
+        .args(["convert", "-"])
+        .write_stdin(" \t\r\ndocument\nendDocument\n")
+        .assert()
+        .success();
+}
+
+#[test]
+fn compare_unified_reports_a_conflict_in_the_second_file() {
+    provkit()
+        .args(["compare", "--unified"])
+        .arg(corpus("json/activity1.json"))
+        .arg(corpus("json/scruffy-generation1-S.json"))
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "scruffy-generation1-S.json: cannot unify",
+        ));
+}
+
+#[test]
+fn the_top_level_help_is_about_the_tool_and_compare_names_standard_input() {
+    let long = provkit().arg("--help").assert().success();
+    let long = String::from_utf8(long.get_output().stdout.clone()).unwrap();
+    let short = provkit().arg("-h").assert().success();
+    let short = String::from_utf8(short.get_output().stdout.clone()).unwrap();
+    assert_eq!(long.lines().next(), short.lines().next());
+    assert!(!long.contains("-f/-t"), "{long}");
+    provkit()
+        .args(["compare", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("or - for standard input"));
+}
+
+#[test]
+fn compare_lists_a_repeated_record_once_and_uses_a_bundle_s_own_prefix() {
+    let dir = scratch("compare_lists_a_repeated_record_once");
+    let a = dir.join("a.provn");
+    let b = dir.join("b.provn");
+    std::fs::write(
+        &a,
+        "document\n prefix ex <http://example.org/>\n entity(ex:e)\n entity(ex:e)\n \
+         bundle ex:b\n  prefix in <http://inner.org/>\n  entity(in:x)\n endBundle\nendDocument\n",
+    )
+    .unwrap();
+    std::fs::write(&b, "document\nendDocument\n").unwrap();
+    provkit()
+        .arg("compare")
+        .arg(&a)
+        .arg(&b)
+        .assert()
+        .code(1)
+        .stdout(format!(
+            "only in {}:\n  entity(ex:e)\n  bundle ex:b:\n    entity(in:x)\n",
+            a.display()
+        ));
 }
 
 #[test]

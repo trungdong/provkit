@@ -16,13 +16,8 @@ use compare::CompareArgs;
 use format::Format;
 
 /// Convert and compare W3C PROV documents.
-///
-/// Formats are taken from -f/-t when given, else from the file extension
-/// (.json, .provn), else by looking at the content. Standard output defaults
-/// to PROV-N, and a file named with -o needs -t unless its extension is .json
-/// or .provn. Use `-` for standard input or output.
 #[derive(Parser)]
-#[command(name = "provkit", version, about, long_about)]
+#[command(name = "provkit", version, about)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -42,11 +37,11 @@ enum Command {
     /// Formats come from the file extension (.json, .provn), else from the
     /// content. Names the output cannot write with a declared prefix get an
     /// `nsN` prefix. A `prefix` line, printed after the records of its scope,
-    /// applies to the whole scope.
+    /// applies to the whole scope. The listing is not a PROV-N document: its
+    /// names resolve with the declarations of the file it came from.
     ///
     /// Exit codes: 0 when the documents are equal (nothing is printed), 1
-    /// when they differ, 2 on a read error or, with --unified, a unification
-    /// failure.
+    /// when they differ, 2 on any error.
     Compare(CompareArgs),
 }
 
@@ -82,6 +77,33 @@ fn main() -> ExitCode {
     }
 }
 
+/// How the tool names `path` in a message: `<stdin>` for `-`.
+fn shown(path: &Path) -> String {
+    if path == Path::new("-") {
+        "<stdin>".to_owned()
+    } else {
+        path.display().to_string()
+    }
+}
+
+/// A library error from reading `source`, as `source:line:column: message`
+/// when the error has a position, so an editor can jump to it.
+fn located(source: &str, error: provkit::Error) -> anyhow::Error {
+    match error {
+        provkit::Error::Syntax {
+            line,
+            column,
+            message,
+        } => anyhow!("{source}:{line}:{column}: {message}"),
+        provkit::Error::At {
+            line,
+            column,
+            error,
+        } => anyhow!("{source}:{line}:{column}: {error}"),
+        other => anyhow!("{source}: {other}"),
+    }
+}
+
 /// How a failure to tell the format is worded.
 #[derive(Clone, Copy)]
 enum Hint {
@@ -97,9 +119,9 @@ enum Hint {
 fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Document> {
     let is_stdin = path == Path::new("-");
     let text = if is_stdin {
-        io::read_to_string(io::stdin()).context("-")?
+        io::read_to_string(io::stdin()).with_context(|| shown(path))?
     } else {
-        fs::read_to_string(path).with_context(|| path.display().to_string())?
+        fs::read_to_string(path).with_context(|| shown(path))?
     };
     let format = from
         .or_else(|| {
@@ -111,19 +133,23 @@ fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Docume
         })
         .or_else(|| Format::sniff(&text))
         .ok_or_else(|| match (is_stdin, hint) {
-            (true, Hint::None) => anyhow!("cannot tell the format of standard input"),
+            (true, Hint::None) => anyhow!(
+                "cannot tell the format of standard input: it starts with neither `{{` nor `document`"
+            ),
+            (true, Hint::FromFlag) => {
+                anyhow!("cannot tell the format of standard input; use -f json or -f provn")
+            }
             (false, Hint::None) => anyhow!("{}: cannot tell the format", path.display()),
-            (_, Hint::FromFlag) => anyhow!(
+            (false, Hint::FromFlag) => anyhow!(
                 "{}: cannot tell the format; use -f json or -f provn",
                 path.display()
             ),
         })?;
-    let context = || path.display().to_string();
     let document = match format {
-        Format::Json => json::read(&text).with_context(context)?,
+        Format::Json => json::read(&text).map_err(|e| located(&shown(path), e))?,
         Format::Provn => {
-            let report =
-                provn::read_report(&text, provn::Profile::Default).with_context(context)?;
+            let report = provn::read_report(&text, provn::Profile::Default)
+                .map_err(|e| located(&shown(path), e))?;
             let source = if is_stdin {
                 "standard input".to_owned()
             } else {
@@ -180,7 +206,7 @@ fn convert(args: &ConvertArgs) -> Result<()> {
         Format::Json => json::write(&doc, &mut buf),
         Format::Provn => provn::write(&doc, &mut buf),
     }
-    .with_context(|| name.clone())?;
+    .with_context(|| shown(&args.input))?;
     match file {
         None => write_stdout(&buf).with_context(|| name)?,
         Some(path) => fs::write(path, &buf).with_context(|| name)?,

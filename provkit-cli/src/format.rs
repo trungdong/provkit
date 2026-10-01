@@ -14,6 +14,10 @@ pub enum Format {
 }
 
 impl Format {
+    /// The grammar's whitespace: space, tab, CR and LF. No other Unicode
+    /// space separates PROV-N tokens.
+    const WS: [char; 4] = [' ', '\t', '\r', '\n'];
+
     /// From a file extension (`.json`, `.provn`), in any letter case.
     pub fn from_path(path: &Path) -> Option<Format> {
         let ext = path.extension()?.to_str()?;
@@ -35,7 +39,7 @@ impl Format {
         // Mirrors `skip_trivia` in the library's PROV-N lexer, which is not
         // public: the grammar's whitespace and both comment forms.
         loop {
-            rest = rest.trim_start();
+            rest = rest.trim_start_matches(Self::WS);
             if let Some(r) = rest.strip_prefix("//") {
                 rest = r.split_once(['\n', '\r']).map_or("", |(_, tail)| tail);
             } else if let Some(r) = rest.strip_prefix("/*") {
@@ -48,7 +52,7 @@ impl Format {
             Some(Format::Json)
         } else if rest.strip_prefix("document").is_some_and(|tail| {
             tail.is_empty()
-                || tail.starts_with(char::is_whitespace)
+                || tail.starts_with(Self::WS)
                 || tail.starts_with("//")
                 || tail.starts_with("/*")
         }) {
@@ -81,6 +85,10 @@ mod tests {
         assert_eq!(Format::sniff("document/*x*/"), Some(Format::Provn));
         assert_eq!(Format::sniff("document// x\n"), Some(Format::Provn));
         assert_eq!(Format::sniff("document/x"), None);
+        assert_eq!(Format::sniff("\u{2003}document"), None);
+        assert_eq!(Format::sniff("\u{c}document\n"), None);
+        assert_eq!(Format::sniff("document\u{a0}x"), None);
+        assert_eq!(Format::sniff("\u{a0}{}"), None);
     }
 
     #[test]
