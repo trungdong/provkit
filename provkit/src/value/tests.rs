@@ -48,6 +48,22 @@ fn assert_distinct_values(datatype: &QName, forms: &[&str]) {
 }
 
 #[test]
+fn every_variant_states_its_datatype() {
+    assert_eq!(Value::from("s").datatype(), Some(XSD_STRING.clone()));
+    assert_eq!(
+        Value::from(LangStr::new("s", "en").unwrap()).datatype(),
+        None
+    );
+    let name = QName::new("http://example.org/", "q").unwrap();
+    assert_eq!(Value::from(name).datatype(), Some(XSD_QNAME.clone()));
+    let time = DateTime::parse("2011-11-16T16:05:33Z").unwrap();
+    assert!(time.is_zoned());
+    assert!(!DateTime::parse("2011-11-16T16:05:33").unwrap().is_zoned());
+    assert_eq!(Value::from(time).datatype(), Some(XSD_DATETIME.clone()));
+    assert_eq!(Value::from(1i32).datatype(), Some(XSD_INT.clone()));
+}
+
+#[test]
 fn typed_folds_string_and_parses_datetime() {
     assert_eq!(
         Value::typed("x", XSD_STRING.clone()).unwrap(),
@@ -136,6 +152,23 @@ fn xsd(local: &str) -> QName {
 fn integers_compare_by_value_under_one_datatype() {
     for (local, min, max) in INTEGER_BOUNDS {
         let datatype = &xsd(local);
+        // A small number inside every range: negative where the range is.
+        let negative = min.is_none() && max.is_some_and(|m| m == "0" || m.starts_with('-'));
+        let five = if negative { "-5" } else { "5" };
+        let digits = five.trim_start_matches('-');
+        let mut small = vec![
+            five.to_owned(),
+            format!(" {five} "),
+            format!("\t{five}\r\n"),
+            format!("{}00{digits}", &five[..five.len() - digits.len()]),
+        ];
+        if !negative {
+            small.push("+5".to_owned());
+        }
+        assert_one_value(
+            datatype,
+            &small.iter().map(String::as_str).collect::<Vec<_>>(),
+        );
         if let Some(max) = max {
             let digits = max.trim_start_matches('-');
             let sign = if max.starts_with('-') { "-" } else { "" };

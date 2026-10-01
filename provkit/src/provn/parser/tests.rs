@@ -150,13 +150,25 @@ fn profiles() {
 
 #[test]
 fn mention_takes_attributes() {
-    assert!(
-        read(
-            "prov:mentionOf(ex:a, ex:b, ex:c, [ex:k=\"v\"])",
-            Profile::Strict
-        )
-        .is_ok()
+    let d = doc(
+        "prov:mentionOf(ex:a, ex:b, ex:c, [ex:k=\"v\"])",
+        Profile::Strict,
     );
+    let Record::Mention(m) = &d.records[0] else {
+        panic!("expected a mention, got {:?}", d.records[0]);
+    };
+    assert_eq!(m.bundle, Some(ex("c")));
+    assert_eq!(
+        m.attributes.get(&ex("k")).collect::<Vec<_>>(),
+        [&Value::from("v")]
+    );
+}
+
+#[test]
+fn a_bare_name_before_a_parenthesis_inside_an_extension_is_a_syntax_error() {
+    for profile in [Profile::Strict, Profile::Default] {
+        assert!(matches!(err("ex:f(g(1))", profile), Error::Syntax { .. }));
+    }
 }
 
 /// The document with `body` under `profile`, and the expressions left out.
@@ -819,9 +831,18 @@ fn a_prefix_is_a_pn_prefix_as_written() {
                 other => panic!("{prefix}: expected a syntax error, got {other:?}"),
             }
         }
-        // A prefix with a hyphen needs no escape, and reads.
-        let text = "document\nprefix a-b <http://x/>\nentity(a-b:e)\nendDocument";
-        assert!(provn::read_with(text, profile).is_ok());
+        // These prefixes need no escape, and each names an entity.
+        for prefix in ["é", "a1", "a.b", "a-b", "a_b", "日本", "a·b"] {
+            let text =
+                format!("document\nprefix {prefix} <http://x/>\nentity({prefix}:e)\nendDocument");
+            let document =
+                provn::read_with(&text, profile).unwrap_or_else(|e| panic!("{prefix}: {e}"));
+            let name = QName::new("http://x/", "e").unwrap();
+            assert!(
+                matches!(&document.records[0], Record::Entity(e) if e.id == name),
+                "{prefix}"
+            );
+        }
     }
 }
 
@@ -838,6 +859,19 @@ fn many_prefix_declarations_stay_linear() {
     let start = std::time::Instant::now();
     provn::read(&text).unwrap();
     assert!(start.elapsed().as_secs() < 5, "took {:?}", start.elapsed());
+}
+
+#[test]
+fn a_message_cuts_text_by_characters_not_bytes() {
+    let wide = "é".repeat(1 << 16);
+    let message = err(&format!("entity(ex:e, '{wide} b')"), Profile::Default).to_string();
+    assert!(message.contains(&"é".repeat(80)), "{} bytes", message.len());
+    assert!(
+        !message.contains(&"é".repeat(81)),
+        "{} bytes",
+        message.len()
+    );
+    assert!(message.len() < 400, "{} bytes", message.len());
 }
 
 #[test]

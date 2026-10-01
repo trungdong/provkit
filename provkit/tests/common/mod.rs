@@ -3,12 +3,37 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use provkit::{Attributes, DateTime, Document, Formal, FormalAttr as F, Kind, QName, Record};
+
 /// Number of PROV-JSON documents in the corpus.
 pub const JSON_CORPUS_SIZE: usize = 398;
 
 /// A name in `http://example.org/`.
-pub fn ex(local: &str) -> provkit::QName {
-    provkit::QName::new("http://example.org/", local).unwrap()
+pub fn ex(local: &str) -> QName {
+    QName::new("http://example.org/", local).unwrap()
+}
+
+/// A fixed zoned `dateTime`.
+pub fn dt() -> DateTime {
+    DateTime::parse("2011-11-16T16:05:33Z").unwrap()
+}
+
+/// An element record with `id` and `attrs`.
+pub fn element(kind: Kind, id: QName, attrs: Attributes) -> Record {
+    Record::from_parts(kind, Some(id), vec![], attrs).unwrap()
+}
+
+/// A relation record from its formals.
+pub fn relation(kind: Kind, id: Option<QName>, formals: Vec<(F, Formal)>) -> Record {
+    Record::from_parts(kind, id, formals, Attributes::new()).unwrap()
+}
+
+/// A document in `http://example.org/` under `ex`, holding `records`.
+pub fn document(records: Vec<Record>) -> Document {
+    let mut d = Document::new();
+    d.namespaces.declare("ex", "http://example.org/").unwrap();
+    d.records = records;
+    d
 }
 
 /// Path of a file in `tests/data`.
@@ -45,7 +70,7 @@ pub fn files(dir: &Path, ext: &str) -> Vec<(String, String)> {
         .filter(|p| p.extension().is_some_and(|x| x == ext))
         .collect();
     entries.sort();
-    entries
+    let found: Vec<(String, String)> = entries
         .into_iter()
         .map(|p| {
             let name = p.file_name().unwrap().to_string_lossy().into_owned();
@@ -53,7 +78,25 @@ pub fn files(dir: &Path, ext: &str) -> Vec<(String, String)> {
             (name, text)
         })
         .filter(|(name, _)| only.as_ref().is_none_or(|o| name.contains(o.as_str())))
-        .collect()
+        .collect();
+    if let Some(only) = &only {
+        assert!(!found.is_empty(), "no file matches PROVKIT_ONLY={only}");
+    }
+    found
+}
+
+/// Whether `PROVKIT_ONLY` leaves `name` in the run.
+pub fn selected(name: &str) -> bool {
+    std::env::var("PROVKIT_ONLY")
+        .ok()
+        .is_none_or(|only| name.contains(only.as_str()))
+}
+
+/// Fails a run whose `PROVKIT_ONLY` filter left no file in the test.
+pub fn require_a_match(any_selected: bool) {
+    if let Ok(only) = std::env::var("PROVKIT_ONLY") {
+        assert!(any_selected, "no file matches PROVKIT_ONLY={only}");
+    }
 }
 
 /// Collects per-file failures so one run reports them all.
@@ -70,7 +113,7 @@ impl Report {
 
     /// Read `text` as PROV-JSON, recording a failure under `name` on error.
     #[cfg(feature = "json")]
-    pub fn read_json(&mut self, name: &str, text: &str) -> Option<provkit::Document> {
+    pub fn read_json(&mut self, name: &str, text: &str) -> Option<Document> {
         match provkit::json::read(text) {
             Ok(document) => Some(document),
             Err(e) => {

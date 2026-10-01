@@ -163,6 +163,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_default_profile_is_default() {
+        assert_eq!(Profile::default(), Profile::Default);
+        // `read` uses it: bare `mentionOf` reads.
+        let text =
+            "document\nprefix ex <http://example.org/>\nmentionOf(ex:a, ex:b, ex:c)\nendDocument";
+        assert!(read(text).is_ok());
+        assert!(read_with(text, Profile::Strict).is_err());
+    }
+
+    #[test]
     fn a_leading_byte_order_mark_is_ignored() {
         let with_bom = "\u{FEFF}document prefix ex <http://e/> entity(ex:e) endDocument";
         assert_eq!(read(with_bom).unwrap().records.len(), 1);

@@ -484,7 +484,9 @@ fn only_grammar_whitespace_separates_tokens() {
     assert_eq!(kinds("\u{1680}a")[0], name("", "\u{1680}a"));
     assert_eq!(kinds("ex:a\u{1680}")[0], name("ex", "a\u{1680}"));
     // Other Unicode spaces are unexpected characters, not separators.
-    for space in ['\u{A0}', '\u{2028}', '\u{2003}', '\u{3000}'] {
+    for space in [
+        '\u{A0}', '\u{2028}', '\u{2003}', '\u{3000}', '\u{c}', '\u{b}', '\u{85}',
+    ] {
         assert_eq!(syntax_at(&format!("ex:a{space}ex:b")), (1, 5), "{space:?}");
         assert!(matches!(
             tokenize(&format!("{space}ex:a")),
@@ -495,22 +497,58 @@ fn only_grammar_whitespace_separates_tokens() {
 
 #[test]
 fn iri_characters_follow_the_shared_rule() {
+    // IRI_REF ::= '<' ([^<>"{}|^`\]-[#x00-#x20])* '>'
+    const FORBIDDEN: [char; 8] = ['<', '"', '{', '}', '|', '^', '`', '\\'];
     let others = ['\u{7F}', 'é', '\u{A0}', '\u{2028}', '😀'];
     for c in (b'!'..=b'~').map(char::from).chain(others) {
         if c == '>' {
             continue;
         }
-        let lexed = tokenize(&format!("<a{c}b>"));
-        if is_iri_forbidden(c) {
-            assert_eq!(syntax_at(&format!("<a{c}b>")), (1, 3), "{c:?}");
+        let text = format!("<a{c}b>");
+        if FORBIDDEN.contains(&c) {
+            assert_eq!(syntax_at(&text), (1, 3), "{c:?}");
         } else {
-            assert_eq!(
-                lexed.unwrap()[0].kind,
-                TokenKind::Iri(format!("a{c}b")),
-                "{c:?}"
-            );
+            assert_eq!(kinds(&text)[0], TokenKind::Iri(format!("a{c}b")), "{c:?}");
         }
     }
+}
+
+#[test]
+fn every_string_escape_decodes() {
+    // ECHAR ::= '\' [tbnrf\"']
+    let cases = [
+        (r"\t", '\t'),
+        (r"\b", '\u{8}'),
+        (r"\n", '\n'),
+        (r"\r", '\r'),
+        (r"\f", '\u{c}'),
+        (r"\\", '\\'),
+        (r#"\""#, '"'),
+        (r"\'", '\''),
+    ];
+    for (escape, decoded) in cases {
+        assert_eq!(
+            kinds(&format!("\"a{escape}b\""))[0],
+            TokenKind::Str(format!("a{decoded}b")),
+            "{escape}"
+        );
+    }
+    assert_eq!(syntax_at(r#""a\qb""#), (1, 3));
+}
+
+#[test]
+fn a_language_subtag_may_hold_digits() {
+    assert_eq!(kinds("\"x\"@en-1")[1], TokenKind::LangTag("en-1".into()));
+    assert_eq!(
+        kinds("\"x\"@de-CH-1996")[1],
+        TokenKind::LangTag("de-CH-1996".into())
+    );
+}
+
+#[test]
+fn a_raw_line_break_ends_a_short_string() {
+    assert_eq!(syntax_at("\"a\nb\""), (1, 1));
+    assert_eq!(syntax_at("\"a\rb\""), (1, 1));
 }
 
 #[test]

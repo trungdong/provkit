@@ -127,6 +127,19 @@ fn formal_tables_match_the_spec() {
     }
 }
 
+#[cfg(feature = "provn")]
+#[test]
+fn the_largest_arity_is_the_number_of_formals() {
+    for &kind in Kind::ALL {
+        assert_eq!(
+            kind.arities().iter().copied().max(),
+            Some(kind.formals().len()),
+            "{}",
+            kind.name()
+        );
+    }
+}
+
 #[test]
 fn from_parts_builds_a_generation() {
     let r = Record::from_parts(
@@ -309,8 +322,8 @@ fn records_compare_and_hash_by_value() {
         .unwrap()
     };
     let r = build("u");
-    assert_eq!(r.clone(), r);
-    assert_eq!(hash(&r.clone()), hash(&r));
+    assert_eq!(build("u"), r);
+    assert_eq!(hash(&build("u")), hash(&r));
     assert_ne!(build("u"), build("v"));
     let unnamed = Record::from_parts(
         Kind::Usage,

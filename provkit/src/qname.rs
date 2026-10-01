@@ -314,13 +314,41 @@ mod tests {
 
     #[test]
     fn well_known_names_use_full_iris() {
-        assert_eq!(
-            well_known::PROV_TYPE.iri(),
-            "http://www.w3.org/ns/prov#type"
-        );
-        assert_eq!(
-            well_known::XSD_DATETIME.iri(),
-            "http://www.w3.org/2001/XMLSchema#dateTime"
-        );
+        use well_known::*;
+        const P: &str = "http://www.w3.org/ns/prov#";
+        const X: &str = "http://www.w3.org/2001/XMLSchema#";
+        assert_eq!((PROV, XSD), (P, X));
+        let names: [(&QName, &str, &str); 27] = [
+            (&PROV_TYPE, P, "type"),
+            (&PROV_LABEL, P, "label"),
+            (&PROV_LOCATION, P, "location"),
+            (&PROV_ROLE, P, "role"),
+            (&PROV_VALUE, P, "value"),
+            (&PROV_INTERNATIONALIZED_STRING, P, "InternationalizedString"),
+            (&PROV_QUALIFIED_NAME, P, "QUALIFIED_NAME"),
+            (&XSD_STRING, X, "string"),
+            (&XSD_QNAME, X, "QName"),
+            (&XSD_DATETIME, X, "dateTime"),
+            (&XSD_INT, X, "int"),
+            (&XSD_LONG, X, "long"),
+            (&XSD_INTEGER, X, "integer"),
+            (&XSD_SHORT, X, "short"),
+            (&XSD_BYTE, X, "byte"),
+            (&XSD_NON_NEGATIVE_INTEGER, X, "nonNegativeInteger"),
+            (&XSD_POSITIVE_INTEGER, X, "positiveInteger"),
+            (&XSD_NON_POSITIVE_INTEGER, X, "nonPositiveInteger"),
+            (&XSD_NEGATIVE_INTEGER, X, "negativeInteger"),
+            (&XSD_UNSIGNED_LONG, X, "unsignedLong"),
+            (&XSD_UNSIGNED_INT, X, "unsignedInt"),
+            (&XSD_UNSIGNED_SHORT, X, "unsignedShort"),
+            (&XSD_UNSIGNED_BYTE, X, "unsignedByte"),
+            (&XSD_DECIMAL, X, "decimal"),
+            (&XSD_DOUBLE, X, "double"),
+            (&XSD_FLOAT, X, "float"),
+            (&XSD_BOOLEAN, X, "boolean"),
+        ];
+        for (name, namespace, local) in names {
+            assert_eq!(name.iri(), format!("{namespace}{local}"));
+        }
     }
 }

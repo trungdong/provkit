@@ -557,55 +557,37 @@ mod tests {
         assert_eq!(ns.prefix_for(PROV), Some("prov"));
     }
 
-    /// The text that writes `name` against `ns`.
-    fn rendered(ns: &mut Namespaces, name: &QName) -> String {
-        match ns.render_parts(name) {
-            Some(prefix) => format!("{prefix}:{}", name.local()),
-            None => name.local().to_owned(),
-        }
-    }
-
     #[test]
-    fn render_parts_prefer_prefix_then_default_then_mint() {
+    fn render_parts_split_the_prefix_from_the_local_part() {
         let mut ns = Namespaces::new();
         ns.declare("ex", "http://example.org/").unwrap();
         ns.set_default("http://default.org/");
+        let q = |iri: &str, local: &str| QName::new(iri, local).unwrap();
+        // The prefix alone comes back; `None` means bare.
         assert_eq!(
-            rendered(&mut ns, &QName::new("http://example.org/", "a").unwrap()),
-            "ex:a"
+            ns.render_parts(&q("http://example.org/", "a")),
+            Some("ex".to_owned())
         );
+        assert_eq!(ns.render_parts(&q("http://default.org/", "b")), None);
+        assert_eq!(ns.render_parts(&q(PROV, "type")), Some("prov".to_owned()));
         assert_eq!(
-            rendered(&mut ns, &QName::new("http://default.org/", "b").unwrap()),
-            "b"
-        );
-        assert_eq!(
-            rendered(&mut ns, &QName::new(PROV, "type").unwrap()),
-            "prov:type"
-        );
-        assert_eq!(
-            rendered(&mut ns, &QName::new("http://new/", "c").unwrap()),
-            "ns1:c"
+            ns.render_parts(&q("http://new/", "c")),
+            Some("ns1".to_owned())
         );
         assert_eq!(ns.iter().count(), 2);
         // A name in the default namespace never mints a prefix.
         let mut plain = Namespaces::new();
         plain.set_default("http://default.org/");
-        assert_eq!(
-            rendered(&mut plain, &QName::new("http://default.org/", "b").unwrap()),
-            "b"
-        );
+        assert_eq!(plain.render_parts(&q("http://default.org/", "b")), None);
         assert_eq!(plain.iter().count(), 0);
         // A colon in the local part cannot be written bare.
         assert_eq!(
-            rendered(
-                &mut plain,
-                &QName::new("http://default.org/", "x:y").unwrap()
-            ),
-            "ns1:x:y"
+            plain.render_parts(&q("http://default.org/", "x:y")),
+            Some("ns1".to_owned())
         );
         assert_eq!(
-            rendered(&mut plain, &QName::new("http://default.org/", "").unwrap()),
-            "ns1:"
+            plain.render_parts(&q("http://default.org/", "")),
+            Some("ns1".to_owned())
         );
     }
 
@@ -888,5 +870,43 @@ mod tests {
         assert_eq!(own.lookup("ns4"), Some("http://new.org/"));
         assert_eq!(own.lookup("ns5"), Some("http://newer.org/"));
         assert_eq!(own.lookup("ns1"), None);
+    }
+
+    #[test]
+    fn a_write_scope_with_its_own_default_renders_as_the_merged_table_does() {
+        let (document, mut bundle) = layered();
+        bundle.set_default("http://bundle-default.org/");
+        let names = [
+            ("http://bundle-default.org/", "bare"),
+            ("http://bundle-default.org/", "with:colon"),
+            ("http://bundle-default.org/", ""),
+            // The document's default does not reach a bundle with its own.
+            ("http://doc.org/", "bare"),
+            ("http://document.org/", "a"),
+            ("http://bundle.org/", "a"),
+            ("http://new.org/", "a"),
+        ];
+        let mut merged = bundle.with_fallback(&document);
+        let mut own = bundle.clone();
+        let mut scope = WriteScope::within(&mut own, &document);
+        for (namespace, local) in names {
+            let name = QName::new(namespace, local).unwrap();
+            assert_eq!(
+                scope.render_parts(&name),
+                merged.render_parts(&name),
+                "{namespace}{local}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_bundle_default_writes_bare_and_the_document_default_takes_a_prefix() {
+        let (document, mut bundle) = layered();
+        bundle.set_default("http://bundle-default.org/");
+        let mut scope = WriteScope::within(&mut bundle, &document);
+        let own = QName::new("http://bundle-default.org/", "bare").unwrap();
+        assert_eq!(scope.render_parts(&own), None);
+        let inherited = QName::new("http://doc.org/", "bare").unwrap();
+        assert_eq!(scope.render_parts(&inherited), Some("ns2".to_owned()));
     }
 }

@@ -248,16 +248,21 @@ mod tests {
 
     #[test]
     fn a_language_string_reads_with_or_without_a_type() {
-        let d = doc(&format!(
-            r#"{{{PFX}, "entity": {{"ex:e": {{
-            "ex:a": {{"$": "bonjour", "lang": "fr"}},
-            "ex:a": {{"$": "bonjour", "type": "prov:InternationalizedString", "lang": "fr"}}
-        }}}}}}"#
-        ));
-        let plain = doc(&format!(
-            r#"{{{PFX}, "entity": {{"ex:e": {{"ex:a": {{"$": "bonjour", "lang": "fr"}}}}}}}}"#
-        ));
-        assert_eq!(d, plain);
+        let read = |member: &str| {
+            let d = doc(&format!(
+                r#"{{{PFX}, "entity": {{"ex:e": {{"ex:a": {member}}}}}}}"#
+            ));
+            let Record::Entity(e) = &d.records[0] else {
+                panic!("expected an entity, got {:?}", d.records[0]);
+            };
+            e.attributes.get(&ex("a")).cloned().collect::<Vec<_>>()
+        };
+        let expected = [Value::from(LangStr::new("bonjour", "fr").unwrap())];
+        assert_eq!(read(r#"{"$": "bonjour", "lang": "fr"}"#), expected);
+        assert_eq!(
+            read(r#"{"$": "bonjour", "type": "prov:InternationalizedString", "lang": "fr"}"#),
+            expected
+        );
     }
 
     #[test]
@@ -400,8 +405,54 @@ mod tests {
             "[".repeat(100_000),
             "]".repeat(100_000)
         );
-        // serde_json's recursion limit is what stops this half.
-        assert!(json::read(&deep).is_err());
+        // The reader stops at the second bracket, not at serde_json's
+        // recursion limit.
+        assert!(matches!(
+            json::read(&deep),
+            Err(Error::JsonStructure { ref message }) if message.contains("nested arrays")
+        ));
+    }
+
+    #[test]
+    fn a_megabyte_of_input_text_stays_out_of_every_message() {
+        use serde_json::json;
+        let big = "x".repeat(1 << 20);
+        let prefix = json!({
+            "ex": "http://example.org/",
+            "d": format!("http://{big}/"),
+            big.as_str(): "http://www.w3.org/ns/prov#",
+        });
+        let documents = [
+            // An unknown section name.
+            json!({big.as_str(): {}}),
+            // An unknown key in a value object.
+            json!({"prefix": prefix, "entity": {"ex:e": {"ex:a": {"$": "v", big.as_str(): "w"}}}}),
+            // A formal key, under a prefix bound to the PROV namespace.
+            json!({"prefix": prefix, "wasGeneratedBy": {"ex:g": {format!("{big}:activity"): 5}}}),
+            // A datatype in a namespace of that length, on a time formal.
+            json!({"prefix": prefix, "wasGeneratedBy": {"ex:g": {
+                "prov:time": {"$": "2011-11-16T16:05:33Z", "type": "d:t"}
+            }}}),
+            // The same, on a name formal.
+            json!({"prefix": prefix, "wasGeneratedBy": {"ex:g": {
+                "prov:activity": {"$": "ex:a", "type": "d:t"}
+            }}}),
+            // A record key with an undeclared prefix of that length.
+            json!({"prefix": prefix, "entity": {format!("{big}y:e"): {}}}),
+        ];
+        for (i, document) in documents.into_iter().enumerate() {
+            let text = document.to_string();
+            let message = json::read(&text)
+                .map(|_| ())
+                .expect_err(&i.to_string())
+                .to_string();
+            assert!(
+                message.len() < 400,
+                "{} bytes: {}",
+                message.len(),
+                &message[..200]
+            );
+        }
     }
 
     #[test]
@@ -693,15 +744,31 @@ mod tests {
                 r#"{{"prefix": {{"ex": "http://example.org/"}}, "wasGeneratedBy": {{"ex:g": {{"prov:entity": "ex:e", "prov:activity": {formal}}}}}}}"#
             )
         };
-        assert!(json::read(&doc(r#"{"$": "ex:a", "type": "prov:QUALIFIED_NAME"}"#)).is_ok());
-        assert!(json::read(&doc(r#"{"$": "ex:a", "type": "xsd:QName"}"#)).is_ok());
+        for accepted in [
+            r#"{"$": "ex:a", "type": "prov:QUALIFIED_NAME"}"#,
+            r#"{"$": "ex:a", "type": "xsd:QName"}"#,
+        ] {
+            let d = json::read(&doc(accepted)).unwrap();
+            assert!(
+                matches!(&d.records[0], Record::Generation(g) if g.activity == Some(ex("a"))),
+                "{accepted}: {:?}",
+                d.records
+            );
+        }
         for bad in [
             r#"{"$": "ex:a", "type": "zz:undeclared"}"#,
             r#"{"$": "ex:a", "type": "xsd:string"}"#,
             r#"{"$": "ex:a", "lang": "en"}"#,
             r#"{"$": "ex:a", "type": "prov:QUALIFIED_NAME", "lang": "en"}"#,
         ] {
-            assert!(json::read(&doc(bad)).is_err(), "{bad}");
+            let (_, _, error) = in_record(json::read(&doc(bad)).unwrap_err());
+            match error {
+                Error::JsonStructure { message } => {
+                    assert!(message.contains("prov:activity"), "{bad}\n{message}");
+                }
+                Error::UndeclaredPrefix(prefix) => assert_eq!(prefix, "zz", "{bad}"),
+                other => panic!("{bad}: {other:?}"),
+            }
         }
     }
 

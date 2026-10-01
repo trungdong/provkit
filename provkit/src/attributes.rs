@@ -328,13 +328,13 @@ mod tests {
             .into_iter()
             .map(|(n, v)| (ex(n), Value::from(v)))
             .collect();
-        assert!(a.remove(&ex("b"), &Value::from("2")));
-        assert!(!a.remove(&ex("b"), &Value::from("2")));
+        assert!(a.remove(&ex("a"), &Value::from("1")));
+        assert!(!a.remove(&ex("a"), &Value::from("1")));
         let names: Vec<_> = (&a)
             .into_iter()
             .map(|(n, _)| n.local().to_owned())
             .collect();
-        assert_eq!(names, ["a", "c"]);
+        assert_eq!(names, ["b", "c"]);
     }
 
     #[test]

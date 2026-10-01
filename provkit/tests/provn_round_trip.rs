@@ -3,32 +3,14 @@
 
 mod common;
 
-use common::ex;
+use common::{document, dt, element, ex, relation};
+#[cfg(feature = "json")]
+use provkit::json;
 use provkit::well_known::{self, XSD_INT, XSD_INTEGER, XSD_LONG};
 use provkit::{
-    Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, LangStr,
-    Namespaces, QName, Record, Value, json, provn,
+    Attributes, Bundle, Document, Error, Formal, FormalAttr as F, Kind, LangStr, Namespaces, QName,
+    Value, provn,
 };
-
-fn dt() -> DateTime {
-    DateTime::parse("2011-11-16T16:05:33Z").unwrap()
-}
-
-fn element(kind: Kind, id: QName, attrs: Attributes) -> Record {
-    Record::from_parts(kind, Some(id), vec![], attrs).unwrap()
-}
-
-fn relation(kind: Kind, id: Option<QName>, formals: Vec<(F, Formal)>) -> Record {
-    Record::from_parts(kind, id, formals, Attributes::new()).unwrap()
-}
-
-/// A document in `http://example.org/` under `ex`, holding `records`.
-fn document(records: Vec<Record>) -> Document {
-    let mut d = Document::new();
-    d.namespaces.declare("ex", "http://example.org/").unwrap();
-    d.records = records;
-    d
-}
 
 /// Write `d`; when the writer accepts it, it must read back equal.
 /// Returns whether the writer accepted it.
@@ -158,6 +140,11 @@ fn sample_values() -> Vec<Value> {
         Value::from(dt()),
         Value::from(LangStr::new("hi", "en-GB").unwrap()),
     ];
+    values.extend(
+        sample_texts()
+            .into_iter()
+            .map(|text| Value::from(LangStr::new(text, "en-GB").unwrap())),
+    );
     let datatypes = [
         XSD_INT.clone(),
         XSD_LONG.clone(),
@@ -193,29 +180,7 @@ fn other_escapable_characters_are_written_bare_and_read_back() {
 
 #[test]
 fn bare_names_that_would_misread_take_a_prefix() {
-    let mut d = Document::new();
-    d.namespaces.set_default("http://default.org/");
-    for local in ["12", "", "@a", "//x", "/*y"] {
-        d.records.push(element(
-            Kind::Entity,
-            QName::new("http://default.org/", local).unwrap(),
-            Attributes::new(),
-        ));
-    }
-    let text = provn::to_string(&d).unwrap();
-    for expected in [
-        "entity(ns1:12)",
-        "entity(ns1:)",
-        "entity(ns1:@a)",
-        "entity(ns1://x)",
-        "entity(ns1:/*y)",
-    ] {
-        assert!(text.contains(expected), "{text}");
-    }
-    assert!(written_reads_back(&d));
-
-    // Names that lex back as themselves stay bare.
-    for local in ["\u{1680}a", "a/b", "a@b"] {
+    let with = |local: &str| {
         let mut d = Document::new();
         d.namespaces.set_default("http://default.org/");
         d.records.push(element(
@@ -223,14 +188,33 @@ fn bare_names_that_would_misread_take_a_prefix() {
             QName::new("http://default.org/", local).unwrap(),
             Attributes::new(),
         ));
+        d
+    };
+    for (local, expected) in [
+        ("12", "entity(ns1:12)"),
+        ("", "entity(ns1:)"),
+        ("//x", "entity(ns1://x)"),
+        ("/*y", "entity(ns1:/*y)"),
+    ] {
+        let d = with(local);
         let text = provn::to_string(&d).unwrap();
-        assert!(text.contains(&format!("entity({local})")), "{text}");
-        assert!(!text.contains("ns1"), "{text}");
-        assert!(written_reads_back(&d));
+        assert!(text.contains(expected), "{local:?}\n{text}");
+        assert!(written_reads_back(&d), "{local:?}");
     }
-    assert!(written_reads_back(&d));
+    // Names that lex back as themselves stay bare.
+    for local in ["@a", "\u{1680}a", "a/b", "a@b"] {
+        let d = with(local);
+        let text = provn::to_string(&d).unwrap();
+        assert!(
+            text.contains(&format!("entity({local})")),
+            "{local:?}\n{text}"
+        );
+        assert!(!text.contains("ns1"), "{local:?}\n{text}");
+        assert!(written_reads_back(&d), "{local:?}");
+    }
 }
 
+#[cfg(feature = "json")]
 #[test]
 fn a_qualified_name_literal_resolves_exactly_when_a_name_can_be_built() {
     let (mut resolved, mut rejected) = (0, 0);
@@ -288,6 +272,7 @@ fn whatever_the_writer_accepts_reads_back_equal() {
         a.insert(ex("v"), v);
         let d = document(vec![element(Kind::Entity, ex("e"), a)]);
         assert!(written_reads_back(&d));
+        #[cfg(feature = "json")]
         {
             let text = json::to_string(&d).unwrap();
             assert_eq!(json::read(&text).unwrap(), d, "{text}");
@@ -306,6 +291,11 @@ fn whatever_the_writer_accepts_reads_back_equal() {
         written_reads_back(&minted);
         let mut default = Document::new();
         default.namespaces.set_default(iri.as_str());
+        default.records.push(element(
+            Kind::Entity,
+            QName::new(iri.as_str(), "e").unwrap(),
+            Attributes::new(),
+        ));
         written_reads_back(&default);
         for prefix in [format!("p{c}"), format!("{c}p"), format!("p{c}q")] {
             let mut declared = Document::new();
@@ -345,12 +335,13 @@ fn many_bundles_under_many_prefixes_stay_linear() {
     let start = std::time::Instant::now();
     let read = provn::read(&text).unwrap();
     let written = provn::to_string(&read).unwrap();
-    let json = json::to_string(&read).unwrap();
-    let back = json::read(&json).unwrap();
+    #[cfg(feature = "json")]
+    let back = json::read(&json::to_string(&read).unwrap()).unwrap();
     let elapsed = start.elapsed();
 
     assert_eq!(read.bundles.len(), N);
     assert_eq!(provn::read(&written).unwrap(), read);
+    #[cfg(feature = "json")]
     assert_eq!(back, read);
     assert!(elapsed.as_secs() < 10, "took {elapsed:?}");
 }

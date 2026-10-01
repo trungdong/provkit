@@ -286,7 +286,7 @@ mod tests {
         let two = QName::new("http://two.org/", "b").unwrap();
         let mut d = Document::new();
         d.namespaces.set_default("http://one.org/");
-        let mut inner = bundle("b1", vec![entity_in(one.clone()), entity_in(two.clone())]);
+        let mut inner = bundle("b1", vec![entity_in(one), entity_in(two)]);
         inner.namespaces.set_default("http://two.org/");
         d.namespaces.declare("ex", "http://example.org/").unwrap();
         d.bundles.push(inner);
@@ -298,6 +298,42 @@ mod tests {
         assert!(entities.contains_key("b"), "{text}");
         assert!(!entities.contains_key("a"), "{text}");
         assert_eq!(json::read(&text).unwrap(), d);
+    }
+
+    #[test]
+    fn a_bundle_inherits_a_document_prefix_and_declares_a_minted_one() {
+        let minted = QName::new("http://new.org/", "m").unwrap();
+        let mut d = Document::new();
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        d.bundles
+            .push(bundle("b1", vec![entity_in(ex("e")), entity_in(minted)]));
+
+        let text = json::to_string(&d).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(
+            v["prefix"],
+            serde_json::json!({"ex": "http://example.org/"})
+        );
+        let inner = &v["bundle"]["ex:b1"];
+        assert_eq!(
+            inner["prefix"],
+            serde_json::json!({"ns1": "http://new.org/"})
+        );
+        let entities = inner["entity"].as_object().unwrap();
+        assert!(entities.contains_key("ex:e"), "{text}");
+        assert!(entities.contains_key("ns1:m"), "{text}");
+        assert_eq!(json::read(&text).unwrap(), d);
+    }
+
+    #[test]
+    fn output_is_indented_by_two_spaces_and_ends_with_a_newline() {
+        let mut d = Document::new();
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        d.records.push(entity_in(ex("e")));
+        assert_eq!(
+            json::to_string(&d).unwrap(),
+            "{\n  \"prefix\": {\n    \"ex\": \"http://example.org/\"\n  },\n  \"entity\": {\n    \"ex:e\": {}\n  }\n}\n"
+        );
     }
 
     #[test]

@@ -118,10 +118,11 @@ enum Hint {
 /// once on standard error.
 fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Document> {
     let is_stdin = path == Path::new("-");
+    let label = shown(path);
     let text = if is_stdin {
-        io::read_to_string(io::stdin()).with_context(|| shown(path))?
+        io::read_to_string(io::stdin()).with_context(|| label.clone())?
     } else {
-        fs::read_to_string(path).with_context(|| shown(path))?
+        fs::read_to_string(path).with_context(|| label.clone())?
     };
     let format = from
         .or_else(|| {
@@ -146,10 +147,10 @@ fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Docume
             ),
         })?;
     let document = match format {
-        Format::Json => json::read(&text).map_err(|e| located(&shown(path), e))?,
+        Format::Json => json::read(&text).map_err(|e| located(&label, e))?,
         Format::Provn => {
             let report = provn::read_report(&text, provn::Profile::Default)
-                .map_err(|e| located(&shown(path), e))?;
+                .map_err(|e| located(&label, e))?;
             let source = if is_stdin {
                 "standard input".to_owned()
             } else {

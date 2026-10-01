@@ -242,9 +242,7 @@ impl Value {
         }
     }
 
-    /// A typed literal as given. The callers keep the one-representation
-    /// rule: none passes `xsd:string`, a well-formed `xsd:dateTime` or a
-    /// qualified-name datatype.
+    /// A typed literal as given; no caller passes a datatype another variant owns.
     fn literal(lexical: String, datatype: QName) -> Value {
         Value::Typed(TypedLiteral { lexical, datatype })
     }

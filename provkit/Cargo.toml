@@ -21,6 +21,10 @@ required-features = ["json"]
 
 [[test]]
 name = "corpus_provn"
+required-features = ["provn"]
+
+[[test]]
+name = "corpus_twins"
 required-features = ["json", "provn"]
 
 [[test]]
@@ -29,7 +33,7 @@ required-features = ["provn"]
 
 [[test]]
 name = "provn_round_trip"
-required-features = ["json", "provn"]
+required-features = ["provn"]
 
 [features]
 default = ["json", "provn"]

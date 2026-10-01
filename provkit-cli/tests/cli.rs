@@ -281,14 +281,6 @@ fn positioned_errors_print_their_message_once() {
 #[test]
 fn stdin_errors_name_the_input_as_stdin() {
     provkit()
-        .args(["convert", "-"])
-        .write_stdin("hello")
-        .assert()
-        .code(2)
-        .stderr(predicate::str::starts_with(
-            "provkit: cannot tell the format of standard input",
-        ));
-    provkit()
         .args(["convert", "-f", "json", "-"])
         .write_stdin("{")
         .assert()
@@ -750,7 +742,8 @@ fn the_top_level_help_is_about_the_tool_and_compare_names_standard_input() {
         .args(["compare", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("or - for standard input"));
+        .stdout(predicate::str::contains("or - for standard input"))
+        .stdout(predicate::str::contains("Only one of the two may be -"));
 }
 
 #[test]

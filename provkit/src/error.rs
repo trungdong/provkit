@@ -233,6 +233,42 @@ mod tests {
     }
 
     #[test]
+    fn the_remaining_messages_read_as_declared() {
+        let name = QName::new("http://example.org/", "a").unwrap();
+        assert_eq!(
+            Error::DuplicateBundle(name.clone()).to_string(),
+            "duplicate bundle `http://example.org/a`"
+        );
+        assert_eq!(
+            Error::InvalidPrefix("1x".into()).to_string(),
+            "`1x` is not a valid prefix"
+        );
+        assert_eq!(
+            Error::ReservedPrefix {
+                prefix: "prov".into(),
+                expected: "http://www.w3.org/ns/prov#".into(),
+                found: "http://x.org/".into(),
+            }
+            .to_string(),
+            "prefix `prov` is reserved for <http://www.w3.org/ns/prov#> \
+             and cannot be declared as <http://x.org/>"
+        );
+        assert_eq!(
+            Error::InvalidLanguageTag("e n".into()).to_string(),
+            "`e n` is not a language tag"
+        );
+        assert_eq!(
+            Error::Unwritable {
+                name,
+                reason: "the namespace IRI contains '>' (U+003E)".into(),
+            }
+            .to_string(),
+            "PROV-N cannot write the name http://example.org/a: \
+             the namespace IRI contains '>' (U+003E)"
+        );
+    }
+
+    #[test]
     fn unwritable_namespace_names_the_prefix_or_the_default_namespace() {
         let error = |prefix: &str| Error::UnwritableNamespace {
             prefix: prefix.into(),
