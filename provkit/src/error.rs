@@ -39,6 +39,17 @@ pub enum Error {
         /// What was wrong.
         message: String,
     },
+    /// An error in one record of a PROV-JSON document, or in a bundle's key.
+    #[error("{section} `{key}`: {error}")]
+    InRecord {
+        /// The section the record is in: a kind's name, or `bundle`.
+        section: String,
+        /// The record's key, as written.
+        key: String,
+        /// The error in that record. `Display` prints it, so it is not also
+        /// the `source()` of this error.
+        error: Box<Error>,
+    },
     /// Parts that do not make a record of their kind.
     #[error("{}: {message}", .kind.name())]
     InvalidRecord {
@@ -148,6 +159,17 @@ mod tests {
             error: Box::new(Error::UndeclaredPrefix("zz".into())),
         };
         assert_eq!(e.to_string(), "line 3, column 8: undeclared prefix `zz`");
+        assert!(std::error::Error::source(&e).is_none());
+    }
+
+    #[test]
+    fn in_record_prints_its_error_and_has_no_source() {
+        let e = Error::InRecord {
+            section: "entity".into(),
+            key: "zz:e".into(),
+            error: Box::new(Error::UndeclaredPrefix("zz".into())),
+        };
+        assert_eq!(e.to_string(), "entity `zz:e`: undeclared prefix `zz`");
         assert!(std::error::Error::source(&e).is_none());
     }
 

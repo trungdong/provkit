@@ -158,7 +158,7 @@ fn sections(
     records: &[Record],
     names: &mut WriteScope<'_>,
     next_blank: &mut usize,
-) -> Result<IndexMap<String, JsonSection>> {
+) -> Result<IndexMap<Kind, JsonSection>> {
     let blanks: Vec<Option<String>> = records
         .iter()
         .map(|r| {
@@ -200,7 +200,7 @@ fn sections(
                 (id, group)
             })
             .collect();
-        out.insert(kind.name().to_owned(), section);
+        out.insert(kind, section);
     }
     Ok(out)
 }

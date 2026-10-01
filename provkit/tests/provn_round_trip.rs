@@ -252,8 +252,11 @@ fn a_qualified_name_literal_resolves_exactly_when_a_name_can_be_built() {
                 assert_eq!(json::read(&json).unwrap(), d, "{json}");
                 resolved += 1;
             }
-            (Err(_), Err(Error::InvalidQName(t))) => {
-                assert_eq!(t, format!("ex:{local}"));
+            (Err(_), Err(Error::InRecord { error, .. })) => {
+                assert!(
+                    matches!(*error, Error::InvalidQName(ref t) if *t == format!("ex:{local}")),
+                    "{local:?}: {error:?}"
+                );
                 rejected += 1;
             }
             (built, read) => panic!("{local:?}: {built:?} against {read:?}"),

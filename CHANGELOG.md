@@ -126,6 +126,10 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     any size by range, any other number as `xsd:double`. The reader does not
     depend on how serde_json represents numbers, so a dependant may enable
     `arbitrary_precision`.
+  - `json::read` reports JSON of the wrong shape as `Error::JsonStructure`,
+    with the line and column, and keeps `Error::Json` for text that is not
+    JSON. An error inside a record is wrapped in `Error::InRecord`, which
+    names the section and the record's key.
   - The PROV-N reader parses every extensibility expression (section 5,
     productions [49] to [51]) under both profiles and leaves it out of the
     document. Names inside one are not resolved and literals inside one are

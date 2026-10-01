@@ -9,6 +9,8 @@ use serde_json::value::RawValue;
 use std::fmt;
 use std::marker::PhantomData;
 
+use crate::Kind;
+
 /// A record's attributes, key order kept.
 pub(super) type JsonRecord = IndexMap<String, JsonValue>;
 /// Records of one kind, keyed by identifier.
@@ -16,13 +18,13 @@ pub(super) type JsonSection = IndexMap<String, OneOrMany<JsonRecord>>;
 
 pub(super) struct JsonDocument {
     pub prefix: IndexMap<String, String>,
-    pub sections: IndexMap<String, JsonSection>,
+    pub sections: IndexMap<Kind, JsonSection>,
     pub bundle: IndexMap<String, JsonBundle>,
 }
 
 pub(super) struct JsonBundle {
     pub prefix: IndexMap<String, String>,
-    pub sections: IndexMap<String, JsonSection>,
+    pub sections: IndexMap<Kind, JsonSection>,
 }
 
 /// Reads the keys of a document or bundle object. `prefix` is the
@@ -37,7 +39,7 @@ struct ContainerVisitor {
 /// A document or bundle as read, before it is split into the two types.
 type Container = (
     IndexMap<String, String>,
-    IndexMap<String, JsonSection>,
+    IndexMap<Kind, JsonSection>,
     IndexMap<String, JsonBundle>,
 );
 
@@ -60,9 +62,12 @@ impl<'de> Visitor<'de> for ContainerVisitor {
                     return Err(de::Error::duplicate_field("bundle"));
                 }
                 "bundle" if self.bundles => bundle = Some(map.next_value()?),
-                _ => {
-                    let section = map.next_value()?;
-                    sections.insert(key, section);
+                "bundle" => return Err(de::Error::custom("a bundle cannot hold a bundle")),
+                name => {
+                    let kind = Kind::from_name(name).ok_or_else(|| {
+                        de::Error::custom(format!("unknown record kind `{name}`"))
+                    })?;
+                    sections.insert(kind, map.next_value()?);
                 }
             }
         }
@@ -103,15 +108,15 @@ impl<'de> Deserialize<'de> for JsonBundle {
 fn serialize_container<S: Serializer>(
     s: S,
     prefix: &IndexMap<String, String>,
-    sections: &IndexMap<String, JsonSection>,
+    sections: &IndexMap<Kind, JsonSection>,
     bundle: Option<&IndexMap<String, JsonBundle>>,
 ) -> Result<S::Ok, S::Error> {
     let mut m = s.serialize_map(None)?;
     if !prefix.is_empty() {
         m.serialize_entry("prefix", prefix)?;
     }
-    for (key, section) in sections {
-        m.serialize_entry(key, section)?;
+    for (kind, section) in sections {
+        m.serialize_entry(kind.name(), section)?;
     }
     if let Some(bundle) = bundle.filter(|b| !b.is_empty()) {
         m.serialize_entry("bundle", bundle)?;
@@ -221,6 +226,9 @@ impl JsonValue {
 /// text, because the visitor interface hands it over as `i64`, `u64` or
 /// `f64` (or, when a dependant enables the `arbitrary_precision` feature of
 /// `serde_json`, as a private map), each of which loses the spelling.
+///
+/// The raw-value capture runs under `serde_json`'s recursion limit, so deeply
+/// nested input is refused before [`from_raw`] sees it.
 impl<'de> Deserialize<'de> for JsonValue {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         from_raw(<&RawValue>::deserialize(d)?.get(), Nesting::Allowed)

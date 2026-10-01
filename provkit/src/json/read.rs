@@ -18,6 +18,15 @@ fn structure(message: impl Into<String>) -> Error {
     }
 }
 
+/// `error` as an error in the record or bundle under `key` of `section`.
+fn in_record(section: &str, key: &str, error: Error) -> Error {
+    Error::InRecord {
+        section: section.to_owned(),
+        key: key.to_owned(),
+        error: Box::new(error),
+    }
+}
+
 fn namespaces(prefix: &IndexMap<String, String>) -> Result<Namespaces> {
     let mut ns = Namespaces::new();
     for (p, iri) in prefix {
@@ -37,12 +46,15 @@ pub(super) fn emit(wire: &JsonDocument, sink: &mut DocumentBuilder) -> Result<()
     for (key, bundle) in &wire.bundle {
         let bundle_ns = namespaces(&bundle.prefix)?;
         let scope = Scope::within(&bundle_ns, &doc_ns);
+        let located = |e| in_record("bundle", key, e);
         if key.starts_with("_:") {
-            return Err(structure(format!("bundle `{key}` needs a real identifier")));
+            return Err(located(structure(format!(
+                "bundle `{key}` needs a real identifier"
+            ))));
         }
         // The bundle's own name resolves in the bundle scope (PROV-N 3.7.4).
-        let id = scope.resolve(key)?;
-        sink.start_bundle(id, bundle_ns.clone())?;
+        let id = scope.resolve(key).map_err(located)?;
+        sink.start_bundle(id, bundle_ns.clone()).map_err(located)?;
         emit_sections(&bundle.sections, scope, sink)?;
         sink.end_bundle();
     }
@@ -51,17 +63,16 @@ pub(super) fn emit(wire: &JsonDocument, sink: &mut DocumentBuilder) -> Result<()
 }
 
 fn emit_sections(
-    sections: &IndexMap<String, JsonSection>,
+    sections: &IndexMap<Kind, JsonSection>,
     scope: Scope<'_>,
     sink: &mut DocumentBuilder,
 ) -> Result<()> {
-    for (section, records) in sections {
-        let kind = Kind::from_name(section)
-            .ok_or_else(|| structure(format!("unknown record kind `{section}`")))?;
+    for (&kind, records) in sections {
         for (key, group) in records {
-            let id = record_id(kind, key, scope)?;
+            let located = |e| in_record(kind.name(), key, e);
+            let id = record_id(kind, key, scope).map_err(located)?;
             for body in group.as_slice() {
-                for record in records_from(kind, id.as_ref(), body, scope)? {
+                for record in records_from(kind, id.as_ref(), body, scope).map_err(located)? {
                     sink.record(record);
                 }
             }
@@ -380,6 +391,7 @@ mod tests {
             "[".repeat(100_000),
             "]".repeat(100_000)
         );
+        // serde_json's recursion limit is what stops this half.
         assert!(json::read(&deep).is_err());
     }
 
@@ -458,26 +470,107 @@ mod tests {
         );
     }
 
+    /// The section, key and inner error of an [`Error::InRecord`].
+    fn in_record(e: Error) -> (String, String, Error) {
+        match e {
+            Error::InRecord {
+                section,
+                key,
+                error,
+            } => (section, key, *error),
+            other => panic!("expected Error::InRecord, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_shape_of_the_json_decides_the_variant() {
+        let structure = [
+            "[]".to_owned(),
+            r#"{"entity": 3}"#.to_owned(),
+            format!(r#"{{{PFX}, "entity": {{"ex:e": {{"ex:a": null}}}}}}"#),
+            format!(r#"{{{PFX}, "entity": {{"ex:e": {{"ex:a": {{"$": 1}}}}}}}}"#),
+            format!(r#"{{{PFX}, "prefix": {{}}}}"#),
+        ];
+        for text in structure {
+            match json::read(&text) {
+                Err(Error::JsonStructure { message }) => {
+                    assert!(message.contains(" at line 1 column "), "{text}\n{message}");
+                }
+                other => panic!("{text}: expected JsonStructure, got {other:?}"),
+            }
+        }
+        for text in ["{", r#"{"entity": 01}"#, "", r#"{"entity": }"#] {
+            assert!(matches!(json::read(text), Err(Error::Json(_))), "{text}");
+        }
+    }
+
+    #[test]
+    fn a_section_is_checked_by_name_before_its_body() {
+        let cases = [
+            (r#"{"foo": "bar"}"#.to_owned(), "unknown record kind `foo`"),
+            (
+                r#"{"@context": {"ex": "http://example.org/"}}"#.to_owned(),
+                "unknown record kind `@context`",
+            ),
+            (
+                r#"{"derivedByInsertionFrom": {"_:d": {"prov:key-entity-set": [{"key": "k", "$": "e"}]}}}"#
+                    .to_owned(),
+                "unknown record kind `derivedByInsertionFrom`",
+            ),
+            (
+                format!(
+                    r#"{{{PFX}, "bundle": {{"ex:b": {{"bundle": {{"ex:c": {{"entity": {{"ex:e": {{}}}}}}}}}}}}}}"#
+                ),
+                "a bundle cannot hold a bundle",
+            ),
+        ];
+        for (text, needle) in cases {
+            match json::read(&text) {
+                Err(Error::JsonStructure { message }) => {
+                    assert!(message.contains(needle), "{text}\n{message}");
+                }
+                other => panic!("{text}: expected JsonStructure, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn an_error_in_a_record_names_the_record() {
+        let (section, key, error) =
+            in_record(json::read(r#"{"entity": {"zz:e": {}}}"#).unwrap_err());
+        assert_eq!((section.as_str(), key.as_str()), ("entity", "zz:e"));
+        assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
+
+        let text = format!(r#"{{{PFX}, "activity": {{"ex:a": {{"prov:startTime": "soon"}}}}}}"#);
+        let e = json::read(&text).unwrap_err();
+        assert!(e.to_string().starts_with("activity `ex:a`: "), "{e}");
+        let (_, _, error) = in_record(e);
+        assert!(matches!(error, Error::InvalidLiteral { .. }));
+
+        let text = format!(r#"{{{PFX}, "bundle": {{"zz:b": {{}}}}}}"#);
+        let (section, key, _) = in_record(json::read(&text).unwrap_err());
+        assert_eq!((section.as_str(), key.as_str()), ("bundle", "zz:b"));
+    }
+
     #[test]
     fn errors() {
         let read = |s: &str| json::read(s);
-        assert!(matches!(
-            read(&format!(r#"{{{PFX}, "entity": {{"_:e": {{}}}}}}"#)),
-            Err(Error::JsonStructure { .. })
-        ));
+        let (_, _, error) =
+            in_record(read(&format!(r#"{{{PFX}, "entity": {{"_:e": {{}}}}}}"#)).unwrap_err());
+        assert!(matches!(error, Error::JsonStructure { .. }));
         assert!(matches!(
             read(&format!(r#"{{{PFX}, "foo": {{"ex:e": {{}}}}}}"#)),
             Err(Error::JsonStructure { .. })
         ));
-        assert!(
-            matches!(read(r#"{"entity": {"zz:e": {}}}"#), Err(Error::UndeclaredPrefix(p)) if p == "zz")
-        );
-        assert!(matches!(
+        let (_, _, error) = in_record(read(r#"{"entity": {"zz:e": {}}}"#).unwrap_err());
+        assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
+        let (_, _, error) = in_record(
             read(&format!(
                 r#"{{{PFX}, "activity": {{"ex:a": {{"prov:startTime": "soon"}}}}}}"#
-            )),
-            Err(Error::InvalidLiteral { .. })
-        ));
+            ))
+            .unwrap_err(),
+        );
+        assert!(matches!(error, Error::InvalidLiteral { .. }));
         assert!(matches!(read("{"), Err(Error::Json(_))));
         assert!(matches!(
             read(r#"{"prefix": {"prov": "http://x/"}}"#),
@@ -558,11 +651,9 @@ mod tests {
         for position in positions {
             for (name, carried) in names {
                 let text = position.replace("{PFX}", PFX).replace("@N@", name);
+                let (_, _, error) = in_record(json::read(&text).unwrap_err());
                 assert!(
-                    matches!(
-                        json::read(&text),
-                        Err(Error::InvalidQName(t)) if t == carried
-                    ),
+                    matches!(&error, Error::InvalidQName(t) if t == carried),
                     "{text}"
                 );
             }
@@ -573,14 +664,17 @@ mod tests {
         ));
         assert_eq!(values(&d, "k"), [Value::QName(ex(""))]);
         // Text that is a qualified name must resolve.
-        assert!(matches!(
-            json::read(&entity(r#""ex:k": {"$": "zz:foo", "type": "prov:QUALIFIED_NAME"}"#)),
-            Err(Error::UndeclaredPrefix(p)) if p == "zz"
-        ));
-        assert!(matches!(
-            json::read(&entity(r#""ex:k": {"$": "", "type": "xsd:QName"}"#)),
-            Err(Error::InvalidQName(t)) if t.is_empty()
-        ));
+        let (_, _, error) = in_record(
+            json::read(&entity(
+                r#""ex:k": {"$": "zz:foo", "type": "prov:QUALIFIED_NAME"}"#,
+            ))
+            .unwrap_err(),
+        );
+        assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
+        let (_, _, error) = in_record(
+            json::read(&entity(r#""ex:k": {"$": "", "type": "xsd:QName"}"#)).unwrap_err(),
+        );
+        assert!(matches!(error, Error::InvalidQName(t) if t.is_empty()));
     }
 
     #[test]
@@ -613,11 +707,14 @@ mod tests {
             r#"{"$": "2011-11-16T16:05:33Z", "type": "xsd:dateTime"}"#,
         ));
         assert!(matches!(&d.records[0], Record::Generation(g) if g.time.is_some()));
-        let names_the_formal = |text: &str, formal: &str| match json::read(text) {
-            Err(Error::JsonStructure { message }) => {
-                assert!(message.contains(formal), "{text}\n{message}");
+        let names_the_formal = |text: &str, formal: &str| {
+            let (_, _, error) = in_record(json::read(text).unwrap_err());
+            match error {
+                Error::JsonStructure { message } => {
+                    assert!(message.contains(formal), "{text}\n{message}");
+                }
+                other => panic!("{text}: {other:?}"),
             }
-            other => panic!("{text}: {other:?}"),
         };
         for bad in [
             r#"{"$": "2011-11-16T16:05:33Z", "type": "xsd:string"}"#,
@@ -647,10 +744,9 @@ mod tests {
             );
         }
         // An undeclared prefix in the `type` is reported as such.
-        assert!(matches!(
-            json::read(&generation(r#"{"$": "x", "type": "zz:t"}"#)),
-            Err(Error::UndeclaredPrefix(p)) if p == "zz"
-        ));
+        let (_, _, error) =
+            in_record(json::read(&generation(r#"{"$": "x", "type": "zz:t"}"#)).unwrap_err());
+        assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
     }
 
     #[test]
@@ -683,10 +779,9 @@ mod tests {
             assert_eq!(doc(&generation(padded)), plain, "{padded}");
         }
         // Other white space is not trimmed.
-        assert!(matches!(
-            json::read(&generation("\"\u{A0}2011-11-16T16:05:33Z\"")),
-            Err(Error::InvalidLiteral { .. })
-        ));
+        let (_, _, error) =
+            in_record(json::read(&generation("\"\u{A0}2011-11-16T16:05:33Z\"")).unwrap_err());
+        assert!(matches!(error, Error::InvalidLiteral { .. }));
     }
 
     #[test]
@@ -697,11 +792,9 @@ mod tests {
             ("activity", "prov:endTime"),
         ] {
             let text = format!(r#"{{{PFX}, "{section}": {{"ex:x": {{"{key}": "nope"}}}}}}"#);
+            let (_, _, error) = in_record(json::read(&text).unwrap_err());
             assert!(
-                matches!(
-                    json::read(&text),
-                    Err(Error::InvalidLiteral { datatype, .. }) if datatype == "xsd:dateTime"
-                ),
+                matches!(&error, Error::InvalidLiteral { datatype, .. } if datatype == "xsd:dateTime"),
                 "{key}"
             );
         }
@@ -767,10 +860,9 @@ mod tests {
 
     #[test]
     fn an_ill_formed_language_tag_is_an_error() {
-        assert!(matches!(
-            json::read(&entity(r#""ex:k": {"$": "x", "lang": "en_US"}"#)),
-            Err(Error::InvalidLanguageTag(tag)) if tag == "en_US"
-        ));
+        let (_, _, error) =
+            in_record(json::read(&entity(r#""ex:k": {"$": "x", "lang": "en_US"}"#)).unwrap_err());
+        assert!(matches!(error, Error::InvalidLanguageTag(tag) if tag == "en_US"));
         let d = doc(&entity(
             r#""ex:k": {"$": "x", "lang": "en-GB-x-averylongsubtag"}"#,
         ));
@@ -853,7 +945,7 @@ mod tests {
             ),
             (
                 format!(r#"{{{PFX}, "bundle": {{"ex:b": {{"bundle": {{}}}}}}}}"#),
-                "unknown record kind `bundle`",
+                "a bundle cannot hold a bundle",
             ),
         ];
         for (text, needle) in cases {
@@ -883,28 +975,30 @@ mod tests {
     fn strict_rules_and_shapes() {
         let read = |s: &str| json::read(s);
         let ent = |body: &str| format!(r#"{{{PFX}, "entity": {{"ex:e": {{{body}}}}}}}"#);
-        assert!(matches!(
-            read(&ent(r#""ex:a": {"$": "1", "type": "zz:t"}"#)),
-            Err(Error::UndeclaredPrefix(p)) if p == "zz"
-        ));
-        assert!(matches!(
-            read(&ent(r#""ex:a": {"$": "1", "type": "zz:t", "lang": "en"}"#)),
-            Err(Error::UndeclaredPrefix(p)) if p == "zz"
-        ));
+        let (_, _, error) =
+            in_record(read(&ent(r#""ex:a": {"$": "1", "type": "zz:t"}"#)).unwrap_err());
+        assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
+        let (_, _, error) = in_record(
+            read(&ent(r#""ex:a": {"$": "1", "type": "zz:t", "lang": "en"}"#)).unwrap_err(),
+        );
+        assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
         assert!(matches!(
             read(&ent(r#""ex:a": [["x"]]"#)),
-            Err(Error::Json(_))
+            Err(Error::JsonStructure { .. })
         ));
-        assert!(matches!(
+        let (_, _, error) = in_record(
             read(&format!(
                 r#"{{{PFX}, "used": {{"_:u": {{"prov:entity": 5}}}}}}"#
-            )),
-            Err(Error::JsonStructure { .. })
-        ));
-        assert!(matches!(
-            read(r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"_:b": {}}}"#),
-            Err(Error::JsonStructure { .. })
-        ));
+            ))
+            .unwrap_err(),
+        );
+        assert!(matches!(error, Error::JsonStructure { .. }));
+        let (section, _, error) = in_record(
+            read(r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"_:b": {}}}"#)
+                .unwrap_err(),
+        );
+        assert_eq!(section, "bundle");
+        assert!(matches!(error, Error::JsonStructure { .. }));
     }
 
     #[test]
@@ -921,7 +1015,10 @@ mod tests {
             format!(r#"{{{PFX}, "bundle": {{}}, "bundle": {{}}}}"#),
             format!(r#"{{{PFX}, "bundle": {{"ex:b": {{"prefix": {{}}, "prefix": {{}}}}}}}}"#),
         ] {
-            assert!(matches!(json::read(&text), Err(Error::Json(_))), "{text}");
+            assert!(
+                matches!(json::read(&text), Err(Error::JsonStructure { .. })),
+                "{text}"
+            );
         }
     }
 

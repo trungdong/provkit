@@ -7,28 +7,35 @@ mod write;
 pub use write::{to_string, write};
 
 use crate::sink::DocumentBuilder;
-use crate::{Document, Result, strip_bom};
+use crate::{Document, Error, Result, strip_bom};
 
 /// Read a PROV-JSON document.
 ///
 /// # Errors
 ///
-/// - [`Error::Json`](crate::Error::Json) for malformed JSON.
-/// - [`Error::JsonStructure`](crate::Error::JsonStructure) for JSON that is
-///   not a PROV document.
-/// - The other [`Error`](crate::Error) variants for names, literals or
-///   records that PROV does not allow.
+/// - [`Error::Json`] for text that is not JSON.
+/// - [`Error::JsonStructure`] for JSON that is
+///   not a PROV document. The message ends with the line and column where
+///   the reader knows them.
+/// - [`Error::InRecord`] around the error for a
+///   name, literal or record that PROV does not allow, naming the record.
 pub fn read(text: &str) -> Result<Document> {
+    let wire: wire::JsonDocument = serde_json::from_str(strip_bom(text)).map_err(shape_error)?;
     let mut builder = DocumentBuilder::new();
-    read_into(strip_bom(text), &mut builder)?;
+    read::emit(&wire, &mut builder)?;
     Ok(builder.finish())
 }
 
-/// Read PROV-JSON text, sending events to `builder`. On an error the builder
-/// has already received the events that came before it.
-pub(crate) fn read_into(text: &str, builder: &mut DocumentBuilder) -> Result<()> {
-    let wire: wire::JsonDocument = serde_json::from_str(text)?;
-    read::emit(&wire, builder)
+/// `serde_json` reports JSON of the wrong shape as a data error. That is
+/// valid JSON which is not PROV-JSON, so it is a structure error here.
+fn shape_error(e: serde_json::Error) -> Error {
+    if e.classify() == serde_json::error::Category::Data {
+        Error::JsonStructure {
+            message: e.to_string(),
+        }
+    } else {
+        Error::Json(e)
+    }
 }
 
 #[cfg(test)]
