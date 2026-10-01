@@ -7,6 +7,7 @@ use super::chars;
 use super::lexer::{Token, TokenKind, tokenize};
 use crate::namespaces::WriteScope;
 use crate::pn;
+use crate::value::{integer_datatype, is_int_literal};
 use crate::well_known::XSD_DATETIME;
 use crate::{
     Bundle, Document, Error, FormalAttr, FormalRef, Namespaces, QName, Record, Result, Value,
@@ -321,10 +322,7 @@ fn string(s: &str) -> String {
 /// minus sign and at least one digit, and reading that text back gives the
 /// same datatype.
 fn bare_int(lexical: &str, datatype: &QName) -> bool {
-    let digits = lexical.strip_prefix('-').unwrap_or(lexical);
-    !digits.is_empty()
-        && digits.bytes().all(|b| b.is_ascii_digit())
-        && matches!(Value::integer(lexical), Value::Typed(read) if read.datatype() == datatype)
+    is_int_literal(lexical) && integer_datatype(lexical) == datatype
 }
 
 fn value(v: &Value, names: &mut WriteScope<'_>) -> Result<String> {

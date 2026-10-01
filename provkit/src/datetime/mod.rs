@@ -145,16 +145,16 @@ impl DateTime {
         if self.year == i64::MIN {
             return Err("year out of range");
         }
-        if i64::try_from(self.canonical_date().0).is_err() {
+        if i64::try_from(self.date(true).0).is_err() {
             return Err("year out of range after hour 24 rolls over");
         }
         Ok(())
     }
 
-    /// The date and hour of the canonical form, where hour 24 becomes the next
-    /// day's midnight.
-    fn canonical_date(&self) -> (i128, i128, i128, i128) {
-        if self.hour == 24 {
+    /// The year, month, day and hour. `roll` moves hour 24 to the next day's
+    /// midnight, as the canonical form does.
+    fn date(&self, roll: bool) -> (i128, i128, i128, i128) {
+        if roll && self.hour == 24 {
             let (y, m, d) = civil_from_days(days_from_civil(self.year, self.month, self.day) + 1);
             (y, m, d, 0)
         } else {
@@ -170,16 +170,7 @@ impl DateTime {
     /// The components in canonical layout, without validation. `roll` moves hour
     /// 24 to the next day's midnight.
     fn text(&self, roll: bool) -> String {
-        let (year, month, day, hour) = if roll {
-            self.canonical_date()
-        } else {
-            (
-                i128::from(self.year),
-                i128::from(self.month),
-                i128::from(self.day),
-                i128::from(self.hour),
-            )
-        };
+        let (year, month, day, hour) = self.date(roll);
         let mut out = String::new();
         if year < 0 {
             let _ = write!(out, "-{:04}", year.unsigned_abs());

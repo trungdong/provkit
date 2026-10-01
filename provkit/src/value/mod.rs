@@ -156,7 +156,7 @@ impl Hash for TypedLiteral {
 /// let double = |text: &str| Value::typed(text, XSD_DOUBLE.clone()).unwrap();
 /// assert_eq!(double("1"), double("1.0E0"));
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Value {
     /// A plain string (`xsd:string`).
     Str(String),
@@ -247,17 +247,10 @@ impl Value {
         Value::Typed(TypedLiteral { lexical, datatype })
     }
 
-    /// An integer written as digits, with an optional sign: `xsd:int`,
-    /// `xsd:long` or `xsd:integer` by range, keeping the text. The range
-    /// follows the digits alone, so leading zeros do not change the type and
-    /// a number beyond `i64` is an `xsd:integer`.
+    /// An integer literal, which [`is_int_literal`] accepts, typed by
+    /// [`integer_datatype`] and keeping its text.
     pub(crate) fn integer(lexical: &str) -> Value {
-        let datatype = match lexical.parse::<i64>() {
-            Ok(n) if i32::try_from(n).is_ok() => XSD_INT.clone(),
-            Ok(_) => XSD_LONG.clone(),
-            Err(_) => XSD_INTEGER.clone(),
-        };
-        Value::literal(lexical.to_owned(), datatype)
+        Value::literal(lexical.to_owned(), integer_datatype(lexical).clone())
     }
 
     /// The rule both readers use for `"lexical" %% datatype` and
@@ -291,6 +284,24 @@ impl Value {
     }
 }
 
+/// Whether `text` is an integer literal: digits with an optional `-`.
+pub(crate) fn is_int_literal(text: &str) -> bool {
+    let digits = text.strip_prefix('-').unwrap_or(text);
+    !digits.is_empty() && all_digits(digits)
+}
+
+/// The datatype of an integer literal: `xsd:int`, `xsd:long` or
+/// `xsd:integer` by range. The range follows the digits alone, so leading
+/// zeros do not change the type and a number beyond `i64` is an
+/// `xsd:integer`.
+pub(crate) fn integer_datatype(lexical: &str) -> &'static QName {
+    match lexical.parse::<i64>() {
+        Ok(n) if i32::try_from(n).is_ok() => &XSD_INT,
+        Ok(_) => &XSD_LONG,
+        Err(_) => &XSD_INTEGER,
+    }
+}
+
 /// `lexical` without the space, tab, CR and LF that XSD collapses around a
 /// number, a boolean or a dateTime.
 pub(crate) fn trim_xsd_space(lexical: &str) -> &str {
@@ -299,34 +310,6 @@ pub(crate) fn trim_xsd_space(lexical: &str) -> &str {
 
 fn is_qname_datatype(datatype: &QName) -> bool {
     *datatype == *XSD_QNAME || *datatype == *PROV_QUALIFIED_NAME
-}
-
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Value::Str(a), Value::Str(b)) => a == b,
-            (Value::LangStr(a), Value::LangStr(b)) => a == b,
-            (Value::QName(a), Value::QName(b)) => a == b,
-            (Value::DateTime(a), Value::DateTime(b)) => a == b,
-            (Value::Typed(a), Value::Typed(b)) => a == b,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for Value {}
-
-impl Hash for Value {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        std::mem::discriminant(self).hash(state);
-        match self {
-            Value::Str(s) => s.hash(state),
-            Value::LangStr(l) => l.hash(state),
-            Value::QName(q) => q.hash(state),
-            Value::DateTime(d) => d.hash(state),
-            Value::Typed(t) => t.hash(state),
-        }
-    }
 }
 
 /// What a typed literal compares and hashes by, beside its datatype.
@@ -373,15 +356,14 @@ impl<'a> Key<'a> {
     /// `[+-]?[0-9]+` within `min` and `max`. Text outside the range is not
     /// in the datatype's lexical space, so it has no integer key.
     fn integer(text: &'a str, min: Option<&str>, max: Option<&str>) -> Option<Self> {
-        let (negative, digits) = split_sign(text);
+        let (_, digits) = split_sign(text);
         if digits.is_empty() || !all_digits(digits) {
             return None;
         }
-        let digits = digits.trim_start_matches('0');
-        let negative = negative && !digits.is_empty();
-        let below = min.is_some_and(|min| compare_integers((negative, digits), parts(min)).is_lt());
-        let above = max.is_some_and(|max| compare_integers((negative, digits), parts(max)).is_gt());
-        (!below && !above).then_some(Key::Integer(negative, digits))
+        let value = parts(text);
+        let below = min.is_some_and(|min| compare_integers(value, parts(min)).is_lt());
+        let above = max.is_some_and(|max| compare_integers(value, parts(max)).is_gt());
+        (!below && !above).then_some(Key::Integer(value.0, value.1))
     }
 
     /// `[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)`
@@ -435,8 +417,8 @@ fn split_sign(text: &str) -> (bool, &str) {
     }
 }
 
-/// The sign and the digits without leading zeros of a bound from
-/// `INTEGER_TYPES`. Zero has no digits and is never negative.
+/// The sign and the digits without leading zeros of an integer, or of a
+/// bound from `INTEGER_TYPES`. Zero has no digits and is never negative.
 fn parts(bound: &str) -> (bool, &str) {
     let (negative, digits) = split_sign(bound);
     let digits = digits.trim_start_matches('0');

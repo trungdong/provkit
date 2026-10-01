@@ -15,7 +15,7 @@ use crate::{QName, Value};
 /// for a pair already present. [`Attributes::get`] by name walks the pairs.
 ///
 /// Clones share one allocation. The first write to a clone copies the pairs.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Attributes {
     pairs: Arc<IndexSet<(QName, Value)>>,
 }
@@ -91,14 +91,8 @@ impl Attributes {
 
 /// A borrowed pair that looks up an owned pair without cloning it. Its hash
 /// and equality follow the tuple `(QName, Value)`.
+#[derive(Hash)]
 struct PairKey<'a>(&'a QName, &'a Value);
-
-impl Hash for PairKey<'_> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-        self.1.hash(state);
-    }
-}
 
 impl Equivalent<(QName, Value)> for PairKey<'_> {
     fn equivalent(&self, key: &(QName, Value)) -> bool {
@@ -197,14 +191,6 @@ impl<'a> IntoIterator for &'a Attributes {
         self.iter()
     }
 }
-
-impl PartialEq for Attributes {
-    fn eq(&self, other: &Self) -> bool {
-        self.pairs.len() == other.pairs.len() && self.pairs.iter().all(|p| other.pairs.contains(p))
-    }
-}
-
-impl Eq for Attributes {}
 
 impl Hash for Attributes {
     // Order-independent: per-pair hashes are sorted before they reach the

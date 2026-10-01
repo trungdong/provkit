@@ -1,6 +1,6 @@
 use super::*;
 use crate::Namespaces;
-use crate::test_util::hash;
+use crate::test_util::{dt, ex, hash};
 
 fn typed(lexical: &str, datatype: &QName) -> Value {
     Value::typed(lexical, datatype.clone()).unwrap()
@@ -54,9 +54,8 @@ fn every_variant_states_its_datatype() {
         Value::from(LangStr::new("s", "en").unwrap()).datatype(),
         None
     );
-    let name = QName::new("http://example.org/", "q").unwrap();
-    assert_eq!(Value::from(name).datatype(), Some(XSD_QNAME.clone()));
-    let time = DateTime::parse("2011-11-16T16:05:33Z").unwrap();
+    assert_eq!(Value::from(ex("q")).datatype(), Some(XSD_QNAME.clone()));
+    let time = dt();
     assert!(time.is_zoned());
     assert!(!DateTime::parse("2011-11-16T16:05:33").unwrap().is_zoned());
     assert_eq!(Value::from(time).datatype(), Some(XSD_DATETIME.clone()));
@@ -145,7 +144,7 @@ const INTEGER_BOUNDS: [(&str, Option<&str>, Option<&str>); 13] = [
 ];
 
 fn xsd(local: &str) -> QName {
-    QName::new("http://www.w3.org/2001/XMLSchema#", local).unwrap()
+    QName::new(crate::well_known::XSD, local).unwrap()
 }
 
 #[test]
@@ -343,8 +342,7 @@ fn ill_formed_text_compares_untrimmed() {
         &["2012-13-01T00:00:00", "2012-13-01T00:00:00 "],
     );
     // Other datatypes have no value space here, so text is compared as written.
-    let any_uri = QName::new(crate::well_known::XSD, "anyURI").unwrap();
-    assert_distinct_values(&any_uri, &["5", " 5 ", "05"]);
+    assert_distinct_values(&xsd("anyURI"), &["5", " 5 ", "05"]);
 }
 
 #[test]
@@ -416,7 +414,7 @@ fn example_names() -> Namespaces {
 #[test]
 fn typed_in_resolves_qualified_names_and_delegates_the_rest() {
     let ns = example_names();
-    let foo = QName::new("http://example.org/", "foo").unwrap();
+    let foo = ex("foo");
     for datatype in [XSD_QNAME.clone(), PROV_QUALIFIED_NAME.clone()] {
         assert_eq!(
             Value::typed_in(Scope::of(&ns), "ex:foo", datatype).unwrap(),
@@ -496,7 +494,7 @@ fn a_qualified_name_value_must_resolve() {
         ));
     }
     // The text spells the name as the model holds it, without escapes.
-    let name = |local: &str| Value::QName(QName::new("http://example.org/", local).unwrap());
+    let name = |local: &str| Value::QName(ex(local));
     for local in ["a=b", "a:b", "a.b.", "-a", "a(1)", "a%2Fb", "12", ""] {
         assert_eq!(
             Value::typed_in(Scope::of(&ns), &format!("ex:{local}"), XSD_QNAME.clone()).unwrap(),
@@ -516,18 +514,10 @@ fn every_constructor_keeps_one_representation() {
         Value::typed("x", XSD_STRING.clone()).unwrap(),
         Value::typed("2011-11-16T16:05:33Z", XSD_DATETIME.clone()).unwrap(),
         Value::typed("nope", XSD_DATETIME.clone()).unwrap(),
-        Value::typed("x", QName::new("http://example.org/", "dt").unwrap()).unwrap(),
+        Value::typed("x", ex("dt")).unwrap(),
         Value::typed_in(Scope::of(&ns), "ex:foo", XSD_QNAME.clone()).unwrap(),
     ];
     assert!(values.iter().all(has_one_representation));
-}
-
-#[test]
-fn datatype_reports_the_asserted_type() {
-    assert_eq!(Value::from("s").datatype(), Some(XSD_STRING.clone()));
-    assert_eq!(Value::from(1i32).datatype(), Some(XSD_INT.clone()));
-    let tagged = Value::from(LangStr::new("hi", "en").unwrap());
-    assert_eq!(tagged.datatype(), None);
 }
 
 #[test]

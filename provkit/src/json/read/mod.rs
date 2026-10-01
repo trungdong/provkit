@@ -6,7 +6,7 @@ use super::wire::{InvalidValue, JsonDocument, JsonRecord, JsonSection, JsonValue
 use crate::builder::DocumentBuilder;
 use crate::error::clip;
 use crate::namespaces::Scope;
-use crate::value::trim_xsd_space;
+use crate::value::{is_int_literal, trim_xsd_space};
 use crate::well_known::{XSD_DATETIME, XSD_DOUBLE};
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
@@ -295,8 +295,7 @@ fn decode_value(v: &JsonValue, scope: Scope<'_>) -> Result<Value> {
 /// integer, typed by range, and any other number is an `xsd:double`. The
 /// text is kept, so `1.50` and `1e400` read back as written.
 fn number(text: &str) -> Result<Value> {
-    let digits = text.strip_prefix('-').unwrap_or(text);
-    if digits.bytes().all(|b| b.is_ascii_digit()) {
+    if is_int_literal(text) {
         Ok(Value::integer(text))
     } else {
         Value::typed(text, XSD_DOUBLE.clone())
