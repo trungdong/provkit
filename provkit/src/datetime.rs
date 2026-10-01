@@ -140,6 +140,11 @@ impl DateTime {
             Some(_) => return Err(invalid(text, "fraction is not digits")),
             None => 0,
         };
+        // XSD's `endOfDayFrag` admits zeros only, and `nanos` holds nine
+        // digits, so the fraction is checked as written.
+        if hour == 24 && fraction.is_some_and(|f| f.bytes().any(|b| b != b'0')) {
+            return Err(invalid(text, "hour 24 needs 00:00:00"));
+        }
         let offset = match zone {
             "" => None,
             "Z" => Some(0),
@@ -249,7 +254,10 @@ impl DateTime {
             "-{month:02}-{day:02}T{hour:02}:{:02}:{:02}",
             self.minute, self.second
         );
-        if self.nanos != 0 {
+        if self.nanos >= 1_000_000_000 {
+            // Only `new` can hold this, for the text of its error.
+            let _ = write!(out, " plus {} nanoseconds", self.nanos);
+        } else if self.nanos != 0 {
             let digits = format!("{:09}", self.nanos);
             let _ = write!(out, ".{}", digits.trim_end_matches('0'));
         }
@@ -485,6 +493,26 @@ mod tests {
             "2011-11-16 16:05:33",
             "+2012-01-01T00:00:00",
             "2011-11-16T16:05:33+15:00",
+            "2011-00-01T00:00:00",
+            "2011-01-00T00:00:00",
+            "2011-04-31T00:00:00",
+            "2011-06-31T00:00:00",
+            "2011-11-16T25:00:00",
+            "2011-11-16T16:60:00",
+            "2011-11-16T16:05:60",
+            "2011-11-16T24:30:00",
+            "2011-11-16T24:00:00.5",
+            "2011-11-16T24:00:00.0000000001",
+            "2011-11-16T16:05:33.",
+            "2011-11-16T16:05:33.x",
+            "2011-11-16T16:05:33.Z",
+            "2011-11-16T16:05:33+10:60",
+            "2011-1-01T00:00:00",
+            "2011-01-1T00:00:00",
+            "2011-01-01T1:00:00",
+            "2011-01-01T01:2:00",
+            "2011-01-01T01:02:3",
+            "2011-01-01T01:02:03+1:00",
             "not a date",
             "",
         ] {
@@ -493,6 +521,47 @@ mod tests {
                 "{text}"
             );
         }
+    }
+
+    #[test]
+    fn hour_24_takes_a_zero_fraction_of_any_length() {
+        let midnight = DateTime::parse("2011-11-17T00:00:00").unwrap();
+        for text in [
+            "2011-11-16T24:00:00",
+            "2011-11-16T24:00:00.0",
+            "2011-11-16T24:00:00.000000000000",
+        ] {
+            assert_eq!(DateTime::parse(text).unwrap(), midnight, "{text}");
+        }
+    }
+
+    #[test]
+    fn new_rejects_each_component_out_of_range() {
+        let new = |minute, second, nanos| DateTime::new(2011, 1, 1, 0, minute, second, nanos, None);
+        assert!(new(59, 59, 999_999_999).is_ok());
+        for (minute, second, nanos) in [(60, 0, 0), (0, 60, 0), (0, 0, 1_000_000_000)] {
+            assert!(
+                matches!(
+                    new(minute, second, nanos),
+                    Err(Error::InvalidLiteral { .. })
+                ),
+                "{minute} {second} {nanos}"
+            );
+        }
+        let Err(Error::InvalidLiteral { lexical, .. }) = new(0, 0, 1_000_000_000) else {
+            panic!("a fraction of a whole second is out of range");
+        };
+        assert!(lexical.contains("1000000000"), "{lexical}");
+        assert!(!lexical.contains(".1"), "{lexical}");
+    }
+
+    #[test]
+    fn new_rejects_a_fraction_at_hour_24() {
+        assert!(DateTime::new(2011, 1, 1, 24, 0, 0, 0, None).is_ok());
+        assert!(matches!(
+            DateTime::new(2011, 1, 1, 24, 0, 0, 1, None),
+            Err(Error::InvalidLiteral { .. })
+        ));
     }
 
     #[test]
