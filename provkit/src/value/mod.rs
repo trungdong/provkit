@@ -156,7 +156,7 @@ impl Hash for TypedLiteral {
 /// let double = |text: &str| Value::typed(text, XSD_DOUBLE.clone()).unwrap();
 /// assert_eq!(double("1"), double("1.0E0"));
 /// ```
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub enum Value {
     /// A plain string (`xsd:string`).
     Str(String),
@@ -310,6 +310,37 @@ pub(crate) fn trim_xsd_space(lexical: &str) -> &str {
 
 pub(crate) fn is_qname_datatype(datatype: &QName) -> bool {
     *datatype == *XSD_QNAME || *datatype == *PROV_QUALIFIED_NAME
+}
+
+// Written out, not derived, because a derived `PartialEq` would also let
+// other crates match a `const Value` as a pattern. `Hash` is written out to
+// agree with it.
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Str(a), Value::Str(b)) => a == b,
+            (Value::LangStr(a), Value::LangStr(b)) => a == b,
+            (Value::QName(a), Value::QName(b)) => a == b,
+            (Value::DateTime(a), Value::DateTime(b)) => a == b,
+            (Value::Typed(a), Value::Typed(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for Value {}
+
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+        match self {
+            Value::Str(s) => s.hash(state),
+            Value::LangStr(l) => l.hash(state),
+            Value::QName(q) => q.hash(state),
+            Value::DateTime(d) => d.hash(state),
+            Value::Typed(t) => t.hash(state),
+        }
+    }
 }
 
 /// What a typed literal compares and hashes by, beside its datatype.
