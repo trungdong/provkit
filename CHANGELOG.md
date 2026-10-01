@@ -22,8 +22,10 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     those present. `FormalRef::to_formal`, and `From<FormalRef>` for
     `Formal`, give an owned `Formal`, and `FormalAttr::ALL` lists every
     formal attribute.
-  - `Kind` and `Record` are `#[non_exhaustive]`, so a `match` on either in
-    another crate needs a wildcard arm.
+  - `Kind`, `Record`, `FormalAttr`, `Formal`, `FormalRef`, `Error`,
+    `provn::Profile`, `provn::Ignored` and `provn::ReadReport` are
+    `#[non_exhaustive]`, so a `match` on any of them in another crate needs
+    a wildcard arm.
   - `Attributes` clones share one allocation and copy it on the first write.
     Its `Hash` sorts the per-pair hashes, `Attributes::remove` keeps the order
     of the rest, and it implements `FromIterator`, `Extend` and `IntoIterator`
@@ -123,8 +125,9 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     document. Names inside one are not resolved and literals inside one are
     not built, but its tokens must match the productions, and nesting deeper
     than 64 levels of expressions and tuples is a syntax error.
-  - `provn::read_report`, which reads a document and lists the extensibility
-    expressions it left out, one per outermost expression in source order.
+  - `provn::read_report`, which returns a `provn::ReadReport` holding the
+    document and the extensibility expressions it left out, one per outermost
+    expression in source order.
   - `provn::Ignored`, an entry in that list: the expression's name as written
     and the line and column of the name.
   - `json::read`, `provn::read`, `provn::read_with` and `provn::read_report`

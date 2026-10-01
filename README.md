@@ -79,8 +79,8 @@ the sharing or where formal attributes conflict. `provn::read_with` takes a
 `provn::Profile`. `Strict` accepts the whole PROV-N grammar and the MUST
 statements of its prose, with the departures CONFORMANCE.md records, and
 `Default` (the profile `provn::read` uses) also accepts what ProvToolbox and
-ProvPy write. `provn::read_report` also lists the extensibility expressions
-the reader left out. API documentation: `cargo doc --open -p provkit`.
+ProvPy write. `provn::read_report` returns a `ReadReport` with the document and
+the expressions left out. API documentation: `cargo doc --open -p provkit`.
 
 ## Conformance
 

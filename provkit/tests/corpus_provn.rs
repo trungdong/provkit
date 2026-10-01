@@ -224,14 +224,16 @@ fn json_corpus_round_trips_through_provn() {
 fn corpus_extensibility_expressions_are_reported() {
     for example in ["prov-n-example-63.provn", "prov-n-example-64.provn"] {
         let text = std::fs::read_to_string(corpus_dir("provn/spec/prov-n").join(example)).unwrap();
-        let (_, ignored) = provkit::provn::read_report(&text, Profile::Strict).unwrap();
+        let provkit::provn::ReadReport { ignored, .. } =
+            provkit::provn::read_report(&text, Profile::Strict).unwrap();
         let names: Vec<&str> = ignored.iter().map(|i| i.name.as_str()).collect();
         assert_eq!(names, ["dictExt:hadMembers"], "{example}");
     }
 
     let text =
         std::fs::read_to_string(corpus_dir("provn/provtoolbox").join("prov-family.provn")).unwrap();
-    let (_, ignored) = provkit::provn::read_report(&text, Profile::Default).unwrap();
+    let provkit::provn::ReadReport { ignored, .. } =
+        provkit::provn::read_report(&text, Profile::Default).unwrap();
     assert_eq!(ignored.len(), 12);
     assert!(
         ignored

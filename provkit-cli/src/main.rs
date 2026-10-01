@@ -122,15 +122,15 @@ fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Docume
     let document = match format {
         Format::Json => json::read(&text).with_context(context)?,
         Format::Provn => {
-            let (document, ignored) =
+            let report =
                 provn::read_report(&text, provn::Profile::Default).with_context(context)?;
             let source = if is_stdin {
                 "standard input".to_owned()
             } else {
                 path.display().to_string()
             };
-            warn_ignored(&source, &ignored);
-            document
+            warn_ignored(&source, &report.ignored);
+            report.document
         }
     };
     Ok(document)

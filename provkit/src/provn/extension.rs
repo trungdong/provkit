@@ -190,9 +190,7 @@ mod tests {
             r#"dictExt:hadMembers(mid; d, dictExt:set(dictExt:pair("k1",e1), dictExt:pair("k2",e2)), [dictExt:uniqueKeys="true"])"#,
         ] {
             for profile in [Profile::Strict, Profile::Default] {
-                let (doc, ignored) =
-                    provn::read_report(&format!("{P}entity(ex:e)\n{body}\nendDocument\n"), profile)
-                        .unwrap();
+                let (doc, ignored) = report(&format!("entity(ex:e)\n{body}"), profile).unwrap();
                 assert_eq!(doc.records.len(), 1, "{body}");
                 assert_eq!(ignored.len(), 1, "{body}");
                 assert_eq!(
@@ -225,11 +223,7 @@ mod tests {
             )
             .is_err()
         );
-        let (doc, ignored) = provn::read_report(
-            &format!("{P}prov:mentionOf(ex:a, ex:b, ex:c)\nendDocument\n"),
-            Profile::Strict,
-        )
-        .unwrap();
+        let (doc, ignored) = report("prov:mentionOf(ex:a, ex:b, ex:c)", Profile::Strict).unwrap();
         assert_eq!((doc.records.len(), ignored.len()), (1, 0));
     }
 
@@ -274,6 +268,7 @@ mod tests {
         profile: Profile,
     ) -> crate::Result<(crate::Document, Vec<provn::Ignored>)> {
         provn::read_report(&format!("{P}{body}\nendDocument\n"), profile)
+            .map(|r| (r.document, r.ignored))
     }
 
     fn syntax_position(
@@ -400,7 +395,11 @@ mod tests {
     #[test]
     fn read_and_read_with_drop_the_list() {
         let text = format!("{P}entity(ex:e)\nex:f(1)\nendDocument\n");
-        let (doc, ignored) = provn::read_report(&text, Profile::Default).unwrap();
+        let provn::ReadReport {
+            document: doc,
+            ignored,
+            ..
+        } = provn::read_report(&text, Profile::Default).unwrap();
         assert_eq!(ignored.len(), 1);
         assert_eq!(provn::read(&text).unwrap(), doc);
         assert_eq!(provn::read_with(&text, Profile::Strict).unwrap(), doc);
@@ -408,7 +407,7 @@ mod tests {
         assert_eq!(
             provn::read_report(&format!("\u{FEFF}{text}"), Profile::Strict)
                 .unwrap()
-                .1,
+                .ignored,
             ignored
         );
     }

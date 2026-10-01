@@ -57,6 +57,18 @@ pub struct Ignored {
     pub column: usize,
 }
 
+/// What [`read_report`] returns: the document, and what the reader left out
+/// of it.
+#[derive(Clone, Debug)]
+#[non_exhaustive]
+pub struct ReadReport {
+    /// The document read.
+    pub document: Document,
+    /// The extensibility expressions parsed and left out, one per outermost
+    /// expression, in source order.
+    pub ignored: Vec<Ignored>,
+}
+
 /// Read a PROV-N document under [`Profile::Default`].
 ///
 /// An extensibility expression (Recommendation section 5, a statement whose
@@ -83,7 +95,7 @@ pub fn read(text: &str) -> Result<Document> {
 ///
 /// As [`read`].
 pub fn read_with(text: &str, profile: Profile) -> Result<Document> {
-    read_report(text, profile).map(|(document, _)| document)
+    read_report(text, profile).map(|report| report.document)
 }
 
 /// Read a PROV-N document under `profile`, and list the extensibility
@@ -95,10 +107,13 @@ pub fn read_with(text: &str, profile: Profile) -> Result<Document> {
 /// # Errors
 ///
 /// As [`read`].
-pub fn read_report(text: &str, profile: Profile) -> Result<(Document, Vec<Ignored>)> {
+pub fn read_report(text: &str, profile: Profile) -> Result<ReadReport> {
     let mut builder = DocumentBuilder::new();
     let ignored = read_into_with(strip_bom(text), profile, &mut builder)?;
-    Ok((builder.finish(), ignored))
+    Ok(ReadReport {
+        document: builder.finish(),
+        ignored,
+    })
 }
 
 /// Read PROV-N text under `profile`, sending events to `builder` as each

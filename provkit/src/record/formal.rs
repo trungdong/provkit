@@ -16,6 +16,7 @@ macro_rules! formals {
     ($($name:ident: $ty:ident $local:literal,)*) => {
         /// A formal attribute name (PROV-DM's positional arguments).
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        #[non_exhaustive]
         pub enum FormalAttr {
             $(#[doc = concat!("`prov:", $local, "`.")] $name,)*
         }
@@ -92,6 +93,7 @@ impl FormalAttr {
 
 /// An owned formal attribute value, for [`Record::from_parts`](super::Record::from_parts).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Formal {
     /// A name-valued formal.
     Name(QName),
@@ -101,6 +103,7 @@ pub enum Formal {
 
 /// A borrowed formal attribute value, from [`Record::formals`](super::Record::formals).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum FormalRef<'a> {
     /// A name-valued formal.
     Name(&'a QName),

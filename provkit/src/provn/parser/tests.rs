@@ -161,7 +161,10 @@ fn mention_takes_attributes() {
 
 /// The document with `body` under `profile`, and the expressions left out.
 fn report(body: &str, profile: Profile) -> (Document, Vec<provn::Ignored>) {
-    provn::read_report(&format!("{HEAD}{body}\nendDocument"), profile).unwrap()
+    let provn::ReadReport {
+        document, ignored, ..
+    } = provn::read_report(&format!("{HEAD}{body}\nendDocument"), profile).unwrap();
+    (document, ignored)
 }
 
 /// `prov:mentionOf` is a mention only in the shape of one: three names,
