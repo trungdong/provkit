@@ -63,6 +63,12 @@ impl TokenKind {
             _ => None,
         }
     }
+
+    /// Whether this is an `identifierOrMarker`: a name, a bare name made of
+    /// digits, or `-`.
+    pub(crate) fn is_identifier_or_marker(&self) -> bool {
+        matches!(self, TokenKind::Name { .. } | TokenKind::Marker) || self.digit_name().is_some()
+    }
 }
 
 /// A token with its 1-based position and its byte span in the source.
@@ -330,7 +336,7 @@ impl<'a> Lexer<'a> {
                     out.push(decoded);
                 }
                 // A line break ends the scan: the IRI never closed.
-                '\n' | '\r' => return Err(self.error("unterminated IRI")),
+                '\n' | '\r' => break,
                 _ if is_iri_forbidden(c) => {
                     return Err(
                         self.error_at(self.pos + i, format!("invalid character {c:?} in IRI"))

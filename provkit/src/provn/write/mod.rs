@@ -117,7 +117,10 @@ pub fn name(name: &QName, namespaces: &mut Namespaces) -> Result<String> {
 /// As [`name`], against a scope.
 fn name_in(name: &QName, names: &mut WriteScope<'_>) -> Result<String> {
     if let Some(reason) = iri_problem(name.namespace()) {
-        return Err(unwritable(name, reason));
+        return Err(Error::Unwritable {
+            name: name.clone(),
+            reason,
+        });
     }
     let local = escape_local(name);
     let prefix = match names.render_parts(name) {
@@ -130,13 +133,6 @@ fn name_in(name: &QName, names: &mut WriteScope<'_>) -> Result<String> {
         Some(prefix) => format!("{prefix}:{local}"),
         None => local,
     })
-}
-
-fn unwritable(name: &QName, reason: String) -> Error {
-    Error::Unwritable {
-        name: name.clone(),
-        reason,
-    }
 }
 
 /// `c` with its code point, so an invisible character shows in a message.

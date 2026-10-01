@@ -50,8 +50,8 @@ pub(super) fn at(token: &Token, error: Error) -> Error {
 /// A name token split into its parts, before resolution.
 pub(super) struct NameParts<'t> {
     token: &'t Token,
-    prefix: String,
-    local: String,
+    prefix: &'t str,
+    local: &'t str,
 }
 
 /// A positional argument, resolved but not yet matched to a formal.
@@ -136,21 +136,18 @@ impl<'t> Parser<'t> {
         &self.source[token.start..token.end]
     }
 
-    pub(super) fn error_at(token: &Token, message: String) -> Error {
+    /// "expected `what`, found `found`" at `token`.
+    pub(super) fn expected_found(token: &Token, what: &str, found: &str) -> Error {
         Error::Syntax {
             line: token.line,
             column: token.column,
-            message,
+            message: format!("expected {what}, found {found}"),
         }
     }
 
-    /// "expected `what`, found ..." at `token`. A message whose "found" part
-    /// is not the bare token goes through [`Self::error_at`] instead.
+    /// "expected `what`, found" the token itself, at `token`.
     pub(super) fn expected_at(token: &Token, what: &str) -> Error {
-        Self::error_at(
-            token,
-            format!("expected {what}, found {}", describe(&token.kind)),
-        )
+        Self::expected_found(token, what, &describe(&token.kind))
     }
 
     /// "expected `what`, found ..." at the current token.
@@ -192,7 +189,7 @@ impl<'t> Parser<'t> {
     /// The name in the current scope. An error is placed at the name token.
     fn resolve(&self, name: &NameParts) -> Result<QName> {
         self.scope()
-            .resolve_parts(&name.prefix, &name.local)
+            .resolve_parts(name.prefix, name.local)
             .map_err(|e| at(name.token, e))
     }
 
@@ -204,8 +201,8 @@ impl<'t> Parser<'t> {
         };
         let parts = NameParts {
             token,
-            prefix: prefix.clone(),
-            local: local.clone(),
+            prefix,
+            local,
         };
         self.bump();
         Ok(parts)
@@ -219,8 +216,8 @@ impl<'t> Parser<'t> {
         if let Some(digits) = token.kind.digit_name() {
             let parts = NameParts {
                 token,
-                prefix: String::new(),
-                local: digits.to_owned(),
+                prefix: "",
+                local: digits,
             };
             self.bump();
             return Ok(parts);
@@ -228,10 +225,10 @@ impl<'t> Parser<'t> {
         self.name(what)
     }
 
-    fn iri(&mut self) -> Result<String> {
+    fn iri(&mut self) -> Result<&'t str> {
         if let TokenKind::Iri(iri) = &self.peek().kind {
             self.bump();
-            Ok(iri.clone())
+            Ok(iri)
         } else {
             Err(self.expected("an IRI in angle brackets"))
         }
@@ -344,7 +341,7 @@ impl<'t> Parser<'t> {
         let mut i = 2;
         if identifier
             && kind(i + 1) == Some(&TokenKind::Semicolon)
-            && (is_name(i) || kind(i) == Some(&TokenKind::Marker))
+            && kind(i).is_some_and(TokenKind::is_identifier_or_marker)
         {
             i += 2;
         }
@@ -385,7 +382,7 @@ impl<'t> Parser<'t> {
         let (id, mut args) = self.identifier_and_first_argument(kind)?;
         let attributes = self.remaining_arguments(kind, &mut args)?;
         Self::check_arity(start, kind, args.len())?;
-        let formals = self.formals(kind, kind.arities(), args)?;
+        let formals = self.formals(kind, args)?;
         Record::from_parts(kind, id, formals, attributes).map_err(|e| at(start, e))
     }
 
@@ -401,12 +398,10 @@ impl<'t> Parser<'t> {
             if prefix.is_empty() && local == Kind::Mention.name() {
                 Self::expected_at(start, "'prov:mentionOf' under the strict profile")
             } else {
-                Self::error_at(
+                Self::expected_found(
                     start,
-                    format!(
-                        "expected a PROV statement, found unknown keyword {}",
-                        describe(&start.kind)
-                    ),
+                    "a PROV statement",
+                    &format!("unknown keyword {}", describe(&start.kind)),
                 )
             }
         })?;
@@ -497,25 +492,18 @@ impl<'t> Parser<'t> {
             .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join(" or ");
-        Err(Self::error_at(
+        Err(Self::expected_found(
             start,
-            format!(
-                "expected {allowed} arguments to {}, found {count}",
-                kind.name()
-            ),
+            &format!("{allowed} arguments to {}", kind.name()),
+            &count.to_string(),
         ))
     }
 
     /// Match positional arguments to the kind's formals; `-` is absent.
     /// Under [`Profile::Strict`], `-` in the first `min(arities)` positions
     /// is an error, because the grammar has a plain identifier there.
-    fn formals(
-        &self,
-        kind: Kind,
-        arities: &[usize],
-        args: Vec<Positional<'_>>,
-    ) -> Result<Vec<(FormalAttr, Formal)>> {
-        let required = arities.iter().copied().min().unwrap_or(0);
+    fn formals(&self, kind: Kind, args: Vec<Positional<'_>>) -> Result<Vec<(FormalAttr, Formal)>> {
+        let required = kind.arities().iter().copied().min().unwrap_or(0);
         let mut out = Vec::new();
         for (i, (attr, (token, arg))) in kind.formals().iter().zip(args).enumerate() {
             let wanted = if attr.is_time() {
@@ -561,11 +549,11 @@ impl<'t> Parser<'t> {
                 self.bump();
                 Arg::Time(DateTime::parse(text).map_err(|e| at(token, e))?)
             }
-            TokenKind::Name { .. } | TokenKind::Int(_) => {
+            // A token that is not a name is refused by `identifier`.
+            _ => {
                 let name = self.identifier("an identifier, a dateTime or '-'")?;
                 Arg::Name(self.resolve(&name)?)
             }
-            _ => return Err(self.expected("an identifier, a dateTime or '-'")),
         };
         Ok((token, arg))
     }
@@ -574,25 +562,40 @@ impl<'t> Parser<'t> {
     // The ',' is consumed by the argument loop.
 
     fn attribute_value_pairs(&mut self) -> Result<Attributes> {
-        self.expect(&TokenKind::LBracket, "'['")?;
         let mut attributes = Attributes::new();
+        self.attribute_block(|parser, name| {
+            let name = parser.resolve(&name)?;
+            parser.expect(&TokenKind::Equals, "'='")?;
+            attributes.insert(name, parser.literal()?);
+            Ok(())
+        })?;
+        Ok(attributes)
+    }
+
+    // attributeValuePairs ::= ( | attributeValuePair ( "," attributeValuePair )* )
+    // attributeValuePair ::= attribute "=" literal
+
+    /// A bracketed attribute block, whose `[` is the current token. `pair`
+    /// reads the rest of each pair after its name.
+    pub(super) fn attribute_block(
+        &mut self,
+        mut pair: impl FnMut(&mut Self, NameParts<'t>) -> Result<()>,
+    ) -> Result<()> {
+        self.expect(&TokenKind::LBracket, "'['")?;
         if self.peek().kind == TokenKind::RBracket {
             self.bump();
-            return Ok(attributes);
+            return Ok(());
         }
         loop {
             let name = self.identifier("an attribute name")?;
-            let name = self.resolve(&name)?;
-            self.expect(&TokenKind::Equals, "'='")?;
-            let value = self.literal()?;
-            attributes.insert(name, value);
+            pair(self, name)?;
             match self.peek().kind {
                 TokenKind::Comma => {
                     self.bump();
                 }
                 TokenKind::RBracket => {
                     self.bump();
-                    return Ok(attributes);
+                    return Ok(());
                 }
                 _ => return Err(self.expected("',' or ']'")),
             }

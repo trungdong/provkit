@@ -33,7 +33,9 @@ impl Parser<'_> {
     fn extensibility_body(&mut self, depth: usize) -> Result<()> {
         self.expect(&TokenKind::LParen, "'('")?;
         // optionalIdentifier ::= ( identifierOrMarker ";" )?
-        if self.peek_next().kind == TokenKind::Semicolon && is_identifier_or_marker(self.peek()) {
+        if self.peek_next().kind == TokenKind::Semicolon
+            && self.peek().kind.is_identifier_or_marker()
+        {
             self.bump();
             self.bump();
         }
@@ -41,7 +43,10 @@ impl Parser<'_> {
         while self.peek().kind == TokenKind::Comma {
             self.bump();
             if self.peek().kind == TokenKind::LBracket {
-                self.skip_attribute_value_pairs()?;
+                self.attribute_block(|parser, _| {
+                    parser.expect(&TokenKind::Equals, "'='")?;
+                    parser.literal_parts().map(drop)
+                })?;
                 return self.expect(&TokenKind::RParen, "')'");
             }
             self.extensibility_argument(depth)?;
@@ -103,40 +108,6 @@ impl Parser<'_> {
         }
         self.expect(&close, what)
     }
-
-    // attributeValuePairs ::= ( | attributeValuePair ( "," attributeValuePair )* )
-    // attributeValuePair ::= attribute "=" literal
-
-    /// An attribute block, unresolved. The current token is `[`.
-    fn skip_attribute_value_pairs(&mut self) -> Result<()> {
-        self.expect(&TokenKind::LBracket, "'['")?;
-        if self.peek().kind == TokenKind::RBracket {
-            self.bump();
-            return Ok(());
-        }
-        loop {
-            self.identifier("an attribute name")?;
-            self.expect(&TokenKind::Equals, "'='")?;
-            self.literal_parts()?;
-            match self.peek().kind {
-                TokenKind::Comma => {
-                    self.bump();
-                }
-                TokenKind::RBracket => {
-                    self.bump();
-                    return Ok(());
-                }
-                _ => return Err(self.expected("',' or ']'")),
-            }
-        }
-    }
-}
-
-/// Whether `token` is an `identifierOrMarker`: a name, a bare name made of
-/// digits, or `-`.
-fn is_identifier_or_marker(token: &Token) -> bool {
-    matches!(token.kind, TokenKind::Name { .. } | TokenKind::Marker)
-        || token.kind.digit_name().is_some()
 }
 
 /// Check that a level below `depth` fits, before parsing it at `token`.
@@ -144,13 +115,10 @@ fn enter(depth: usize, token: &Token) -> Result<()> {
     if depth < MAX_DEPTH {
         Ok(())
     } else {
-        Err(Parser::error_at(
+        Err(Parser::expected_found(
             token,
-            format!(
-                "expected at most {MAX_DEPTH} levels of nesting in an extensibility expression, \
-                 found {} nested deeper",
-                describe(&token.kind)
-            ),
+            &format!("at most {MAX_DEPTH} levels of nesting in an extensibility expression"),
+            &format!("{} nested deeper", describe(&token.kind)),
         ))
     }
 }
