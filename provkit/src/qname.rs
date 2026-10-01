@@ -59,11 +59,12 @@ impl QName {
     }
 
     /// Every character of `local` has a place in a `PN_LOCAL`, bare or
-    /// after `\`.
+    /// after `\`. An ASCII letter, digit or `_` has one anywhere, so the
+    /// full rule runs only for the other characters.
     fn check_local(local: &str) -> Result<()> {
-        let writable = local
-            .char_indices()
-            .all(|(at, c)| pn::local_char(local, at, c).is_some());
+        let writable = local.char_indices().all(|(at, c)| {
+            c.is_ascii_alphanumeric() || c == '_' || pn::local_char(local, at, c).is_some()
+        });
         if writable {
             Ok(())
         } else {

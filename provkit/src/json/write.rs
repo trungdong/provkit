@@ -1,8 +1,10 @@
 //! Document to wire structs to JSON text.
 
 use std::io::Write;
+use std::mem;
 
 use indexmap::IndexMap;
+use indexmap::map::Entry;
 
 use super::wire::{
     DEFAULT, JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany,
@@ -208,20 +210,23 @@ fn record_wire(record: &Record, names: &mut WriteScope<'_>) -> Result<JsonRecord
         body.insert(attr.to_string(), JsonValue::Str(text));
     }
     // Several values under one name become an array, in insertion order.
-    let mut grouped: IndexMap<String, Vec<JsonValue>> = IndexMap::new();
+    // No attribute key equals a formal's, because `check_attributes` has
+    // refused an attribute named after one.
     for (name, value) in record.attributes() {
-        grouped
-            .entry(key(name, names))
-            .or_default()
-            .push(value_wire(value, names));
-    }
-    for (name, mut values) in grouped {
-        let value = if values.len() == 1 {
-            values.remove(0)
-        } else {
-            JsonValue::Many(values)
-        };
-        body.insert(name, value);
+        let name = key(name, names);
+        let value = value_wire(value, names);
+        match body.entry(name) {
+            Entry::Vacant(slot) => {
+                slot.insert(value);
+            }
+            Entry::Occupied(mut slot) => match slot.get_mut() {
+                JsonValue::Many(values) => values.push(value),
+                first => {
+                    let first_value = mem::replace(first, JsonValue::Many(Vec::new()));
+                    *first = JsonValue::Many(vec![first_value, value]);
+                }
+            },
+        }
     }
     Ok(body)
 }

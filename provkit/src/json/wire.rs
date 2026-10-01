@@ -280,6 +280,9 @@ fn from_raw(text: &str) -> JsonValue {
     if text.starts_with(['-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9']) {
         return JsonValue::Number(text.to_owned());
     }
+    if let Some(content) = unescaped(text) {
+        return JsonValue::Str(content.to_owned());
+    }
     serde_json::Deserializer::from_str(text)
         .deserialize_any(ValueVisitor)
         .unwrap_or_else(|e| JsonValue::Invalid(InvalidValue::from_error(text, &e)))
@@ -382,7 +385,18 @@ fn member_string(key: &str, text: &str) -> Result<String, InvalidValue> {
             format!("expected a string as the `{key}` of a value object"),
         ));
     }
-    serde_json::from_str(text).map_err(|e| InvalidValue::from_error(text, &e))
+    match unescaped(text) {
+        Some(content) => Ok(content.to_owned()),
+        None => serde_json::from_str(text).map_err(|e| InvalidValue::from_error(text, &e)),
+    }
+}
+
+/// The content of a JSON string token with no `\`, which needs no parsing.
+/// The token is valid JSON, so it holds no control character, and without
+/// an escape its content is the text between the quotes.
+fn unescaped(token: &str) -> Option<&str> {
+    let content = token.strip_prefix('"')?.strip_suffix('"')?;
+    (!content.contains('\\')).then_some(content)
 }
 
 impl Serialize for JsonValue {
