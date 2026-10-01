@@ -37,10 +37,10 @@ Input format comes from `-f json|provn`, else the file extension, else the
 content. The sniffer treats `document` followed by whitespace, a comment or
 the end of input as PROV-N, and `{` as PROV-JSON. A comment glued to the
 keyword is part of the name in PROV-N, so the reader then rejects it; the
-departures in CONFORMANCE.md say why. Output format comes from `-t`, else the `-o`
-extension (`.json` or `.provn`, in any letter case). PROV-N is the default on
-standard output only, so `-o out.txt` needs `-t json` or `-t provn`. `-` means
-standard input or output.
+departures in CONFORMANCE.md say why. Output format comes from `-t`, else
+the `-o` extension (`.json` or `.provn`, in any letter case). PROV-N is the
+default on standard output only, so `-o out.txt` needs `-t json` or
+`-t provn`. `-` means standard input or output.
 
 `compare` declares the `nsN` prefixes it mints for names with no declared
 prefix, with a `prefix nsN <IRI>` line after the records of each scope. Such a
@@ -79,9 +79,8 @@ the sharing or where formal attributes conflict. `provn::read_with` takes a
 `provn::Profile`. `Strict` accepts the whole PROV-N grammar and the MUST
 statements of its prose, with the departures CONFORMANCE.md records, and
 `Default` (the profile `provn::read` uses) also accepts what ProvToolbox and
-ProvPy write. `provn::read_report` also lists the
-extensibility expressions the reader left out. API documentation:
-`cargo doc --open -p provkit`.
+ProvPy write. `provn::read_report` also lists the extensibility expressions
+the reader left out. API documentation: `cargo doc --open -p provkit`.
 
 ## Conformance
 

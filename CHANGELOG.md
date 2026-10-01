@@ -150,9 +150,9 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     name, literal or record. `Error::DuplicateBundle` reports two bundles
     with one identifier in either reader.
   - Public modules `json`, `provn` and `well_known`. Every other public item
-    has one path at the crate root. `provn::Profile` and `provn::Ignored`
-    live under `provn`. `well_known` holds the `QName` statics and the
-    `PROV` and `XSD` namespace IRIs.
+    has one path. It is at the crate root, except `provn::Profile` and
+    `provn::Ignored`, which live under `provn`. `well_known` holds the
+    `QName` statics and the `PROV` and `XSD` namespace IRIs.
   - Namespace arguments and results are `&str`.
   - Cargo features `json` and `provn`, both on by default.
 - `provkit` binary (crate `provkit-cli`):

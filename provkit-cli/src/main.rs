@@ -118,21 +118,22 @@ fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Docume
                 path.display()
             ),
         })?;
+    let context = || path.display().to_string();
     let document = match format {
-        Format::Json => json::read(&text),
+        Format::Json => json::read(&text).with_context(context)?,
         Format::Provn => {
-            provn::read_report(&text, provn::Profile::Default).map(|(document, ignored)| {
-                let source = if is_stdin {
-                    "standard input".to_owned()
-                } else {
-                    path.display().to_string()
-                };
-                warn_ignored(&source, &ignored);
-                document
-            })
+            let (document, ignored) =
+                provn::read_report(&text, provn::Profile::Default).with_context(context)?;
+            let source = if is_stdin {
+                "standard input".to_owned()
+            } else {
+                path.display().to_string()
+            };
+            warn_ignored(&source, &ignored);
+            document
         }
     };
-    document.with_context(|| path.display().to_string())
+    Ok(document)
 }
 
 /// Prints one warning on standard error for the extensibility expressions
