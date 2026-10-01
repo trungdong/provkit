@@ -173,9 +173,10 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     A message quotes at most 80 characters of rejected input and gives
     the full length, and the error holds the whole text.
   - Public modules `json`, `provn` and `well_known`. Every other public item
-    has one path. It is at the crate root, except `provn::Profile` and
-    `provn::Ignored`, which live under `provn`. `well_known` holds the
-    `QName` statics and the `PROV` and `XSD` namespace IRIs.
+    has one path. It is at the crate root, except `provn::Profile`,
+    `provn::Ignored` and `provn::ReadReport`, which live under `provn`.
+    `well_known` holds the `QName` statics and the `PROV` and `XSD`
+    namespace IRIs.
   - Namespace arguments and results are `&str`, except
     `Namespaces::ensure_prefix`, which returns the prefix as a `String`
     because it may mint one.
