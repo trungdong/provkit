@@ -1,12 +1,12 @@
 //! Extensibility expressions (Recommendation section 5, productions [49] to
 //! [51]). Each is parsed in full and left out of the document: names are not
-//! resolved, literals are not built, and the outermost expression is
+//! resolved, literals are not built, a time is checked, and the outermost expression is
 //! recorded as an [`Ignored`].
 
 use super::Ignored;
 use super::lexer::{Token, TokenKind};
-use super::parser::{Parser, describe};
-use crate::Result;
+use super::parser::{Parser, at, describe};
+use crate::{DateTime, Result};
 
 /// Levels of nested expressions and tuples an expression may hold.
 const MAX_DEPTH: usize = 64;
@@ -69,7 +69,13 @@ impl Parser<'_> {
                 enter(depth, token)?;
                 self.extensibility_tuple(depth + 1)
             }
-            TokenKind::Name { .. } | TokenKind::Marker | TokenKind::DateTime(_) => {
+            TokenKind::Name { .. } | TokenKind::Marker => {
+                self.bump();
+                Ok(())
+            }
+            // Production [44]: a time is a `DATETIME`, so its text must be one.
+            TokenKind::DateTime(text) => {
+                DateTime::parse(text).map_err(|e| at(token, e))?;
                 self.bump();
                 Ok(())
             }
@@ -277,6 +283,34 @@ mod tests {
         match result {
             Err(Error::Syntax { line, column, .. }) => (line, column),
             other => panic!("expected a syntax error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_time_in_an_extension_must_be_a_datetime() {
+        for profile in [Profile::Strict, Profile::Default] {
+            for time in [
+                "2011-99-99T99:99:99",
+                "2011-02-30T00:00:00",
+                "2011-11-16T25:00:00",
+            ] {
+                let text = format!("{P}ex:f({time})\nendDocument");
+                match provn::read_with(&text, profile) {
+                    Err(Error::At {
+                        line,
+                        column,
+                        error,
+                    }) => {
+                        assert_eq!((line, column), (4, 6), "{time}");
+                        assert!(matches!(*error, Error::InvalidLiteral { .. }), "{time}");
+                    }
+                    other => panic!("{time}: expected Error::At, got {other:?}"),
+                }
+            }
+            let text =
+                format!("{P}ex:f(2011-11-16T16:05:33, {{2012-01-01T00:00:00Z}})\nendDocument");
+            let report = provn::read_report(&text, profile).unwrap();
+            assert_eq!(report.ignored.len(), 1);
         }
     }
 

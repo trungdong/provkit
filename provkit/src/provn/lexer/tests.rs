@@ -109,12 +109,7 @@ fn iri_typed_and_comments() {
 
 #[test]
 fn unterminated_iri_is_reported_at_its_start() {
-    for src in [
-        "x <http://x",
-        "x <http://x ",
-        "x <http://x\n",
-        "x <http://x\t>",
-    ] {
+    for src in ["x <http://x", "x <http://x\n"] {
         match tokenize(src) {
             Err(Error::Syntax { line, column, .. }) => {
                 assert_eq!((line, column), (1, 3), "{src:?}");
@@ -514,6 +509,38 @@ fn iri_characters_follow_the_shared_rule() {
                 TokenKind::Iri(format!("a{c}b")),
                 "{c:?}"
             );
+        }
+    }
+}
+
+#[test]
+fn a_space_or_control_character_in_an_iri_is_reported_where_it_is() {
+    for c in [' ', '\t', '\0', '\u{1}', '\u{1F}'] {
+        let text = format!("<http://d{c}/x>");
+        match tokenize(&text) {
+            Err(Error::Syntax {
+                line,
+                column,
+                message,
+            }) => {
+                assert_eq!((line, column), (1, 10), "{c:?}");
+                assert!(message.starts_with("invalid character"), "{message}");
+            }
+            other => panic!("{c:?}: {other:?}"),
+        }
+    }
+    // A line break ends the scan: the IRI never closed.
+    for text in ["<http://d\n/x>", "<http://d\r/x>", "<http://d"] {
+        match tokenize(text) {
+            Err(Error::Syntax {
+                line,
+                column,
+                message,
+            }) => {
+                assert_eq!((line, column), (1, 1), "{text:?}");
+                assert_eq!(message, "unterminated IRI");
+            }
+            other => panic!("{text:?}: {other:?}"),
         }
     }
 }

@@ -328,8 +328,8 @@ impl<'a> Lexer<'a> {
                     chars.nth(digits);
                     out.push(decoded);
                 }
-                // Whitespace and control characters end the scan: the IRI never closed.
-                '\0'..=' ' => return Err(self.error("unterminated IRI")),
+                // A line break ends the scan: the IRI never closed.
+                '\n' | '\r' => return Err(self.error("unterminated IRI")),
                 _ if is_iri_forbidden(c) => {
                     return Err(
                         self.error_at(self.pos + i, format!("invalid character {c:?} in IRI"))

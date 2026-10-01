@@ -10,9 +10,12 @@
 //! `extension` module and recorded in [`Parser::ignored`] instead of the
 //! document.
 
+use std::collections::HashSet;
+
 use super::lexer::{Token, TokenKind};
-use super::{Ignored, Profile};
+use super::{Ignored, Profile, Relaxation};
 use crate::namespaces::Scope;
+use crate::pn;
 use crate::sink::DocumentBuilder;
 use crate::well_known::{PROV, XSD};
 use crate::{
@@ -26,7 +29,7 @@ use crate::{
 fn classify(prefix: &str, local: &str, profile: Profile) -> Option<Kind> {
     let kind = Kind::from_name(local)?;
     let accepted = if kind == Kind::Mention {
-        prefix == "prov" || (prefix.is_empty() && profile == Profile::Default)
+        prefix == "prov" || (prefix.is_empty() && profile.allows(Relaxation::BareMentionOf))
     } else {
         prefix.is_empty()
     };
@@ -34,7 +37,7 @@ fn classify(prefix: &str, local: &str, profile: Profile) -> Option<Kind> {
 }
 
 /// Attach `token`'s position to an error that has none.
-fn at(token: &Token, error: Error) -> Error {
+pub(super) fn at(token: &Token, error: Error) -> Error {
     match error {
         Error::Syntax { .. } | Error::At { .. } => error,
         other => Error::At {
@@ -223,7 +226,7 @@ impl<'t> Parser<'t> {
                 after_bundle = true;
             } else {
                 // Expressions come before bundles: production [1].
-                if after_bundle && self.profile == Profile::Strict {
+                if after_bundle && !self.profile.allows(Relaxation::StatementAfterBundle) {
                     return Err(Self::error_at(
                         self.peek(),
                         format!(
@@ -248,7 +251,7 @@ impl<'t> Parser<'t> {
 
     fn namespace_declarations(&mut self) -> Result<Namespaces> {
         let mut ns = Namespaces::new();
-        let mut seen: Vec<String> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
         let mut has_default = false;
         loop {
             if self.is_keyword("default") {
@@ -261,7 +264,7 @@ impl<'t> Parser<'t> {
                     ));
                 }
                 // `default` comes before every `prefix`: production [45].
-                if !seen.is_empty() && self.profile == Profile::Strict {
+                if !seen.is_empty() && !self.profile.allows(Relaxation::DefaultAfterPrefix) {
                     return Err(Self::error_at(
                         self.peek(),
                         "expected 'default' before every 'prefix' under the strict profile, \
@@ -275,13 +278,7 @@ impl<'t> Parser<'t> {
                 ns.set_default(&iri);
             } else if self.is_keyword("prefix") {
                 self.bump();
-                let name = self.name("a prefix")?;
-                if !name.prefix.is_empty() {
-                    return Err(Self::error_at(
-                        name.token,
-                        format!("expected a prefix, found {}", describe(&name.token.kind)),
-                    ));
-                }
+                let name = self.prefix_name()?;
                 if seen.contains(&name.local) {
                     return Err(Self::error_at(
                         name.token,
@@ -295,7 +292,7 @@ impl<'t> Parser<'t> {
                 // `prov` and `xsd` are predeclared: section 3.7.4.
                 let predeclared =
                     (name.local == "prov" && iri == PROV) || (name.local == "xsd" && iri == XSD);
-                if predeclared && self.profile == Profile::Strict {
+                if predeclared && !self.profile.allows(Relaxation::PredeclaredPrefix) {
                     return Err(Self::error_at(
                         name.token,
                         format!(
@@ -307,10 +304,26 @@ impl<'t> Parser<'t> {
                 }
                 ns.declare(&name.local, &iri)
                     .map_err(|e| at(name.token, e))?;
-                seen.push(name.local);
+                seen.insert(name.local);
             } else {
                 return Ok(ns);
             }
+        }
+    }
+
+    /// The prefix in a `prefix` declaration. Production [46] takes a
+    /// `PN_PREFIX`, which has no escapes, so the text as written is tested,
+    /// not the unescaped name.
+    fn prefix_name(&mut self) -> Result<NameParts<'t>> {
+        let name = self.name("a prefix")?;
+        let written = self.text_of(name.token);
+        if pn::is_pn_prefix(written) {
+            Ok(name)
+        } else {
+            Err(Self::error_at(
+                name.token,
+                format!("expected a prefix, found '{written}'"),
+            ))
         }
     }
 
@@ -368,19 +381,22 @@ impl<'t> Parser<'t> {
     /// production [49].
     fn mention_shape_follows(&self) -> bool {
         let kind = |i: usize| self.tokens.get(self.pos + i).map(|t| &t.kind);
-        let relaxed = self.profile == Profile::Default;
+        let markers = self.profile.allows(Relaxation::MarkerInRequiredPosition);
+        let identifier = self
+            .profile
+            .allows(Relaxation::IdentifierOrAttributesOnBareKind);
         let is_name = |i: usize| {
             kind(i).is_some_and(|k| {
                 matches!(k, TokenKind::Name { .. })
                     || k.digit_name().is_some()
-                    || (relaxed && *k == TokenKind::Marker)
+                    || (markers && *k == TokenKind::Marker)
             })
         };
         if kind(1) != Some(&TokenKind::LParen) {
             return false;
         }
         let mut i = 2;
-        if relaxed
+        if identifier
             && kind(i + 1) == Some(&TokenKind::Semicolon)
             && (is_name(i) || kind(i) == Some(&TokenKind::Marker))
         {
@@ -405,6 +421,16 @@ impl<'t> Parser<'t> {
         }
     }
 
+    /// Whether `kind` takes neither an identifier nor attributes here.
+    /// Productions [24] to [26] give those relations neither, and only the
+    /// default profile reads them anyway.
+    fn takes_no_extras(&self, kind: Kind) -> bool {
+        kind.is_bare()
+            && !self
+                .profile
+                .allows(Relaxation::IdentifierOrAttributesOnBareKind)
+    }
+
     // expression ::= keyword "(" optionalIdentifier arguments optionalAttributeValuePairs ")"
 
     fn expression(&mut self) -> Result<Record> {
@@ -425,6 +451,7 @@ impl<'t> Parser<'t> {
         })?;
         self.bump();
         self.expect(&TokenKind::LParen, "'('")?;
+        let closed = self.takes_no_extras(kind);
 
         // Elements take a mandatory identifier; relations an optional `id;` or `-;`.
         let mut id = None;
@@ -448,7 +475,7 @@ impl<'t> Parser<'t> {
                         ));
                     }
                 };
-                if self.profile == Profile::Strict && kind.is_bare() {
+                if closed {
                     return Err(Self::error_at(
                         first.0,
                         format!(
@@ -471,8 +498,9 @@ impl<'t> Parser<'t> {
             self.bump();
             if self.peek().kind == TokenKind::LBracket {
                 // Productions [24] to [26] give these relations no attribute
-                // block; PROV-LINKS gives `mentionOf` one.
-                if self.profile == Profile::Strict && kind.is_bare() && kind != Kind::Mention {
+                // block. `prov:mentionOf` with one reads as a mention under
+                // both profiles, a recorded departure.
+                if closed && kind != Kind::Mention {
                     return Err(Self::error_at(
                         self.peek(),
                         format!(
@@ -533,7 +561,10 @@ impl<'t> Parser<'t> {
                 "an identifier or '-'"
             };
             match arg {
-                Arg::Marker if self.profile == Profile::Strict && i < required => {
+                Arg::Marker
+                    if !self.profile.allows(Relaxation::MarkerInRequiredPosition)
+                        && i < required =>
+                {
                     return Err(Self::error_at(
                         token,
                         format!(

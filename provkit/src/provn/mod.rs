@@ -45,6 +45,34 @@ pub enum Profile {
     Default,
 }
 
+/// What a profile reads beyond the grammar. One variant per bullet in
+/// [`Profile::Strict`]'s list.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Relaxation {
+    /// `mentionOf` without the `prov:` prefix.
+    BareMentionOf,
+    /// `-` in a required position of a relation.
+    MarkerInRequiredPosition,
+    /// `default` after a `prefix`.
+    DefaultAfterPrefix,
+    /// A statement after a bundle at document level.
+    StatementAfterBundle,
+    /// An identifier or attributes on a relation the grammar gives neither.
+    IdentifierOrAttributesOnBareKind,
+    /// A declaration of `prov` or `xsd` at its predeclared IRI.
+    PredeclaredPrefix,
+}
+
+impl Profile {
+    /// Whether this profile reads `relaxation`.
+    pub(crate) fn allows(self, _relaxation: Relaxation) -> bool {
+        match self {
+            Profile::Strict => false,
+            Profile::Default => true,
+        }
+    }
+}
+
 /// An extensibility expression the reader parsed and left out of the document.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]

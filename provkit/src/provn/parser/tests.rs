@@ -806,3 +806,36 @@ fn duplicate_prefix_in_one_scope_is_rejected() {
         Err(Error::Syntax { line: 3, .. })
     ));
 }
+
+#[test]
+fn a_prefix_is_a_pn_prefix_as_written() {
+    for profile in [Profile::Strict, Profile::Default] {
+        for prefix in [r"a\-b", r"a\.b", r"a\:b", "a%41", "_", "a/b"] {
+            let text = format!("document\nprefix {prefix} <http://x/>\nentity(a-b:e)\nendDocument");
+            match provn::read_with(&text, profile) {
+                Err(Error::Syntax { line, column, .. }) => {
+                    assert_eq!((line, column), (2, 8), "{prefix}");
+                }
+                other => panic!("{prefix}: expected a syntax error, got {other:?}"),
+            }
+        }
+        // A prefix with a hyphen needs no escape, and reads.
+        let text = "document\nprefix a-b <http://x/>\nentity(a-b:e)\nendDocument";
+        assert!(provn::read_with(text, profile).is_ok());
+    }
+}
+
+#[test]
+fn many_prefix_declarations_stay_linear() {
+    use std::fmt::Write as _;
+    let mut text = String::from("document\n");
+    for i in 0..100_000 {
+        writeln!(text, "prefix p{i} <http://e/{i}/>").unwrap();
+    }
+    text.push_str("endDocument\n");
+    // A scan of the earlier declarations per `prefix` took minutes in a
+    // debug build.
+    let start = std::time::Instant::now();
+    provn::read(&text).unwrap();
+    assert!(start.elapsed().as_secs() < 5, "took {:?}", start.elapsed());
+}
