@@ -43,6 +43,17 @@ pub fn data_path(name: &str) -> PathBuf {
         .join(name)
 }
 
+/// The (first, second) column pairs of a two-column file in `tests/data`.
+pub fn pairs(file: &str) -> Vec<(String, String)> {
+    tsv(&data_path(file))
+        .into_iter()
+        .map(|row| match row.as_slice() {
+            [first, second] => (first.clone(), second.clone()),
+            other => panic!("{file}: expected two columns, got {other:?}"),
+        })
+        .collect()
+}
+
 /// The tab-separated rows of a file, skipping blank lines.
 pub fn tsv(path: &Path) -> Vec<Vec<String>> {
     fs::read_to_string(path)
@@ -72,7 +83,6 @@ pub fn files(dir: &Path, ext: &str) -> Vec<(String, String)> {
 /// that reads several directories and checks the union with
 /// [`require_a_match`].
 pub fn files_unchecked(dir: &Path, ext: &str) -> Vec<(String, String)> {
-    let only = std::env::var("PROVKIT_ONLY").ok();
     let mut entries: Vec<PathBuf> = fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()))
         .map(|e| e.unwrap().path())
@@ -86,20 +96,23 @@ pub fn files_unchecked(dir: &Path, ext: &str) -> Vec<(String, String)> {
             let text = fs::read_to_string(&p).unwrap();
             (name, text)
         })
-        .filter(|(name, _)| only.as_ref().is_none_or(|o| name.contains(o.as_str())))
+        .filter(|(name, _)| selected(name))
         .collect()
+}
+
+/// The `PROVKIT_ONLY` filter, if set.
+pub fn only() -> Option<String> {
+    std::env::var("PROVKIT_ONLY").ok()
 }
 
 /// Whether `PROVKIT_ONLY` leaves `name` in the run.
 pub fn selected(name: &str) -> bool {
-    std::env::var("PROVKIT_ONLY")
-        .ok()
-        .is_none_or(|only| name.contains(only.as_str()))
+    only().is_none_or(|only| name.contains(only.as_str()))
 }
 
 /// Fails a run whose `PROVKIT_ONLY` filter left no file in the test.
 pub fn require_a_match(any_selected: bool) {
-    if let Ok(only) = std::env::var("PROVKIT_ONLY") {
+    if let Some(only) = only() {
         assert!(any_selected, "no file matches PROVKIT_ONLY={only}");
     }
 }
@@ -128,10 +141,29 @@ impl Report {
         }
     }
 
+    /// Write `document` with `write` and read the text back with `read`,
+    /// recording a failure under `name` unless the result equals `document`.
+    pub fn round_trip(
+        &mut self,
+        name: &str,
+        document: &Document,
+        write: impl FnOnce(&Document) -> provkit::Result<String>,
+        read: impl FnOnce(&str) -> provkit::Result<Document>,
+    ) {
+        let text = match write(document) {
+            Ok(text) => text,
+            Err(e) => return self.fail(name, format!("write: {e}")),
+        };
+        match read(&text) {
+            Ok(back) if back == *document => {}
+            Ok(_) => self.fail(name, "differs after the round trip"),
+            Err(e) => self.fail(name, format!("re-read: {e}")),
+        }
+    }
+
     pub fn finish(self, expected: usize) {
         // Skip count assertion when PROVKIT_ONLY filter is set, for debugging.
-        let only = std::env::var("PROVKIT_ONLY").ok();
-        if only.is_none() {
+        if only().is_none() {
             assert_eq!(self.checked, expected, "unexpected number of cases checked");
         }
         assert!(

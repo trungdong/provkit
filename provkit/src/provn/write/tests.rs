@@ -1,4 +1,4 @@
-use crate::test_util::{Broken, bundle, document, dt, element, ex, relation};
+use crate::test_util::{Broken, bundle, document, dt, element, entity, entity_in, ex, relation};
 use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT, XSD_INTEGER, XSD_LONG};
 use crate::{
     Attributes, Bundle, Document, Error, Formal, FormalAttr as F, Kind, LangStr, Namespaces, QName,
@@ -11,28 +11,31 @@ fn line(record: Record) -> String {
     provn::statement(&d.records[0], &mut d.namespaces).unwrap()
 }
 
+/// The statement line of entity `ex:e` with `pairs` as its attributes.
+fn entity_line(pairs: impl IntoIterator<Item = (QName, Value)>) -> String {
+    line(element(Kind::Entity, ex("e"), pairs.into_iter().collect()))
+}
+
 #[test]
 fn prints_the_expected_text() {
     let mut d = Document::new();
     d.namespaces.set_default("http://default.org/");
     d.namespaces.declare("ex", "http://example.org/").unwrap();
-    let mut a = Attributes::new();
-    a.insert(PROV_TYPE.clone(), ex("T").into());
-    a.insert(ex("n"), 1i32.into());
-    a.insert(ex("s"), "a\"b\n".into());
-    a.insert(PROV_LABEL.clone(), LangStr::new("x", "en").unwrap().into());
-    a.insert(ex("d"), dt().into());
-    a.insert(ex("f"), 1.5f64.into());
-    d.records.push(element(Kind::Entity, ex("e1"), a));
-    d.records.push(
-        Record::from_parts(
-            Kind::Activity,
-            Some(QName::new("http://default.org/", "a1").unwrap()),
-            vec![(F::StartTime, Formal::Time(dt()))],
-            Attributes::new(),
-        )
-        .unwrap(),
-    );
+    let a = [
+        (PROV_TYPE.clone(), ex("T").into()),
+        (ex("n"), 1i32.into()),
+        (ex("s"), "a\"b\n".into()),
+        (PROV_LABEL.clone(), LangStr::new("x", "en").unwrap().into()),
+        (ex("d"), dt().into()),
+        (ex("f"), 1.5f64.into()),
+    ];
+    d.records
+        .push(element(Kind::Entity, ex("e1"), a.into_iter().collect()));
+    d.records.push(relation(
+        Kind::Activity,
+        Some(QName::new("http://default.org/", "a1").unwrap()),
+        vec![(F::StartTime, Formal::Time(dt()))],
+    ));
     let a1 = QName::new("http://default.org/", "a1").unwrap();
     d.records.push(relation(
         Kind::Generation,
@@ -56,12 +59,8 @@ fn prints_the_expected_text() {
             (F::Bundle, Formal::Name(ex("b"))),
         ],
     ));
-    d.records
-        .push(element(Kind::Entity, ex("e.2"), Attributes::new()));
-    d.bundles.push(bundle(
-        "b",
-        vec![element(Kind::Entity, ex("e2"), Attributes::new())],
-    ));
+    d.records.push(entity("e.2"));
+    d.bundles.push(bundle("b", vec![entity("e2")]));
     let expected = "\
 document
   default <http://default.org/>
@@ -102,16 +101,13 @@ fn relations_have_full_arity() {
 fn activity_writes_both_times_or_neither() {
     let neither = element(Kind::Activity, ex("a"), Attributes::new());
     assert_eq!(line(neither), "activity(ex:a)");
-    let end_only = Record::from_parts(
+    let end_only = relation(
         Kind::Activity,
         Some(ex("a")),
         vec![(F::EndTime, Formal::Time(dt()))],
-        Attributes::new(),
-    )
-    .unwrap();
+    );
     assert_eq!(line(end_only), "activity(ex:a, -, 2011-11-16T16:05:33Z)");
-    let mut attrs = Attributes::new();
-    attrs.insert(ex("k"), "v".into());
+    let attrs = [(ex("k"), "v".into())].into_iter().collect();
     assert_eq!(
         line(element(Kind::Activity, ex("a"), attrs)),
         "activity(ex:a, [ex:k=\"v\"])"
@@ -156,15 +152,16 @@ fn mention_is_written_bare() {
 
 #[test]
 fn values_follow_the_grammar() {
-    let mut a = Attributes::new();
-    a.insert(ex("q"), ex("name").into());
-    a.insert(ex("i"), 1i32.into());
-    a.insert(ex("neg"), Value::typed("-42", XSD_INT.clone()).unwrap());
-    a.insert(ex("zeros"), Value::typed("005", XSD_INT.clone()).unwrap());
-    a.insert(ex("l"), 7i64.into());
-    a.insert(ex("c"), Value::typed("x", ex("dt")).unwrap());
+    let a = [
+        (ex("q"), ex("name").into()),
+        (ex("i"), 1i32.into()),
+        (ex("neg"), Value::typed("-42", XSD_INT.clone()).unwrap()),
+        (ex("zeros"), Value::typed("005", XSD_INT.clone()).unwrap()),
+        (ex("l"), 7i64.into()),
+        (ex("c"), Value::typed("x", ex("dt")).unwrap()),
+    ];
     assert_eq!(
-        line(element(Kind::Entity, ex("e"), a)),
+        entity_line(a),
         "entity(ex:e, [ex:q='ex:name', ex:i=1, ex:neg=-42, ex:zeros=005, \
          ex:l=\"7\" %% xsd:long, ex:c=\"x\" %% ex:dt])"
     );
@@ -185,15 +182,14 @@ fn an_integer_is_bare_only_when_it_reads_back_the_same() {
         ("3000000000", &XSD_INTEGER, false),
     ];
     for (text, datatype, bare) in cases {
-        let mut a = Attributes::new();
-        a.insert(ex("i"), Value::typed(text, QName::clone(datatype)).unwrap());
+        let value = Value::typed(text, QName::clone(datatype)).unwrap();
         let shown = if bare {
             text.to_owned()
         } else {
             format!("\"{text}\" %% xsd:{}", datatype.local())
         };
         assert_eq!(
-            line(element(Kind::Entity, ex("e"), a)),
+            entity_line([(ex("i"), value)]),
             format!("entity(ex:e, [ex:i={shown}])"),
             "{text} as {datatype:?}"
         );
@@ -203,10 +199,9 @@ fn an_integer_is_bare_only_when_it_reads_back_the_same() {
 #[test]
 fn a_lone_minus_or_empty_int_is_not_bare() {
     for text in ["-", "", "+1", "1.0", "--1", "1 ", " 5 ", "abc"] {
-        let mut a = Attributes::new();
-        a.insert(ex("i"), Value::typed(text, XSD_INT.clone()).unwrap());
+        let value = Value::typed(text, XSD_INT.clone()).unwrap();
         assert_eq!(
-            line(element(Kind::Entity, ex("e"), a)),
+            entity_line([(ex("i"), value)]),
             format!("entity(ex:e, [ex:i=\"{text}\" %% xsd:int])"),
             "lexical form {text:?}"
         );
@@ -220,10 +215,8 @@ fn local_parts_and_strings_escape() {
         line(element(Kind::Entity, all, Attributes::new())),
         "entity(ex:a\\=b\\'c\\(d\\)e\\,f\\:g\\-h\\[i\\]j\\.k\\;l)"
     );
-    let mut a = Attributes::new();
-    a.insert(ex("s"), "q\" b\\ n\n r\r t\t".into());
     assert_eq!(
-        line(element(Kind::Entity, ex("e"), a)),
+        entity_line([(ex("s"), "q\" b\\ n\n r\r t\t".into())]),
         "entity(ex:e, [ex:s=\"q\\\" b\\\\ n\\n r\\r t\\t\"])"
     );
 }
@@ -231,11 +224,7 @@ fn local_parts_and_strings_escape() {
 #[test]
 fn undeclared_namespaces_get_minted_prefixes_and_the_document_is_untouched() {
     let mut d = Document::new();
-    d.records.push(element(
-        Kind::Entity,
-        QName::new("http://new.org/", "e").unwrap(),
-        Attributes::new(),
-    ));
+    d.records.push(entity_in("http://new.org/", "e"));
     let before = d.namespaces.clone();
     assert_eq!(
         provn::to_string(&d).unwrap(),
@@ -248,11 +237,7 @@ fn undeclared_namespaces_get_minted_prefixes_and_the_document_is_untouched() {
 fn default_namespace_names_mint_no_prefix() {
     let mut d = Document::new();
     d.namespaces.set_default("http://default.org/");
-    d.records.push(element(
-        Kind::Entity,
-        QName::new("http://default.org/", "e").unwrap(),
-        Attributes::new(),
-    ));
+    d.records.push(entity_in("http://default.org/", "e"));
     assert_eq!(
         provn::to_string(&d).unwrap(),
         "document\n  default <http://default.org/>\n\n  entity(e)\nendDocument\n"
@@ -271,10 +256,7 @@ fn empty_document_has_no_blank_line() {
 fn bundles_sharing_an_identifier_are_written_once() {
     let mut d = document(vec![]);
     for id in ["e1", "e2"] {
-        d.bundles.push(bundle(
-            "b",
-            vec![element(Kind::Entity, ex(id), Attributes::new())],
-        ));
+        d.bundles.push(bundle("b", vec![entity(id)]));
     }
     let text = provn::to_string(&d).unwrap();
     assert_eq!(text.matches("bundle ex:b").count(), 1);
@@ -290,14 +272,7 @@ fn bundle_prefix_overrides_the_documents_for_its_own_identifier() {
     d.bundles.push(Bundle {
         id: QName::new(bundle_ns, "b").unwrap(),
         namespaces: inner,
-        records: vec![
-            element(
-                Kind::Entity,
-                QName::new(bundle_ns, "in").unwrap(),
-                Attributes::new(),
-            ),
-            element(Kind::Entity, ex("out"), Attributes::new()),
-        ],
+        records: vec![entity_in(bundle_ns, "in"), entity("out")],
     });
     let text = provn::to_string(&d).unwrap();
     // The identifier and the bundle's own names use the bundle's `ex`;
@@ -321,14 +296,8 @@ endDocument
 fn bundle_inherits_and_does_not_repeat_document_declarations() {
     let mut d = document(vec![]);
     d.namespaces.set_default("http://default.org/");
-    d.bundles.push(bundle(
-        "b",
-        vec![element(
-            Kind::Entity,
-            QName::new("http://default.org/", "e").unwrap(),
-            Attributes::new(),
-        )],
-    ));
+    d.bundles
+        .push(bundle("b", vec![entity_in("http://default.org/", "e")]));
     assert_eq!(
         provn::to_string(&d).unwrap(),
         "document\n  default <http://default.org/>\n  prefix ex <http://example.org/>\n\n  \
@@ -346,13 +315,7 @@ fn unwritable(d: &Document) -> (QName, String) {
 
 #[test]
 fn unrepresentable_iris_are_errors() {
-    let name_in = |iri: &str| {
-        element(
-            Kind::Entity,
-            QName::new(iri, "e").unwrap(),
-            Attributes::new(),
-        )
-    };
+    let name_in = |iri: &str| entity_in(iri, "e");
     // Met while rendering a name.
     let mut minted = Document::new();
     minted.records.push(name_in("http://x.org/a b/"));
@@ -392,17 +355,16 @@ fn unrepresentable_iris_are_errors() {
 
 #[test]
 fn an_attribute_spelling_an_own_formal_cannot_be_written() {
-    let mut a = Attributes::new();
-    a.insert(
+    let a = [(
         QName::new(crate::well_known::PROV, "entity").unwrap(),
         ex("x").into(),
-    );
+    )];
     let r = Record::Usage(crate::Usage {
         id: None,
         activity: Some(ex("a")),
         entity: None,
         time: None,
-        attributes: a,
+        attributes: a.into_iter().collect(),
     });
     let d = document(vec![r]);
     assert!(matches!(
@@ -450,11 +412,7 @@ fn a_minted_prefix_skips_one_the_table_already_binds() {
 #[test]
 fn statement_hands_back_the_prefixes_it_mints() {
     let mut names = Namespaces::new();
-    let e = element(
-        Kind::Entity,
-        QName::new("http://one.org/", "e").unwrap(),
-        Attributes::new(),
-    );
+    let e = entity_in("http://one.org/", "e");
     assert_eq!(provn::statement(&e, &mut names).unwrap(), "entity(ns1:e)");
     assert_eq!(names.lookup("ns1"), Some("http://one.org/"));
     assert_eq!(provn::statement(&e, &mut names).unwrap(), "entity(ns1:e)");

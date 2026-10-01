@@ -137,6 +137,13 @@ mod tests {
     use super::*;
     use crate::test_util::{agent, bundle, entity, ex};
 
+    fn bundled(bundles: Vec<Bundle>) -> Document {
+        Document {
+            bundles,
+            ..Document::default()
+        }
+    }
+
     #[test]
     fn equality_is_a_set_over_records() {
         let mut a = Document::new();
@@ -160,18 +167,14 @@ mod tests {
 
     #[test]
     fn an_empty_bundle_is_not_an_absent_one() {
-        let mut with = Document::new();
-        with.bundles.push(bundle("b", vec![]));
-        assert_ne!(with, Document::new());
+        assert_ne!(bundled(vec![bundle("b", vec![])]), Document::new());
     }
 
     #[test]
     fn a_top_level_record_is_not_the_same_record_in_a_bundle() {
         let mut top = Document::new();
         top.records.push(entity("e"));
-        let mut inside = Document::new();
-        inside.bundles.push(bundle("b", vec![entity("e")]));
-        assert_ne!(top, inside);
+        assert_ne!(top, bundled(vec![bundle("b", vec![entity("e")])]));
     }
 
     #[test]
@@ -192,9 +195,10 @@ mod tests {
 
     #[test]
     fn bundles_match_by_identifier() {
-        let mut a = Document::new();
-        a.bundles.push(bundle("b", vec![entity("e1")]));
-        a.bundles.push(bundle("c", vec![entity("e2")]));
+        let a = bundled(vec![
+            bundle("b", vec![entity("e1")]),
+            bundle("c", vec![entity("e2")]),
+        ]);
         let mut b = a.clone();
         b.bundles.reverse();
         b.bundles[0].records.push(entity("e2"));
@@ -208,18 +212,18 @@ mod tests {
 
     #[test]
     fn repeated_bundle_identifiers_merge() {
-        let mut a = Document::new();
-        a.bundles.push(bundle("b", vec![entity("e1")]));
-        a.bundles.push(bundle("b", vec![entity("e2")]));
+        let a = bundled(vec![
+            bundle("b", vec![entity("e1")]),
+            bundle("b", vec![entity("e2")]),
+        ]);
         assert_eq!(a, a);
-        let mut b = Document::new();
-        b.bundles.push(bundle("b", vec![entity("e2")]));
-        b.bundles.push(bundle("b", vec![entity("e1")]));
+        let b = bundled(vec![
+            bundle("b", vec![entity("e2")]),
+            bundle("b", vec![entity("e1")]),
+        ]);
         assert_eq!(a, b);
         assert_eq!(b, a);
-        let mut c = Document::new();
-        c.bundles
-            .push(bundle("b", vec![entity("e1"), entity("e2")]));
+        let mut c = bundled(vec![bundle("b", vec![entity("e1"), entity("e2")])]);
         assert_eq!(a, c);
         c.bundles.push(bundle("c", vec![entity("e1")]));
         assert_ne!(a, c);
@@ -255,15 +259,11 @@ mod tests {
 
     #[test]
     fn merged_bundles_keep_first_positions() {
-        let bundles = vec![
+        let doc = bundled(vec![
             bundle("b", vec![entity("e1")]),
             bundle("c", vec![entity("e2")]),
             bundle("b", vec![entity("e3")]),
-        ];
-        let doc = Document {
-            bundles,
-            ..Document::default()
-        };
+        ]);
         let merged = doc.merged_bundles();
         assert!(matches!(merged, Cow::Owned(_)));
         assert_eq!(merged.len(), 2);
@@ -278,8 +278,7 @@ mod tests {
         first.namespaces.declare("a", "http://a.org/").unwrap();
         let mut second = bundle("b", vec![entity("e2")]);
         second.namespaces.declare("z", "http://z.org/").unwrap();
-        let mut d = Document::new();
-        d.bundles = vec![first, second];
+        let d = bundled(vec![first, second]);
         let merged = d.merged_bundles();
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].namespaces.lookup("a"), Some("http://a.org/"));
@@ -288,13 +287,10 @@ mod tests {
 
     #[test]
     fn merged_bundles_borrow_when_identifiers_are_unique() {
-        let doc = Document {
-            bundles: vec![
-                bundle("b", vec![entity("e1")]),
-                bundle("c", vec![entity("e2")]),
-            ],
-            ..Document::default()
-        };
+        let doc = bundled(vec![
+            bundle("b", vec![entity("e1")]),
+            bundle("c", vec![entity("e2")]),
+        ]);
         let merged = doc.merged_bundles();
         assert!(matches!(merged, Cow::Borrowed(_)));
         assert!(std::ptr::eq(merged.as_ptr(), doc.bundles.as_ptr()));
@@ -303,13 +299,10 @@ mod tests {
 
     #[test]
     fn bundle_returns_the_first_of_several_with_one_identifier() {
-        let doc = Document {
-            bundles: vec![
-                bundle("b", vec![entity("e1")]),
-                bundle("b", vec![entity("e2")]),
-            ],
-            ..Document::default()
-        };
+        let doc = bundled(vec![
+            bundle("b", vec![entity("e1")]),
+            bundle("b", vec![entity("e2")]),
+        ]);
         assert_eq!(doc.bundle(&ex("b")).unwrap().records, [entity("e1")]);
     }
 }

@@ -126,6 +126,7 @@ fn enter(depth: usize, token: &Token) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::provn::Profile;
+    use crate::test_util::{located, syntax};
     use crate::{Error, provn};
 
     const P: &str = "document\nprefix ex <http://example.org/>\nprefix dictExt <http://example.org/dictionaries#>\n";
@@ -155,21 +156,9 @@ mod tests {
             "entty(ex:e)",
             "hadDictionaryMember(ex:d, ex:e, \"k\")",
         ] {
-            assert!(
-                matches!(
-                    provn::read(&format!("{P}{body}\nendDocument\n")),
-                    Err(Error::Syntax { .. })
-                ),
-                "{body}"
-            );
+            syntax(report(body, Profile::Default).unwrap_err());
         }
-        assert!(
-            provn::read_with(
-                &format!("{P}mentionOf(ex:a, ex:b, ex:c)\nendDocument\n"),
-                Profile::Strict
-            )
-            .is_err()
-        );
+        assert!(report("mentionOf(ex:a, ex:b, ex:c)", Profile::Strict).is_err());
         let (doc, ignored) = report("prov:mentionOf(ex:a, ex:b, ex:c)", Profile::Strict).unwrap();
         assert_eq!((doc.records.len(), ignored.len()), (1, 0));
     }
@@ -183,30 +172,15 @@ mod tests {
             "ex:foo({})",
             "ex:foo(ex:e, [ex:k=1], ex:f)",
         ] {
-            assert!(
-                matches!(
-                    provn::read(&format!("{P}{body}\nendDocument\n")),
-                    Err(Error::Syntax { .. })
-                ),
-                "{body}"
-            );
+            syntax(report(body, Profile::Default).unwrap_err());
         }
     }
 
     #[test]
     fn nesting_is_limited() {
-        let deep = format!(
-            "{P}ex:f({}ex:e{})\nendDocument\n",
-            "(".repeat(100_000),
-            ")".repeat(100_000)
-        );
-        assert!(matches!(provn::read(&deep), Err(Error::Syntax { .. })));
-        let ok = format!(
-            "{P}ex:f({}ex:e{})\nendDocument\n",
-            "(".repeat(60),
-            ")".repeat(60)
-        );
-        assert!(provn::read(&ok).is_ok());
+        let nested = |n: usize| format!("ex:f({}ex:e{})", "(".repeat(n), ")".repeat(n));
+        syntax(report(&nested(100_000), Profile::Default).unwrap_err());
+        assert!(report(&nested(60), Profile::Default).is_ok());
     }
 
     /// The document with `body` on line 4, under `profile`.
@@ -218,15 +192,6 @@ mod tests {
             .map(|r| (r.document, r.ignored))
     }
 
-    fn syntax_position(
-        result: crate::Result<(crate::Document, Vec<provn::Ignored>)>,
-    ) -> (usize, usize) {
-        match result {
-            Err(Error::Syntax { line, column, .. }) => (line, column),
-            other => panic!("expected a syntax error, got {other:?}"),
-        }
-    }
-
     #[test]
     fn a_time_in_an_extension_must_be_a_datetime() {
         for profile in [Profile::Strict, Profile::Default] {
@@ -236,17 +201,9 @@ mod tests {
                 "2011-11-16T25:00:00",
             ] {
                 let text = format!("{P}ex:f({time})\nendDocument");
-                match provn::read_with(&text, profile) {
-                    Err(Error::At {
-                        line,
-                        column,
-                        error,
-                    }) => {
-                        assert_eq!((line, column), (4, 6), "{time}");
-                        assert!(matches!(*error, Error::InvalidLiteral { .. }), "{time}");
-                    }
-                    other => panic!("{time}: expected Error::At, got {other:?}"),
-                }
+                let (at, error) = located(provn::read_with(&text, profile).unwrap_err());
+                assert_eq!(at, (4, 6), "{time}");
+                assert!(matches!(error, Error::InvalidLiteral { .. }), "{time}");
             }
             let text =
                 format!("{P}ex:f(2011-11-16T16:05:33, {{2012-01-01T00:00:00Z}})\nendDocument");
@@ -260,18 +217,13 @@ mod tests {
         let nested = |n: usize| format!("ex:f({}ex:e{})", "(".repeat(n), ")".repeat(n));
         assert!(report(&nested(64), Profile::Strict).is_ok());
         // The 65th opening parenthesis follows `ex:f(` and 64 others.
-        assert_eq!(
-            syntax_position(report(&nested(65), Profile::Strict)),
-            (4, 70)
-        );
-        match report(&nested(65), Profile::Strict) {
-            Err(Error::Syntax { message, .. }) => assert!(message.contains("64"), "{message}"),
-            other => panic!("expected a syntax error, got {other:?}"),
-        }
+        let (at, message) = syntax(report(&nested(65), Profile::Strict).unwrap_err());
+        assert_eq!(at, (4, 70));
+        assert!(message.contains("64"), "{message}");
         let expressions = |n: usize| format!("ex:f({}ex:e{})", "ex:g(".repeat(n), ")".repeat(n));
         assert!(report(&expressions(64), Profile::Strict).is_ok());
         assert_eq!(
-            syntax_position(report(&expressions(65), Profile::Strict)),
+            syntax(report(&expressions(65), Profile::Strict).unwrap_err()).0,
             (4, 5 + 64 * 5 + 1)
         );
     }
@@ -319,7 +271,7 @@ mod tests {
             ("ex:f({set(1)})", 10),
         ] {
             assert_eq!(
-                syntax_position(report(body, Profile::Default)),
+                syntax(report(body, Profile::Default).unwrap_err()).0,
                 (4, column),
                 "{body}"
             );
@@ -350,7 +302,10 @@ mod tests {
         }
         // After a bundle, an extension is an expression out of place: production [1].
         let after = "bundle ex:b\nendBundle\nex:f(1)";
-        assert_eq!(syntax_position(report(after, Profile::Strict)), (6, 1));
+        assert_eq!(
+            syntax(report(after, Profile::Strict).unwrap_err()).0,
+            (6, 1)
+        );
         assert_eq!(report(after, Profile::Default).unwrap().1.len(), 1);
     }
 

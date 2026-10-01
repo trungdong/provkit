@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{Report, corpus_dir, files, files_unchecked, require_a_match};
+use common::{Report, corpus_dir, files, files_unchecked, only, pairs, require_a_match};
 use provkit::Error;
 use provkit::provn::Profile;
 
@@ -11,25 +11,14 @@ use provkit::provn::Profile;
 /// complete PROV-N, from `tests/data/excluded_spec_examples.tsv` (file name,
 /// tab, reason). Names and reasons follow `corpus/provn/README.md`.
 fn excluded_spec_examples() -> Vec<(String, String)> {
-    exclusions("excluded_spec_examples.tsv")
+    pairs("excluded_spec_examples.tsv")
 }
 
 /// `ProvToolbox`'s own documents outside what the default profile reads,
 /// from `tests/data/excluded_provtoolbox_documents.tsv` (file name, tab,
 /// reason). Names and reasons follow `corpus/provn/README.md`.
 fn excluded_provtoolbox_documents() -> Vec<(String, String)> {
-    exclusions("excluded_provtoolbox_documents.tsv")
-}
-
-/// The (file name, reason) rows of an exclusion list in `tests/data`.
-fn exclusions(file: &str) -> Vec<(String, String)> {
-    common::tsv(&common::data_path(file))
-        .into_iter()
-        .map(|row| match row.as_slice() {
-            [name, reason] => (name.clone(), reason.clone()),
-            other => panic!("{file}: expected a name and a reason, got {other:?}"),
-        })
-        .collect()
+    pairs("excluded_provtoolbox_documents.tsv")
 }
 
 fn reason<'a>(list: &'a [(String, String)], name: &str) -> Option<&'a str> {
@@ -89,7 +78,7 @@ fn spec_examples_parse_under_strict() {
         }
     }
     require_a_match(any_selected);
-    if std::env::var("PROVKIT_ONLY").is_err() {
+    if only().is_none() {
         assert_eq!(excluded, excluded_examples.len());
     }
     report.finish(127 - excluded_examples.len());

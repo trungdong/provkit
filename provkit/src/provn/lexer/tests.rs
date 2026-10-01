@@ -1,5 +1,5 @@
 use super::*;
-use crate::Error;
+use crate::test_util::syntax;
 
 fn kinds(src: &str) -> Vec<TokenKind> {
     tokenize(src).unwrap().into_iter().map(|t| t.kind).collect()
@@ -14,10 +14,7 @@ fn name(prefix: &str, local: &str) -> TokenKind {
 
 /// The line and column of the syntax error `src` raises.
 fn syntax_at(src: &str) -> (usize, usize) {
-    match tokenize(src) {
-        Err(Error::Syntax { line, column, .. }) => (line, column),
-        other => panic!("expected a syntax error for {src:?}, got {other:?}"),
-    }
+    syntax(tokenize(src).unwrap_err()).0
 }
 
 #[test]
@@ -75,15 +72,8 @@ line""" "#,
     assert_eq!(t[1].kind, TokenKind::LangTag("en".into()));
     assert_eq!(t[3].kind, TokenKind::LangTag("fr-CA".into()));
     assert_eq!(t[4].kind, TokenKind::Str("multi\nline".into()));
-    assert!(matches!(
-        tokenize(r#""open"#),
-        Err(Error::Syntax {
-            line: 1,
-            column: 1,
-            ..
-        })
-    ));
-    assert!(matches!(tokenize(r#""\q""#), Err(Error::Syntax { .. })));
+    assert_eq!(syntax_at(r#""open"#), (1, 1));
+    syntax(tokenize(r#""\q""#).unwrap_err());
 }
 
 #[test]
@@ -102,34 +92,22 @@ fn iri_typed_and_comments() {
     assert_eq!(t[3].kind, TokenKind::Str("1".into()));
     assert_eq!(t[4].kind, TokenKind::Typed);
     assert_eq!((t[3].line, t[3].column), (3, 9));
-    assert!(matches!(tokenize("/* open"), Err(Error::Syntax { .. })));
-    assert!(matches!(tokenize("<open"), Err(Error::Syntax { .. })));
-    assert!(matches!(tokenize("'ex:open"), Err(Error::Syntax { .. })));
+    syntax(tokenize("/* open").unwrap_err());
+    syntax(tokenize("<open").unwrap_err());
+    syntax(tokenize("'ex:open").unwrap_err());
 }
 
 #[test]
 fn unterminated_iri_is_reported_at_its_start() {
     for src in ["x <http://x", "x <http://x\n"] {
-        match tokenize(src) {
-            Err(Error::Syntax { line, column, .. }) => {
-                assert_eq!((line, column), (1, 3), "{src:?}");
-            }
-            other => panic!("expected an error for {src:?}, got {other:?}"),
-        }
+        assert_eq!(syntax_at(src), (1, 3), "{src:?}");
     }
 }
 
 #[test]
 fn forbidden_iri_character_is_reported_at_the_character() {
     for (src, column) in [("<a{b>", 3), ("<ab|>", 4), ("<a\\b>", 3)] {
-        match tokenize(src) {
-            Err(Error::Syntax {
-                line, column: c, ..
-            }) => {
-                assert_eq!((line, c), (1, column), "{src:?}");
-            }
-            other => panic!("expected an error for {src:?}, got {other:?}"),
-        }
+        assert_eq!(syntax_at(src), (1, column), "{src:?}");
     }
 }
 
@@ -138,10 +116,7 @@ fn columns_count_characters_not_bytes() {
     let t = tokenize("\"é\" ex:é ex:x").unwrap();
     assert_eq!(t[1].kind, name("ex", "é"));
     assert_eq!((t[2].line, t[2].column), (1, 10));
-    match tokenize("\"é\" \"\\q\"") {
-        Err(Error::Syntax { line, column, .. }) => assert_eq!((line, column), (1, 6)),
-        other => panic!("unexpected {other:?}"),
-    }
+    assert_eq!(syntax_at("\"é\" \"\\q\""), (1, 6));
 }
 
 #[test]
@@ -174,11 +149,11 @@ fn local_part_rules() {
     );
     assert!(matches!(&kinds("ex:a.b")[0], TokenKind::Name { local, .. } if local == "a.b"));
     // "ex:a." is the name "ex:a" followed by an unexpected '.'.
-    assert!(matches!(tokenize("ex:a."), Err(Error::Syntax { .. })));
+    syntax(tokenize("ex:a.").unwrap_err());
     assert!(
         matches!(&kinds("bbc:")[0], TokenKind::Name { prefix, local } if prefix == "bbc" && local.is_empty())
     );
-    assert!(matches!(tokenize("ex:a:b"), Err(Error::Syntax { .. })));
+    syntax(tokenize("ex:a:b").unwrap_err());
 }
 
 #[test]
@@ -198,7 +173,7 @@ fn local_part_accepts_the_full_grammar() {
     assert_eq!(kinds("ex:a-b.c")[0], name("ex", "a-b.c"));
     // An escaped dot may end a local part; a bare one may not.
     assert_eq!(kinds(r"ex:a\.")[0], name("ex", "a."));
-    assert!(matches!(tokenize(r"ex:a\q"), Err(Error::Syntax { .. })));
+    syntax(tokenize(r"ex:a\q").unwrap_err());
     assert_eq!(kinds("ex:a%2Fb")[0], name("ex", "a%2Fb"));
 }
 
@@ -226,14 +201,8 @@ fn a_bare_name_may_start_with_an_at_sign() {
 
 #[test]
 fn an_at_sign_before_a_bad_escape_is_reported_at_the_escape() {
-    match tokenize("ex:a @\\q") {
-        Err(Error::Syntax { line, column, .. }) => assert_eq!((line, column), (1, 7)),
-        other => panic!("unexpected {other:?}"),
-    }
-    match tokenize(", @\\") {
-        Err(Error::Syntax { line, column, .. }) => assert_eq!((line, column), (1, 4)),
-        other => panic!("unexpected {other:?}"),
-    }
+    assert_eq!(syntax_at("ex:a @\\q"), (1, 7));
+    assert_eq!(syntax_at(", @\\"), (1, 4));
 }
 
 #[test]
@@ -279,10 +248,10 @@ fn a_comment_glued_to_a_name_is_part_of_the_name() {
 #[test]
 fn a_block_comment_needs_both_delimiters() {
     assert_eq!(syntax_at("/*/"), (1, 1));
-    match tokenize("/*/") {
-        Err(Error::Syntax { message, .. }) => assert_eq!(message, "unterminated comment"),
-        other => panic!("unexpected {other:?}"),
-    }
+    assert_eq!(
+        syntax(tokenize("/*/").unwrap_err()).1,
+        "unterminated comment"
+    );
     assert_eq!(syntax_at("x /*/ y"), (1, 3));
     assert_eq!(kinds("/**/ x"), [name("", "x"), TokenKind::Eof]);
     assert_eq!(kinds("/***/ x"), [name("", "x"), TokenKind::Eof]);
@@ -357,10 +326,8 @@ fn an_upper_case_u_escape_below_u10000_is_a_syntax_error_at_its_backslash() {
     ] {
         assert_eq!(syntax_at(src), (1, column), "{src}");
     }
-    match tokenize("\"\\U000000E9\"") {
-        Err(Error::Syntax { message, .. }) => assert!(message.contains("U+10000"), "{message}"),
-        other => panic!("unexpected {other:?}"),
-    }
+    let (_, message) = syntax(tokenize("\"\\U000000E9\"").unwrap_err());
+    assert!(message.contains("U+10000"), "{message}");
 }
 
 #[test]
@@ -380,14 +347,7 @@ fn a_bad_code_point_escape_is_reported_at_its_backslash() {
         ("<a\\u005C>", 3),
         ("<a\\u007B>", 3),
     ] {
-        match tokenize(src) {
-            Err(Error::Syntax {
-                line, column: c, ..
-            }) => {
-                assert_eq!((line, c), (1, column), "{src:?}");
-            }
-            other => panic!("expected an error for {src:?}, got {other:?}"),
-        }
+        assert_eq!(syntax_at(src), (1, column), "{src:?}");
     }
 }
 
@@ -409,21 +369,13 @@ fn crlf_inside_a_comment_and_a_long_string_counts_once() {
     assert_eq!((t[2].line, t[2].column), (3, 6));
     assert_eq!(t[3].kind, TokenKind::Str("p\r\nq".into()));
     assert_eq!((t[4].line, t[4].column), (4, 6));
-    match tokenize("\"\"\"p\r\nq\\x\"\"\"") {
-        Err(Error::Syntax { line, column, .. }) => assert_eq!((line, column), (2, 2)),
-        other => panic!("unexpected {other:?}"),
-    }
+    assert_eq!(syntax_at("\"\"\"p\r\nq\\x\"\"\""), (2, 2));
 }
 
 #[test]
 fn a_qualified_name_literal_left_open_is_reported_at_its_quote() {
     for src in ["x 'ex:a", "x 'ex:a\ny'", "x 'ex:a\r", "x 'ex:a\\"] {
-        match tokenize(src) {
-            Err(Error::Syntax { line, column, .. }) => {
-                assert_eq!((line, column), (1, 3), "{src:?}");
-            }
-            other => panic!("expected an error for {src:?}, got {other:?}"),
-        }
+        assert_eq!(syntax_at(src), (1, 3), "{src:?}");
     }
 }
 
@@ -468,10 +420,7 @@ fn positions_count_crlf_once() {
 
 #[test]
 fn error_position_inside_a_multiline_string() {
-    match tokenize("a\n\"\"\"x\n\\q\"\"\"") {
-        Err(Error::Syntax { line, column, .. }) => assert_eq!((line, column), (3, 1)),
-        other => panic!("unexpected {other:?}"),
-    }
+    assert_eq!(syntax_at("a\n\"\"\"x\n\\q\"\"\""), (3, 1));
 }
 
 #[test]
@@ -488,10 +437,7 @@ fn only_grammar_whitespace_separates_tokens() {
         '\u{A0}', '\u{2028}', '\u{2003}', '\u{3000}', '\u{c}', '\u{b}', '\u{85}',
     ] {
         assert_eq!(syntax_at(&format!("ex:a{space}ex:b")), (1, 5), "{space:?}");
-        assert!(matches!(
-            tokenize(&format!("{space}ex:a")),
-            Err(Error::Syntax { .. })
-        ));
+        syntax(tokenize(&format!("{space}ex:a")).unwrap_err());
     }
 }
 
@@ -555,30 +501,14 @@ fn a_raw_line_break_ends_a_short_string() {
 fn a_space_or_control_character_in_an_iri_is_reported_where_it_is() {
     for c in [' ', '\t', '\0', '\u{1}', '\u{1F}'] {
         let text = format!("<http://d{c}/x>");
-        match tokenize(&text) {
-            Err(Error::Syntax {
-                line,
-                column,
-                message,
-            }) => {
-                assert_eq!((line, column), (1, 10), "{c:?}");
-                assert!(message.starts_with("invalid character"), "{message}");
-            }
-            other => panic!("{c:?}: {other:?}"),
-        }
+        let (at, message) = syntax(tokenize(&text).unwrap_err());
+        assert_eq!(at, (1, 10), "{c:?}");
+        assert!(message.starts_with("invalid character"), "{message}");
     }
     // A line break ends the scan: the IRI never closed.
     for text in ["<http://d\n/x>", "<http://d\r/x>", "<http://d"] {
-        match tokenize(text) {
-            Err(Error::Syntax {
-                line,
-                column,
-                message,
-            }) => {
-                assert_eq!((line, column), (1, 1), "{text:?}");
-                assert_eq!(message, "unterminated IRI");
-            }
-            other => panic!("{text:?}: {other:?}"),
-        }
+        let (at, message) = syntax(tokenize(text).unwrap_err());
+        assert_eq!(at, (1, 1), "{text:?}");
+        assert_eq!(message, "unterminated IRI");
     }
 }

@@ -263,49 +263,54 @@ fn typed(value: String, datatype: &QName, names: &mut WriteScope<'_>) -> JsonVal
 
 #[cfg(test)]
 mod tests {
-    use crate::test_util::{Broken, bundle, ex};
+    use crate::test_util::{
+        Broken, bundle, document, element, entity, entity_in, ex, relation, round_trip, written,
+    };
     use crate::{
-        Attributes, Bundle, Document, Entity, Generation, Kind, LangStr, Namespaces, QName, Record,
-        json,
+        Attributes, Bundle, Document, Formal, FormalAttr, Generation, Kind, LangStr, Namespaces,
+        QName, Record, json,
     };
 
-    fn entity_in(id: QName) -> Record {
-        Record::Entity(Entity {
-            id,
-            attributes: Attributes::new(),
-        })
+    /// A `wasGeneratedBy` of `ex:e` with no identifier.
+    fn blank_generation() -> Record {
+        relation(
+            Kind::Generation,
+            None,
+            vec![(FormalAttr::Entity, Formal::Name(ex("e")))],
+        )
     }
 
     #[test]
     fn a_bundle_writes_bare_names_against_its_own_default() {
-        let one = QName::new("http://one.org/", "a").unwrap();
-        let two = QName::new("http://two.org/", "b").unwrap();
         let mut d = Document::new();
         d.namespaces.set_default("http://one.org/");
-        let mut inner = bundle("b1", vec![entity_in(one), entity_in(two)]);
+        let mut inner = bundle(
+            "b1",
+            vec![
+                entity_in("http://one.org/", "a"),
+                entity_in("http://two.org/", "b"),
+            ],
+        );
         inner.namespaces.set_default("http://two.org/");
         d.namespaces.declare("ex", "http://example.org/").unwrap();
         d.bundles.push(inner);
 
-        let text = json::to_string(&d).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let (text, v) = round_trip(&d);
         let entities = v["bundle"]["ex:b1"]["entity"].as_object().unwrap();
         // The name in the bundle's default namespace is bare; the other is not.
         assert!(entities.contains_key("b"), "{text}");
         assert!(!entities.contains_key("a"), "{text}");
-        assert_eq!(json::read(&text).unwrap(), d);
     }
 
     #[test]
     fn a_bundle_inherits_a_document_prefix_and_declares_a_minted_one() {
-        let minted = QName::new("http://new.org/", "m").unwrap();
-        let mut d = Document::new();
-        d.namespaces.declare("ex", "http://example.org/").unwrap();
-        d.bundles
-            .push(bundle("b1", vec![entity_in(ex("e")), entity_in(minted)]));
+        let mut d = document(vec![]);
+        d.bundles.push(bundle(
+            "b1",
+            vec![entity("e"), entity_in("http://new.org/", "m")],
+        ));
 
-        let text = json::to_string(&d).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let (text, v) = round_trip(&d);
         assert_eq!(
             v["prefix"],
             serde_json::json!({"ex": "http://example.org/"})
@@ -318,14 +323,11 @@ mod tests {
         let entities = inner["entity"].as_object().unwrap();
         assert!(entities.contains_key("ex:e"), "{text}");
         assert!(entities.contains_key("ns1:m"), "{text}");
-        assert_eq!(json::read(&text).unwrap(), d);
     }
 
     #[test]
     fn output_is_indented_by_two_spaces_and_ends_with_a_newline() {
-        let mut d = Document::new();
-        d.namespaces.declare("ex", "http://example.org/").unwrap();
-        d.records.push(entity_in(ex("e")));
+        let d = document(vec![entity("e")]);
         assert_eq!(
             json::to_string(&d).unwrap(),
             "{\n  \"prefix\": {\n    \"ex\": \"http://example.org/\"\n  },\n  \"entity\": {\n    \"ex:e\": {}\n  }\n}\n"
@@ -334,23 +336,15 @@ mod tests {
 
     #[test]
     fn shape_and_blank_ids() {
-        let mut d = Document::new();
-        d.namespaces.declare("ex", "http://example.org/").unwrap();
-        d.records.push(Record::Generation(Generation {
-            id: None,
-            entity: Some(ex("e")),
-            activity: None,
-            time: None,
-            attributes: Attributes::new(),
-        }));
-        d.records.push(entity_in(ex("e")));
-        d.records
-            .push(entity_in(QName::new("http://other/", "o").unwrap()));
-        let text = json::to_string(&d).unwrap();
+        let d = document(vec![
+            blank_generation(),
+            entity("e"),
+            entity_in("http://other/", "o"),
+        ]);
+        let (text, v) = written(&d);
         let at = |needle: &str| text.find(needle).unwrap_or_else(|| panic!("no {needle}"));
         assert!(at("\"prefix\"") < at("\"entity\""));
         assert!(at("\"entity\"") < at("\"wasGeneratedBy\""));
-        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
         assert_eq!(v.as_object().unwrap().len(), 3);
         assert_eq!(v["prefix"]["ns1"], "http://other/");
         assert_eq!(v["entity"]["ns1:o"], serde_json::json!({}));
@@ -361,20 +355,10 @@ mod tests {
 
     #[test]
     fn blank_ids_continue_through_bundles() {
-        let blank = || {
-            Record::Generation(Generation {
-                id: None,
-                entity: Some(ex("e")),
-                activity: None,
-                time: None,
-                attributes: Attributes::new(),
-            })
-        };
-        let mut d = Document::new();
-        d.namespaces.declare("ex", "http://example.org/").unwrap();
-        d.records.push(blank());
-        d.bundles.push(bundle("b", vec![blank(), blank()]));
-        let v: serde_json::Value = serde_json::from_str(&json::to_string(&d).unwrap()).unwrap();
+        let mut d = document(vec![blank_generation()]);
+        d.bundles
+            .push(bundle("b", vec![blank_generation(), blank_generation()]));
+        let (_, v) = written(&d);
         assert!(v["wasGeneratedBy"]["_:id1"].is_object());
         let inner = &v["bundle"]["ex:b"]["wasGeneratedBy"];
         assert!(inner["_:id2"].is_object() && inner["_:id3"].is_object());
@@ -382,22 +366,18 @@ mod tests {
 
     #[test]
     fn blank_ids_follow_record_order() {
-        let mut d = Document::new();
-        d.namespaces.declare("ex", "http://example.org/").unwrap();
-        d.records
-            .push(Record::from_parts(Kind::Usage, None, vec![], Attributes::new()).unwrap());
-        d.records
-            .push(Record::from_parts(Kind::Generation, None, vec![], Attributes::new()).unwrap());
-        let v: serde_json::Value = serde_json::from_str(&json::to_string(&d).unwrap()).unwrap();
+        let d = document(vec![
+            relation(Kind::Usage, None, vec![]),
+            relation(Kind::Generation, None, vec![]),
+        ]);
+        let (_, v) = written(&d);
         assert!(v["used"]["_:id1"].is_object());
         assert!(v["wasGeneratedBy"]["_:id2"].is_object());
     }
 
     #[test]
     fn failing_writer_reports_io() {
-        let mut d = Document::new();
-        d.namespaces.declare("ex", "http://example.org/").unwrap();
-        d.records.push(entity_in(ex("e")));
+        let d = document(vec![entity("e")]);
         assert!(matches!(
             json::write(&d, &mut Broken),
             Err(crate::Error::Io(_))
@@ -412,36 +392,30 @@ mod tests {
             Bundle {
                 id: ex("b"),
                 namespaces: ns,
-                records: vec![entity_in(QName::new(iri, local).unwrap())],
+                records: vec![entity_in(iri, local)],
             }
         };
-        let mut d = Document::new();
-        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        let mut d = document(vec![]);
         d.bundles.push(bundle("http://one.org/", "x"));
         d.bundles.push(bundle("http://two.org/", "y"));
-        let text = json::to_string(&d).unwrap();
-        assert_eq!(json::read(&text).unwrap(), d);
+        round_trip(&d);
     }
 
     #[test]
     fn default_namespace_never_mints_a_prefix() {
         let mut d = Document::new();
         d.namespaces.set_default("http://example.org/");
-        d.records.push(entity_in(ex("e")));
-        let text = json::to_string(&d).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        d.records.push(entity("e"));
+        let (_, v) = round_trip(&d);
         assert_eq!(
             v["prefix"],
             serde_json::json!({"default": "http://example.org/"})
         );
         assert!(v["entity"]["e"].is_object());
-        assert_eq!(json::read(&text).unwrap(), d);
     }
 
     #[test]
     fn every_value_variant_round_trips() {
-        let mut d = Document::new();
-        d.namespaces.declare("ex", "http://example.org/").unwrap();
         let mut a = Attributes::new();
         a.insert(ex("s"), "plain".into());
         a.insert(ex("l"), LangStr::new("bonjour", "fr").unwrap().into());
@@ -456,18 +430,12 @@ mod tests {
         a.insert(ex("f"), 1.5f64.into());
         a.insert(ex("b"), true.into());
         a.insert(ex("s"), "second".into());
-        d.records.push(Record::Entity(Entity {
-            id: ex("e"),
-            attributes: a,
-        }));
+        let mut d = document(vec![element(Kind::Entity, ex("e"), a)]);
         for &kind in Kind::ALL {
-            let id = Some(ex(kind.name()));
             d.records
-                .push(Record::from_parts(kind, id, vec![], Attributes::new()).unwrap());
+                .push(relation(kind, Some(ex(kind.name())), vec![]));
         }
-        let text = json::to_string(&d).unwrap();
-        assert_eq!(json::read(&text).unwrap(), d);
-        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let (text, v) = round_trip(&d);
         let body = &v["entity"]["ex:e"];
         for key in ["ex:i", "ex:f", "ex:b", "ex:q", "ex:d", "ex:l"] {
             assert!(body[key]["$"].is_string(), "{key} must be a `$` string");
@@ -480,22 +448,16 @@ mod tests {
 
     #[test]
     fn bundle_redeclaring_its_own_prefix_round_trips() {
-        let mut d = Document::new();
-        d.namespaces.declare("ex", "http://example.org/").unwrap();
-        d.records.push(entity_in(ex("top")));
+        let mut d = document(vec![entity("top")]);
         let mut inner = Namespaces::new();
         inner.declare("ex", "http://shadow.org/").unwrap();
         d.bundles.push(Bundle {
             id: QName::new("http://shadow.org/", "b").unwrap(),
             namespaces: inner,
-            records: vec![
-                entity_in(QName::new("http://shadow.org/", "e").unwrap()),
-                entity_in(ex("f")),
-            ],
+            records: vec![entity_in("http://shadow.org/", "e"), entity("f")],
         });
-        let text = json::to_string(&d).unwrap();
+        let (text, _) = round_trip(&d);
         assert!(text.contains("\"ex:b\""), "key uses the bundle's table");
-        assert_eq!(json::read(&text).unwrap(), d);
     }
 
     #[test]
@@ -503,19 +465,12 @@ mod tests {
         let tagged = |tag: &str| {
             let mut attributes = Attributes::new();
             attributes.insert(ex("tag"), tag.into());
-            Record::Entity(Entity {
-                id: ex("e"),
-                attributes,
-            })
+            element(Kind::Entity, ex("e"), attributes)
         };
-        let mut d = Document::new();
-        d.namespaces.declare("ex", "http://example.org/").unwrap();
-        d.records = vec![tagged("one"), tagged("two"), entity_in(ex("single"))];
-        let text = json::to_string(&d).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let d = document(vec![tagged("one"), tagged("two"), entity("single")]);
+        let (_, v) = round_trip(&d);
         assert_eq!(v["entity"]["ex:e"].as_array().map(Vec::len), Some(2));
         assert!(v["entity"]["ex:single"].is_object());
-        assert_eq!(json::read(&text).unwrap(), d);
     }
 
     #[test]
@@ -525,15 +480,13 @@ mod tests {
             QName::new(crate::well_known::PROV, "activity").unwrap(),
             ex("a2").into(),
         );
-        let mut d = Document::new();
-        d.namespaces.declare("ex", "http://example.org/").unwrap();
-        d.records.push(Record::Generation(Generation {
+        let d = document(vec![Record::Generation(Generation {
             id: None,
             entity: Some(ex("e")),
             activity: Some(ex("a")),
             time: None,
             attributes,
-        }));
+        })]);
         assert!(matches!(
             json::to_string(&d),
             Err(crate::Error::InvalidRecord {
@@ -548,17 +501,15 @@ mod tests {
         let mut d = Document::new();
         d.namespaces.declare("default", "http://d.org/").unwrap();
         d.namespaces.set_default("http://example.org/");
-        d.records
-            .push(entity_in(QName::new("http://d.org/", "e").unwrap()));
+        d.records.push(entity_in("http://d.org/", "e"));
         let mut inner = Namespaces::new();
         inner.declare("default", "http://b.org/").unwrap();
         d.bundles.push(Bundle {
             id: ex("b"),
             namespaces: inner,
-            records: vec![entity_in(QName::new("http://b.org/", "f").unwrap())],
+            records: vec![entity_in("http://b.org/", "f")],
         });
-        let text = json::to_string(&d).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let (_, v) = round_trip(&d);
         assert_eq!(
             v["prefix"],
             serde_json::json!({"ns1": "http://d.org/", "default": "http://example.org/"})
@@ -568,25 +519,21 @@ mod tests {
             v["bundle"]["b"]["prefix"],
             serde_json::json!({"ns2": "http://b.org/"})
         );
-        assert_eq!(json::read(&text).unwrap(), d);
     }
 
     #[test]
     fn bundles_sharing_an_identifier_merge_and_round_trip() {
-        let mut d = Document::new();
-        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        let mut d = document(vec![]);
         let mut other = Namespaces::new();
         other.declare("o", "http://o.org/").unwrap();
-        d.bundles.push(bundle("b", vec![entity_in(ex("one"))]));
+        d.bundles.push(bundle("b", vec![entity("one")]));
         d.bundles.push(Bundle {
             id: ex("b"),
             namespaces: other,
-            records: vec![entity_in(QName::new("http://o.org/", "two").unwrap())],
+            records: vec![entity_in("http://o.org/", "two")],
         });
-        let text = json::to_string(&d).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let (_, v) = round_trip(&d);
         assert_eq!(v["bundle"].as_object().unwrap().len(), 1);
-        assert_eq!(json::read(&text).unwrap(), d);
     }
 
     /// Two bundles whose identifiers differ but whose own tables spell both
@@ -598,7 +545,7 @@ mod tests {
             Bundle {
                 id: QName::new(iri, "b").unwrap(),
                 namespaces: ns,
-                records: vec![entity_in(QName::new(iri, "e").unwrap())],
+                records: vec![entity_in(iri, "e")],
             }
         };
         let mut d = Document::new();
@@ -610,8 +557,7 @@ mod tests {
     #[test]
     fn colliding_bundle_keys_get_a_fresh_prefix_and_round_trip() {
         let d = colliding_bundles();
-        let text = json::to_string(&d).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let (text, v) = round_trip(&d);
         let bundles = v["bundle"].as_object().unwrap();
         assert_eq!(bundles.len(), 2, "{text}");
         assert!(bundles.contains_key("ex:b"), "{text}");
@@ -620,7 +566,6 @@ mod tests {
             serde_json::json!({"ex": "http://c.org/", "ns1": "http://c.org/"}),
             "{text}"
         );
-        assert_eq!(json::read(&text).unwrap(), d);
 
         // A minted key never lands on a key an earlier bundle already owns.
         let mut d = colliding_bundles();
@@ -634,11 +579,9 @@ mod tests {
                 records: vec![],
             },
         );
-        let text = json::to_string(&d).unwrap();
-        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let (text, v) = round_trip(&d);
         let keys: Vec<_> = v["bundle"].as_object().unwrap().keys().cloned().collect();
         assert_eq!(keys, ["ex:b", "ns1:b", "ns2:b"], "{text}");
-        assert_eq!(json::read(&text).unwrap(), d);
     }
 
     #[cfg(feature = "provn")]
@@ -657,7 +600,6 @@ endDocument
 ";
         let d = crate::provn::read(text).unwrap();
         assert_eq!(d, colliding_bundles());
-        let json = json::to_string(&d).unwrap();
-        assert_eq!(json::read(&json).unwrap(), d, "{json}");
+        round_trip(&d);
     }
 }

@@ -1,4 +1,5 @@
 use super::*;
+use crate::test_util::ex;
 
 #[test]
 fn tables_that_differ_only_in_the_default_are_unequal() {
@@ -17,10 +18,7 @@ fn resolves_prefixed_bare_and_predeclared() {
     let mut ns = Namespaces::new();
     ns.declare("ex", "http://example.org/").unwrap();
     ns.set_default("http://default.org/");
-    assert_eq!(
-        ns.resolve("ex:e1").unwrap(),
-        QName::new("http://example.org/", "e1").unwrap()
-    );
+    assert_eq!(ns.resolve("ex:e1").unwrap(), ex("e1"));
     assert_eq!(
         ns.resolve("e1").unwrap(),
         QName::new("http://default.org/", "e1").unwrap()
@@ -69,10 +67,7 @@ fn a_local_part_provn_cannot_write_does_not_resolve() {
         Scope::of(&ns).resolve_parts("", "a\tb"),
         Err(Error::InvalidQName(t)) if t == "a\tb"
     ));
-    assert_eq!(
-        ns.resolve("ex:").unwrap(),
-        QName::new("http://example.org/", "").unwrap()
-    );
+    assert_eq!(ns.resolve("ex:").unwrap(), ex(""));
     // The prefix is looked up before the local part is checked.
     assert!(matches!(ns.resolve("zz:a b"), Err(Error::UndeclaredPrefix(p)) if p == "zz"));
 }
@@ -188,10 +183,7 @@ fn a_bundle_table_falls_back_to_the_document() {
     let mut bundle = Namespaces::new();
     bundle.declare("b", "http://bundle.org/").unwrap();
     let merged = bundle.with_fallback(&doc);
-    assert_eq!(
-        merged.resolve("ex:e").unwrap(),
-        QName::new("http://example.org/", "e").unwrap()
-    );
+    assert_eq!(merged.resolve("ex:e").unwrap(), ex("e"));
     assert_eq!(
         merged.resolve("b:e").unwrap(),
         QName::new("http://bundle.org/", "e").unwrap()

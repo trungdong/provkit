@@ -1,8 +1,8 @@
-use crate::test_util::{bundle, entity, ex};
-use crate::well_known::{PROV, PROV_LABEL};
+use crate::test_util::{agent, bundle, document, entity, ex, prov, relation};
+use crate::well_known::PROV_LABEL;
 use crate::{
     Association, Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F,
-    Generation, Kind, Namespaces, QName, Record, Value,
+    Generation, Kind, Namespaces, QName, Record,
 };
 
 fn rec(kind: Kind, id: &str, formals: Vec<(F, Formal)>, label: Option<&str>) -> Record {
@@ -13,12 +13,29 @@ fn rec(kind: Kind, id: &str, formals: Vec<(F, Formal)>, label: Option<&str>) -> 
     Record::from_parts(kind, Some(ex(id)), formals, a).unwrap()
 }
 
-fn anon(kind: Kind, formals: Vec<(F, Formal)>) -> Record {
-    Record::from_parts(kind, None, formals, Attributes::new()).unwrap()
-}
-
 fn t(s: &str) -> Formal {
     Formal::Time(DateTime::parse(s).unwrap())
+}
+
+/// A generation at `time`, with no other formal.
+fn gen_at(id: Option<&str>, time: &str) -> Record {
+    relation(Kind::Generation, id.map(ex), vec![(F::Time, t(time))])
+}
+
+/// The generation `ex:g` of `ex:e`, with `prov:activity` as an attribute
+/// when `clash` is set.
+fn hand_built(clash: bool) -> Record {
+    let mut attributes = Attributes::new();
+    if clash {
+        attributes.insert(prov("activity"), ex("a").into());
+    }
+    Record::Generation(Generation {
+        id: Some(ex("g")),
+        entity: Some(ex("e")),
+        activity: None,
+        time: None,
+        attributes,
+    })
 }
 
 fn name(l: &str) -> Formal {
@@ -27,20 +44,21 @@ fn name(l: &str) -> Formal {
 
 #[test]
 fn merges_formals_and_attributes() {
-    let mut d = Document::new();
-    d.records.push(rec(
-        Kind::Generation,
-        "g",
-        vec![(F::Entity, name("e"))],
-        Some("one"),
-    ));
-    d.records.push(rec(Kind::Entity, "e", vec![], None));
-    d.records.push(rec(
-        Kind::Generation,
-        "g",
-        vec![(F::Activity, name("a"))],
-        Some("two"),
-    ));
+    let d = document(vec![
+        rec(
+            Kind::Generation,
+            "g",
+            vec![(F::Entity, name("e"))],
+            Some("one"),
+        ),
+        entity("e"),
+        rec(
+            Kind::Generation,
+            "g",
+            vec![(F::Activity, name("a"))],
+            Some("two"),
+        ),
+    ]);
     let u = d.unified().unwrap();
     assert_eq!(u.records.len(), 2);
     let Record::Generation(g) = &u.records[0] else {
@@ -64,11 +82,15 @@ fn merges_formals_and_attributes() {
 #[test]
 fn absent_takes_the_concrete_value_in_either_order() {
     for (first, second) in [(None, Some("a")), (Some("a"), None)] {
-        let mut d = Document::new();
-        for act in [first, second] {
-            let formals = act.map(|a| (F::Activity, name(a))).into_iter().collect();
-            d.records.push(rec(Kind::Generation, "g", formals, None));
-        }
+        let d = document(
+            [first, second]
+                .into_iter()
+                .map(|act| {
+                    let formals = act.map(|a| (F::Activity, name(a))).into_iter().collect();
+                    rec(Kind::Generation, "g", formals, None)
+                })
+                .collect(),
+        );
         let u = d.unified().unwrap();
         assert_eq!(u.records.len(), 1);
         let Record::Generation(g) = &u.records[0] else {
@@ -80,33 +102,16 @@ fn absent_takes_the_concrete_value_in_either_order() {
 
 #[test]
 fn equal_values_unify() {
-    let mut d = Document::new();
-    for _ in 0..2 {
-        d.records.push(rec(
-            Kind::Generation,
-            "g",
-            vec![(F::Time, t("2014-06-23T12:28:53Z"))],
-            None,
-        ));
-    }
+    let d = document(vec![gen_at(Some("g"), "2014-06-23T12:28:53Z"); 2]);
     assert_eq!(d.unified().unwrap().records.len(), 1);
 }
 
 #[test]
 fn conflicting_times_fail() {
-    let mut d = Document::new();
-    d.records.push(rec(
-        Kind::Generation,
-        "g",
-        vec![(F::Time, t("2014-06-23T12:28:53Z"))],
-        None,
-    ));
-    d.records.push(rec(
-        Kind::Generation,
-        "g",
-        vec![(F::Time, t("2012-12-03T21:08:16Z"))],
-        None,
-    ));
+    let d = document(vec![
+        gen_at(Some("g"), "2014-06-23T12:28:53Z"),
+        gen_at(Some("g"), "2012-12-03T21:08:16Z"),
+    ]);
     match d.unified() {
         Err(Error::Unification { id, reason }) => {
             assert_eq!(id, ex("g"));
@@ -123,11 +128,11 @@ fn conflicting_times_fail() {
 
 #[test]
 fn conflicting_names_fail() {
-    let mut d = Document::new();
-    for a in ["a1", "a2"] {
-        d.records
-            .push(rec(Kind::Usage, "u", vec![(F::Activity, name(a))], None));
-    }
+    let d = document(
+        ["a1", "a2"]
+            .map(|a| rec(Kind::Usage, "u", vec![(F::Activity, name(a))], None))
+            .to_vec(),
+    );
     let Err(Error::Unification { reason, .. }) = d.unified() else {
         panic!("expected a unification error")
     };
@@ -139,16 +144,12 @@ fn conflicting_names_fail() {
 
 #[test]
 fn a_conflict_between_long_names_gives_a_short_message() {
-    let long = |c: char| QName::new("http://example.org/", &c.to_string().repeat(1 << 20)).unwrap();
-    let mut d = Document::new();
-    for c in ['a', 'b'] {
-        d.records.push(rec(
-            Kind::Usage,
-            "u",
-            vec![(F::Activity, Formal::Name(long(c)))],
-            None,
-        ));
-    }
+    let long = |c: char| Formal::Name(ex(&c.to_string().repeat(1 << 20)));
+    let d = document(
+        ['a', 'b']
+            .map(|c| rec(Kind::Usage, "u", vec![(F::Activity, long(c))], None))
+            .to_vec(),
+    );
     let Err(Error::Unification { reason, .. }) = d.unified() else {
         panic!("expected a unification error")
     };
@@ -157,16 +158,7 @@ fn a_conflict_between_long_names_gives_a_short_message() {
 
 #[test]
 fn a_lone_record_with_an_own_formal_attribute_is_invalid() {
-    let mut attributes = Attributes::new();
-    attributes.insert(QName::new(PROV, "activity").unwrap(), Value::QName(ex("a")));
-    let mut d = Document::new();
-    d.records.push(Record::Generation(Generation {
-        id: Some(ex("g")),
-        entity: Some(ex("e")),
-        activity: None,
-        time: None,
-        attributes,
-    }));
+    let d = document(vec![hand_built(true)]);
     assert!(matches!(
         d.unified(),
         Err(Error::InvalidRecord {
@@ -202,8 +194,7 @@ fn an_absent_formal_unifies_with_a_present_one_in_every_position() {
             attributes: Attributes::new(),
         })
     };
-    let mut d = Document::new();
-    d.records = vec![association(None), association(Some(ex("pl")))];
+    let d = document(vec![association(None), association(Some(ex("pl")))]);
     let u = d.unified().unwrap();
     assert_eq!(u.records, vec![association(Some(ex("pl")))]);
 
@@ -218,8 +209,7 @@ fn an_absent_formal_unifies_with_a_present_one_in_every_position() {
             let with = rec(kind, "x", vec![(attr, present)], None);
             let without = rec(kind, "x", vec![], None);
             for pair in [[&with, &without], [&without, &with]] {
-                let mut d = Document::new();
-                d.records = pair.iter().map(|&r| r.clone()).collect();
+                let d = document(pair.iter().map(|&r| r.clone()).collect());
                 assert_eq!(
                     d.unified().unwrap().records,
                     vec![with.clone()],
@@ -231,10 +221,7 @@ fn an_absent_formal_unifies_with_a_present_one_in_every_position() {
 }
 
 fn pair(a: Kind, b: Kind) -> crate::Result<Document> {
-    let mut d = Document::new();
-    d.records.push(rec(a, "x", vec![], None));
-    d.records.push(rec(b, "x", vec![], None));
-    d.unified()
+    document(vec![rec(a, "x", vec![], None), rec(b, "x", vec![], None)]).unified()
 }
 
 /// Constraint 53 spelt out independently of `DISJOINT_RELATIONS`, so
@@ -319,44 +306,44 @@ fn constraint_55_entity_and_activity_are_disjoint_and_agents_overlap() {
 
 #[test]
 fn an_entity_agent_and_activity_under_one_identifier_fail() {
-    let mut d = Document::new();
-    for kind in [Kind::Entity, Kind::Agent, Kind::Activity] {
-        d.records.push(rec(kind, "x", vec![], None));
-    }
+    let d = document(
+        [Kind::Entity, Kind::Agent, Kind::Activity]
+            .map(|kind| rec(kind, "x", vec![], None))
+            .to_vec(),
+    );
     assert!(matches!(d.unified(), Err(Error::Unification { .. })));
 }
 
 #[test]
 fn identifier_less_kinds_are_never_merged_or_checked() {
     let with = |kind: Kind, formals: Vec<(F, Formal)>| rec(kind, "x", formals, None);
-    let mut d = Document::new();
+    let mut records = Vec::new();
     for (a1, a2) in [("a", "b"), ("c", "d")] {
-        d.records.push(with(
-            Kind::Alternate,
-            vec![(F::Alternate1, name(a1)), (F::Alternate2, name(a2))],
-        ));
-        d.records.push(with(
-            Kind::Specialization,
-            vec![(F::SpecificEntity, name(a1))],
-        ));
-        d.records
-            .push(with(Kind::Mention, vec![(F::SpecificEntity, name(a1))]));
-        d.records
-            .push(with(Kind::Membership, vec![(F::Collection, name(a1))]));
+        records.extend([
+            with(
+                Kind::Alternate,
+                vec![(F::Alternate1, name(a1)), (F::Alternate2, name(a2))],
+            ),
+            with(Kind::Specialization, vec![(F::SpecificEntity, name(a1))]),
+            with(Kind::Mention, vec![(F::SpecificEntity, name(a1))]),
+            with(Kind::Membership, vec![(F::Collection, name(a1))]),
+        ]);
     }
     // None of the eight clashes with the entity under the same identifier,
     // and none merges with its twin.
-    d.records.push(with(Kind::Entity, vec![]));
+    records.push(entity("x"));
+    let d = document(records);
     let u = d.unified().unwrap();
     assert_eq!(u.records, d.records);
 }
 
 #[test]
 fn overlapping_kinds_merge_per_kind() {
-    let mut d = Document::new();
-    d.records.push(rec(Kind::Entity, "x", vec![], Some("e1")));
-    d.records.push(rec(Kind::Agent, "x", vec![], None));
-    d.records.push(rec(Kind::Entity, "x", vec![], Some("e2")));
+    let d = document(vec![
+        rec(Kind::Entity, "x", vec![], Some("e1")),
+        agent("x"),
+        rec(Kind::Entity, "x", vec![], Some("e2")),
+    ]);
     let u = d.unified().unwrap();
     assert_eq!(u.records.len(), 2);
     assert_eq!(u.records[0].kind(), Kind::Entity);
@@ -366,11 +353,12 @@ fn overlapping_kinds_merge_per_kind() {
 
 #[test]
 fn output_order_follows_first_members() {
-    let mut d = Document::new();
-    d.records.push(rec(Kind::Entity, "b", vec![], None));
-    d.records.push(rec(Kind::Entity, "a", vec![], None));
-    d.records.push(rec(Kind::Entity, "b", vec![], Some("l")));
-    d.records.push(rec(Kind::Entity, "c", vec![], None));
+    let d = document(vec![
+        entity("b"),
+        entity("a"),
+        rec(Kind::Entity, "b", vec![], Some("l")),
+        entity("c"),
+    ]);
     let u = d.unified().unwrap();
     let ids: Vec<_> = u.records.iter().map(|r| r.id().unwrap().clone()).collect();
     assert_eq!(ids, [ex("b"), ex("a"), ex("c")]);
@@ -378,19 +366,13 @@ fn output_order_follows_first_members() {
 
 #[test]
 fn records_without_identifiers_never_merge() {
-    let mut d = Document::new();
-    for _ in 0..2 {
-        d.records
-            .push(anon(Kind::Generation, vec![(F::Entity, name("e"))]));
-    }
-    d.records.push(anon(
-        Kind::Generation,
-        vec![(F::Time, t("2014-06-23T12:28:53Z"))],
-    ));
-    d.records.push(anon(
-        Kind::Generation,
-        vec![(F::Time, t("2012-12-03T21:08:16Z"))],
-    ));
+    let of_e = relation(Kind::Generation, None, vec![(F::Entity, name("e"))]);
+    let d = document(vec![
+        of_e.clone(),
+        of_e,
+        gen_at(None, "2014-06-23T12:28:53Z"),
+        gen_at(None, "2012-12-03T21:08:16Z"),
+    ]);
     let u = d.unified().unwrap();
     assert_eq!(u.records.len(), 4);
     assert_eq!(u.records, d.records);
@@ -407,20 +389,17 @@ fn identified_memberships_survive_unchanged() {
             None,
         )
     };
-    let mut d = Document::new();
-    d.records.push(member("a"));
-    d.records.push(member("b"));
+    let mut d = document(vec![member("a"), member("b")]);
     let u = d.unified().unwrap();
     assert_eq!(u.records, d.records);
     // Sharing an identifier with another kind is not a conflict either.
-    d.records.push(rec(Kind::Entity, "m", vec![], None));
+    d.records.push(entity("m"));
     assert_eq!(d.unified().unwrap().records, d.records);
 }
 
 #[test]
 fn bundles_unify_independently() {
-    let mut d = Document::new();
-    d.records.push(rec(Kind::Entity, "e", vec![], Some("top")));
+    let mut d = document(vec![rec(Kind::Entity, "e", vec![], Some("top"))]);
     d.bundles.push(bundle(
         "b",
         vec![
@@ -436,8 +415,7 @@ fn bundles_unify_independently() {
 
     // A conflict inside a bundle is not visible from outside it, and the
     // same identifier in different scopes never conflicts.
-    let mut d = Document::new();
-    d.records.push(rec(Kind::Entity, "x", vec![], None));
+    let mut d = document(vec![entity("x")]);
     d.bundles
         .push(bundle("b", vec![rec(Kind::Activity, "x", vec![], None)]));
     assert!(d.unified().is_ok());
@@ -483,30 +461,31 @@ fn bundles_sharing_an_identifier_merge_first() {
 #[test]
 fn two_spellings_of_one_iri_merge() {
     let split = |ns: &str, local: &str| QName::new(ns, local).unwrap();
-    let mut d = Document::new();
-    for (ns, local, label) in [
-        ("http://example.org/", "foo/bar", "one"),
-        ("http://example.org/foo/", "bar", "two"),
-    ] {
-        let mut a = Attributes::new();
-        a.insert(PROV_LABEL.clone(), label.into());
-        d.records.push(
+    let mut d = document(
+        [
+            ("http://example.org/", "foo/bar", "one"),
+            ("http://example.org/foo/", "bar", "two"),
+        ]
+        .map(|(ns, local, label)| {
+            let mut a = Attributes::new();
+            a.insert(PROV_LABEL.clone(), label.into());
             Record::from_parts(
                 Kind::Generation,
                 Some(split(ns, local)),
                 vec![(F::Entity, Formal::Name(split(ns, "e")))],
                 a,
             )
-            .unwrap(),
-        );
-    }
+            .unwrap()
+        })
+        .to_vec(),
+    );
     // `e` differs between the two, so the merge must see a conflict
     // rather than two unrelated records.
     assert!(matches!(d.unified(), Err(Error::Unification { .. })));
     let Record::Generation(g) = &mut d.records[1] else {
         panic!()
     };
-    g.entity = Some(split("http://example.org/", "e"));
+    g.entity = Some(ex("e"));
     let u = d.unified().unwrap();
     assert_eq!(u.records.len(), 1);
     assert_eq!(u.records[0].attributes().len(), 2);
@@ -514,20 +493,7 @@ fn two_spellings_of_one_iri_merge() {
 
 #[test]
 fn merging_a_hand_built_formal_named_attribute_is_an_invalid_record() {
-    let mut a = Attributes::new();
-    a.insert(QName::new(PROV, "activity").unwrap(), ex("x").into());
-    let generation = |attributes: Attributes| {
-        Record::Generation(Generation {
-            id: Some(ex("g")),
-            entity: Some(ex("e")),
-            activity: None,
-            time: None,
-            attributes,
-        })
-    };
-    let mut d = Document::new();
-    d.records.push(generation(a));
-    d.records.push(generation(Attributes::new()));
+    let d = document(vec![hand_built(true), hand_built(false)]);
     assert!(matches!(
         d.unified(),
         Err(Error::InvalidRecord {

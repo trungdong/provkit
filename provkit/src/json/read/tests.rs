@@ -1,6 +1,6 @@
 use super::*;
 use crate::json;
-use crate::test_util::ex;
+use crate::test_util::{ex, round_trip, written};
 use crate::well_known::{XSD_BOOLEAN, XSD_INT, XSD_INTEGER, XSD_LONG};
 
 fn doc(json: &str) -> crate::Document {
@@ -8,16 +8,60 @@ fn doc(json: &str) -> crate::Document {
 }
 const PFX: &str = r#""prefix": {"ex": "http://example.org/", "default": "http://default.org/"}"#;
 
+/// A document holding one record, `kind` `key`, whose body is `body`.
+fn record(kind: &str, key: &str, body: &str) -> String {
+    format!(r#"{{{PFX}, "{kind}": {{"{key}": {{{body}}}}}}}"#)
+}
+
+/// A document holding one entity `ex:e` with the attributes in `body`.
+fn entity(body: &str) -> String {
+    record("entity", "ex:e", body)
+}
+
+/// A one-line document with one record, `kind` `key`, whose body is `body`.
+/// The text is fixed because tests pin columns in it.
+fn one_record(kind: &str, key: &str, body: &str) -> String {
+    format!(r#"{{"prefix": {{"ex": "http://example.org/"}}, "{kind}": {{"{key}": {{{body}}}}}}}"#)
+}
+
+/// The values under `ex:<local>` of `record`.
+fn values_of(record: &Record, local: &str) -> Vec<Value> {
+    record.attributes().get(&ex(local)).cloned().collect()
+}
+
+/// The values under `ex:<local>` of the first record.
+fn values(d: &crate::Document, local: &str) -> Vec<Value> {
+    values_of(&d.records[0], local)
+}
+
+/// Section, key and inner error of the `Error::InRecord` that reading `text` gives.
+fn record_error(text: &str) -> (String, String, Error) {
+    match json::read(text) {
+        Err(Error::InRecord {
+            section,
+            key,
+            error,
+        }) => (section, key, *error),
+        other => panic!("{text}: expected Error::InRecord, got {other:?}"),
+    }
+}
+
+/// Section, key and message of an `Error::JsonStructure` inside a record.
+fn record_structure(text: &str) -> (String, String, String) {
+    match record_error(text) {
+        (s, k, Error::JsonStructure { message }) => (s, k, message),
+        (_, _, other) => panic!("{text}: expected JsonStructure, got {other:?}"),
+    }
+}
+
 #[test]
 fn a_language_string_reads_with_or_without_a_type() {
     let read = |member: &str| {
-        let d = doc(&format!(
-            r#"{{{PFX}, "entity": {{"ex:e": {{"ex:a": {member}}}}}}}"#
-        ));
-        let Record::Entity(e) = &d.records[0] else {
+        let d = doc(&entity(&format!(r#""ex:a": {member}"#)));
+        let Record::Entity(_) = &d.records[0] else {
             panic!("expected an entity, got {:?}", d.records[0]);
         };
-        e.attributes.get(&ex("a")).cloned().collect::<Vec<_>>()
+        values(&d, "a")
     };
     let expected = [Value::from(LangStr::new("bonjour", "fr").unwrap())];
     assert_eq!(read(r#"{"$": "bonjour", "lang": "fr"}"#), expected);
@@ -29,22 +73,22 @@ fn a_language_string_reads_with_or_without_a_type() {
 
 #[test]
 fn values_decode_per_table() {
-    let d = doc(&format!(
-        r#"{{{PFX}, "entity": {{"ex:e": {{
+    let d = doc(&entity(
+        r#"
         "ex:s": "text",
         "ex:i": 5, "ex:l": 3000000000, "ex:b": 18446744073709551615, "ex:d": 1.5, "ex:t": true,
-        "ex:o": {{"$": "x"}}, "ex:xs": {{"$": "x", "type": "xsd:string"}},
-        "ex:lang": {{"$": "bonjour", "type": "prov:InternationalizedString", "lang": "fr"}},
-        "ex:qn": {{"$": "ex:q", "type": "xsd:QName"}}, "ex:legacy": {{"$": "ex:q", "type": "prov:QUALIFIED_NAME"}},
-        "ex:dt": {{"$": "2011-11-16T16:05:33Z", "type": "xsd:dateTime"}},
-        "ex:ty": {{"$": "1", "type": "xsd:long"}},
-        "ex:many": ["a", {{"$": "2", "type": "xsd:int"}}]
-    }}}}}}"#
+        "ex:o": {"$": "x"}, "ex:xs": {"$": "x", "type": "xsd:string"},
+        "ex:lang": {"$": "bonjour", "type": "prov:InternationalizedString", "lang": "fr"},
+        "ex:qn": {"$": "ex:q", "type": "xsd:QName"}, "ex:legacy": {"$": "ex:q", "type": "prov:QUALIFIED_NAME"},
+        "ex:dt": {"$": "2011-11-16T16:05:33Z", "type": "xsd:dateTime"},
+        "ex:ty": {"$": "1", "type": "xsd:long"},
+        "ex:many": ["a", {"$": "2", "type": "xsd:int"}]
+    "#,
     ));
     let Record::Entity(e) = &d.records[0] else {
         panic!()
     };
-    let get = |l: &str| e.attributes.get(&ex(l)).cloned().collect::<Vec<_>>();
+    let get = |l: &str| values(&d, l);
     assert_eq!(get("s"), [Value::Str("text".into())]);
     assert_eq!(get("i"), [Value::typed("5", XSD_INT.clone()).unwrap()]);
     assert_eq!(
@@ -74,13 +118,13 @@ fn values_decode_per_table() {
 
 #[test]
 fn integers_type_by_range() {
-    let d = doc(&format!(
-        r#"{{{PFX}, "entity": {{"ex:e": {{
+    let d = doc(&entity(
+        r#"
         "ex:min": -2147483648, "ex:max": 2147483647, "ex:over": 2147483648,
         "ex:low": -2147483649, "ex:i64": 9223372036854775807,
         "ex:u64": 9223372036854775808, "ex:neg": -9223372036854775808,
         "ex:huge": 12345678901234567890123, "ex:exp": 1e3
-    }}}}}}"#
+    "#,
     ));
     let Record::Entity(e) = &d.records[0] else {
         panic!()
@@ -107,11 +151,11 @@ fn integers_type_by_range() {
 
 #[test]
 fn numbers_are_typed_from_their_text() {
-    let d = doc(&format!(
-        r#"{{{PFX}, "entity": {{"ex:e": {{
+    let d = doc(&entity(
+        r#"
         "ex:zero": -0, "ex:low": -9223372036854775809, "ex:high": 18446744073709551616,
         "ex:huge": 1e400, "ex:frac": 1.50, "ex:exp": 1E2, "ex:negzero": -0.0
-    }}}}}}"#
+    "#,
     ));
     let Record::Entity(e) = &d.records[0] else {
         panic!()
@@ -143,8 +187,8 @@ fn numbers_are_typed_from_their_text() {
 #[cfg(feature = "provn")]
 #[test]
 fn bare_integers_read_alike_in_both_formats() {
-    let json = doc(&format!(
-        r#"{{{PFX}, "entity": {{"ex:e": {{"ex:n": [-0, 0, 3000000000, -9223372036854775809]}}}}}}"#
+    let json = doc(&entity(
+        r#""ex:n": [-0, 0, 3000000000, -9223372036854775809]"#,
     ));
     let provn = crate::provn::read(
         "document\n default <http://default.org/>\n prefix ex <http://example.org/>\n \
@@ -156,26 +200,19 @@ fn bare_integers_read_alike_in_both_formats() {
 
 #[test]
 fn nested_arrays_are_an_error_at_any_depth() {
-    let nested = format!(r#"{{{PFX}, "entity": {{"ex:e": {{"ex:n": [[1]]}}}}}}"#);
-    let (_, _, error) = in_record(json::read(&nested).unwrap_err());
-    assert!(
-        matches!(&error, Error::JsonStructure { message } if message.contains("nested arrays")),
-        "{error}"
-    );
-    let deep = format!(
-        r#"{{{PFX}, "entity": {{"ex:e": {{"ex:n": {}1{}}}}}}}"#,
+    let (_, _, message) = record_structure(&entity(r#""ex:n": [[1]]"#));
+    assert!(message.contains("nested arrays"), "{message}");
+    let deep = entity(&format!(
+        r#""ex:n": {}1{}"#,
         "[".repeat(100_000),
         "]".repeat(100_000)
-    );
+    ));
     // The value's text is captured by a scan that does not recurse, and
     // the second bracket is refused by its first byte, before it is parsed.
     // So the depth is never recursed into, and serde_json's recursion limit
     // is not what stops it.
-    let (_, _, error) = in_record(json::read(&deep).unwrap_err());
-    assert!(
-        matches!(&error, Error::JsonStructure { message } if message.contains("nested arrays")),
-        "{error}"
-    );
+    let (_, _, message) = record_structure(&deep);
+    assert!(message.contains("nested arrays"), "{message}");
 }
 
 #[test]
@@ -271,8 +308,8 @@ fn a_string_serde_quotes_is_cut_without_a_count() {
 
 #[test]
 fn any_uri_stays_a_typed_literal() {
-    let d = doc(&format!(
-        r#"{{{PFX}, "entity": {{"ex:e": {{"ex:u": {{"$": "http://x.example/", "type": "xsd:anyURI"}}}}}}}}"#
+    let d = doc(&entity(
+        r#""ex:u": {"$": "http://x.example/", "type": "xsd:anyURI"}"#,
     ));
     let Record::Entity(e) = &d.records[0] else {
         panic!()
@@ -328,11 +365,15 @@ fn member_fan_out_shares_one_attribute_allocation() {
     let n = 3_000;
     let members: Vec<String> = (0..n).map(|i| format!(r#""ex:m{i}""#)).collect();
     let attrs: Vec<String> = (0..n).map(|i| format!(r#""ex:k{i}""#)).collect();
-    let d = doc(&format!(
-        r#"{{{PFX}, "hadMember": {{"ex:c": {{"prov:collection": "ex:c",
-            "prov:entity": [{}], "ex:tag": [{}]}}}}}}"#,
-        members.join(","),
-        attrs.join(",")
+    let d = doc(&record(
+        "hadMember",
+        "ex:c",
+        &format!(
+            r#""prov:collection": "ex:c",
+            "prov:entity": [{}], "ex:tag": [{}]"#,
+            members.join(","),
+            attrs.join(",")
+        ),
     ));
     assert_eq!(d.records.len(), n);
     let first = d.records[0].attributes();
@@ -344,18 +385,6 @@ fn member_fan_out_shares_one_attribute_allocation() {
     );
 }
 
-/// The section, key and inner error of an [`Error::InRecord`].
-fn in_record(e: Error) -> (String, String, Error) {
-    match e {
-        Error::InRecord {
-            section,
-            key,
-            error,
-        } => (section, key, *error),
-        other => panic!("expected Error::InRecord, got {other:?}"),
-    }
-}
-
 #[test]
 fn the_shape_of_the_json_decides_the_variant() {
     let positioned = |text: &str, error: Error| match error {
@@ -364,21 +393,18 @@ fn the_shape_of_the_json_decides_the_variant() {
         }
         other => panic!("{text}: expected JsonStructure, got {other:?}"),
     };
-    let structure = [
+    let wrong_shape = [
         "[]".to_owned(),
         r#"{"entity": 3}"#.to_owned(),
         format!(r#"{{{PFX}, "prefix": {{}}}}"#),
     ];
-    for text in structure {
+    for text in wrong_shape {
         positioned(&text, json::read(&text).unwrap_err());
     }
     // A value of the wrong shape is inside a record.
-    let values = [
-        format!(r#"{{{PFX}, "entity": {{"ex:e": {{"ex:a": null}}}}}}"#),
-        format!(r#"{{{PFX}, "entity": {{"ex:e": {{"ex:a": {{"$": 1}}}}}}}}"#),
-    ];
+    let values = [entity(r#""ex:a": null"#), entity(r#""ex:a": {"$": 1}"#)];
     for text in values {
-        let (_, _, error) = in_record(json::read(&text).unwrap_err());
+        let (_, _, error) = record_error(&text);
         positioned(&text, error);
     }
     for text in [
@@ -417,8 +443,10 @@ fn a_section_is_checked_by_name_before_its_body() {
             "unknown record kind `derivedByRemovalFrom`",
         ),
         (
-            format!(
-                r#"{{{PFX}, "bundle": {{"ex:b": {{"bundle": {{"ex:c": {{"entity": {{"ex:e": {{}}}}}}}}}}}}}}"#
+            record(
+                "bundle",
+                "ex:b",
+                r#""bundle": {"ex:c": {"entity": {"ex:e": {}}}}"#,
             ),
             "a bundle cannot hold a bundle",
         ),
@@ -435,55 +463,37 @@ fn a_section_is_checked_by_name_before_its_body() {
 
 #[test]
 fn an_error_in_a_record_names_the_record() {
-    let (section, key, error) = in_record(json::read(r#"{"entity": {"zz:e": {}}}"#).unwrap_err());
+    let (section, key, error) = record_error(r#"{"entity": {"zz:e": {}}}"#);
     assert_eq!((section.as_str(), key.as_str()), ("entity", "zz:e"));
     assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
 
-    let text = format!(r#"{{{PFX}, "activity": {{"ex:a": {{"prov:startTime": "soon"}}}}}}"#);
+    let text = record("activity", "ex:a", r#""prov:startTime": "soon""#);
     let e = json::read(&text).unwrap_err();
     assert!(e.to_string().starts_with("activity `ex:a`: "), "{e}");
-    let (_, _, error) = in_record(e);
+    let (_, _, error) = record_error(&text);
     assert!(matches!(error, Error::InvalidLiteral { .. }));
 
-    let text = format!(r#"{{{PFX}, "bundle": {{"zz:b": {{}}}}}}"#);
-    let (section, key, _) = in_record(json::read(&text).unwrap_err());
+    let (section, key, _) = record_error(&record("bundle", "zz:b", ""));
     assert_eq!((section.as_str(), key.as_str()), ("bundle", "zz:b"));
 }
 
 #[test]
 fn errors() {
-    let read = |s: &str| json::read(s);
-    let (_, _, error) =
-        in_record(read(&format!(r#"{{{PFX}, "entity": {{"_:e": {{}}}}}}"#)).unwrap_err());
+    let (_, _, error) = record_error(&record("entity", "_:e", ""));
     assert!(matches!(error, Error::JsonStructure { .. }));
     assert!(matches!(
-        read(&format!(r#"{{{PFX}, "foo": {{"ex:e": {{}}}}}}"#)),
+        json::read(&record("foo", "ex:e", "")),
         Err(Error::JsonStructure { .. })
     ));
-    let (_, _, error) = in_record(read(r#"{"entity": {"zz:e": {}}}"#).unwrap_err());
+    let (_, _, error) = record_error(r#"{"entity": {"zz:e": {}}}"#);
     assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
-    let (_, _, error) = in_record(
-        read(&format!(
-            r#"{{{PFX}, "activity": {{"ex:a": {{"prov:startTime": "soon"}}}}}}"#
-        ))
-        .unwrap_err(),
-    );
+    let (_, _, error) = record_error(&record("activity", "ex:a", r#""prov:startTime": "soon""#));
     assert!(matches!(error, Error::InvalidLiteral { .. }));
-    assert!(matches!(read("{"), Err(Error::Json(_))));
+    assert!(matches!(json::read("{"), Err(Error::Json(_))));
     assert!(matches!(
-        read(r#"{"prefix": {"prov": "http://x/"}}"#),
+        json::read(r#"{"prefix": {"prov": "http://x/"}}"#),
         Err(Error::ReservedPrefix { .. })
     ));
-}
-
-/// A document holding one entity `ex:e` with the attributes in `body`.
-fn entity(body: &str) -> String {
-    format!(r#"{{{PFX}, "entity": {{"ex:e": {{{body}}}}}}}"#)
-}
-
-/// The values under `ex:<local>` of the first record.
-fn values(d: &crate::Document, local: &str) -> Vec<Value> {
-    d.records[0].attributes().get(&ex(local)).cloned().collect()
 }
 
 #[test]
@@ -511,8 +521,7 @@ fn ill_formed_literals_read_and_round_trip() {
         );
     }
     // Each literal is written with the text and datatype it was read with.
-    let written = json::to_string(&d).unwrap();
-    let v: serde_json::Value = serde_json::from_str(&written).unwrap();
+    let (written, v) = round_trip(&d);
     for (i, (text, datatype)) in literals.iter().enumerate() {
         assert_eq!(
             v["entity"]["ex:e"][format!("ex:k{i}")],
@@ -520,7 +529,6 @@ fn ill_formed_literals_read_and_round_trip() {
             "{written}"
         );
     }
-    assert_eq!(doc(&written), d);
 }
 
 #[test]
@@ -549,7 +557,7 @@ fn a_name_that_cannot_be_written_in_provn_is_rejected() {
     for position in positions {
         for (name, carried) in names {
             let text = position.replace("{PFX}", PFX).replace("@N@", name);
-            let (_, _, error) = in_record(json::read(&text).unwrap_err());
+            let (_, _, error) = record_error(&text);
             assert!(
                 matches!(&error, Error::InvalidQName(t) if t == carried),
                 "{text}"
@@ -562,30 +570,28 @@ fn a_name_that_cannot_be_written_in_provn_is_rejected() {
     ));
     assert_eq!(values(&d, "k"), [Value::QName(ex(""))]);
     // Text that is a qualified name must resolve.
-    let (_, _, error) = in_record(
-        json::read(&entity(
-            r#""ex:k": {"$": "zz:foo", "type": "prov:QUALIFIED_NAME"}"#,
-        ))
-        .unwrap_err(),
-    );
+    let (_, _, error) = record_error(&entity(
+        r#""ex:k": {"$": "zz:foo", "type": "prov:QUALIFIED_NAME"}"#,
+    ));
     assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
-    let (_, _, error) =
-        in_record(json::read(&entity(r#""ex:k": {"$": "", "type": "xsd:QName"}"#)).unwrap_err());
+    let (_, _, error) = record_error(&entity(r#""ex:k": {"$": "", "type": "xsd:QName"}"#));
     assert!(matches!(error, Error::InvalidQName(t) if t.is_empty()));
 }
 
 #[test]
 fn a_formal_written_as_an_object_is_checked() {
-    let doc = |formal: &str| {
-        format!(
-            r#"{{"prefix": {{"ex": "http://example.org/"}}, "wasGeneratedBy": {{"ex:g": {{"prov:entity": "ex:e", "prov:activity": {formal}}}}}}}"#
+    let generation = |formal: &str| {
+        one_record(
+            "wasGeneratedBy",
+            "ex:g",
+            &format!(r#""prov:entity": "ex:e", "prov:activity": {formal}"#),
         )
     };
     for accepted in [
         r#"{"$": "ex:a", "type": "prov:QUALIFIED_NAME"}"#,
         r#"{"$": "ex:a", "type": "xsd:QName"}"#,
     ] {
-        let d = json::read(&doc(accepted)).unwrap();
+        let d = doc(&generation(accepted));
         assert!(
             matches!(&d.records[0], Record::Generation(g) if g.activity == Some(ex("a"))),
             "{accepted}: {:?}",
@@ -597,16 +603,11 @@ fn a_formal_written_as_an_object_is_checked() {
         r#"{"$": "ex:a", "lang": "en"}"#,
         r#"{"$": "ex:a", "type": "prov:QUALIFIED_NAME", "lang": "en"}"#,
     ] {
-        let (_, _, error) = in_record(json::read(&doc(bad)).unwrap_err());
-        match error {
-            Error::JsonStructure { message } => {
-                assert!(message.contains("prov:activity"), "{bad}\n{message}");
-            }
-            other => panic!("{bad}: {other:?}"),
-        }
+        let (_, _, message) = record_structure(&generation(bad));
+        assert!(message.contains("prov:activity"), "{bad}\n{message}");
     }
     let undeclared = r#"{"$": "ex:a", "type": "zz:undeclared"}"#;
-    let (_, _, error) = in_record(json::read(&doc(undeclared)).unwrap_err());
+    let (_, _, error) = record_error(&generation(undeclared));
     assert!(
         matches!(error, Error::UndeclaredPrefix(ref p) if p == "zz"),
         "{error:?}"
@@ -616,8 +617,10 @@ fn a_formal_written_as_an_object_is_checked() {
 #[test]
 fn a_formal_object_of_the_wrong_shape_names_the_formal() {
     let generation = |formal: &str| {
-        format!(
-            r#"{{{PFX}, "wasGeneratedBy": {{"ex:g": {{"prov:entity": "ex:e", "prov:time": {formal}}}}}}}"#
+        record(
+            "wasGeneratedBy",
+            "ex:g",
+            &format!(r#""prov:entity": "ex:e", "prov:time": {formal}"#),
         )
     };
     let d = doc(&generation(
@@ -625,13 +628,8 @@ fn a_formal_object_of_the_wrong_shape_names_the_formal() {
     ));
     assert!(matches!(&d.records[0], Record::Generation(g) if g.time.is_some()));
     let names_the_formal = |text: &str, formal: &str| {
-        let (_, _, error) = in_record(json::read(text).unwrap_err());
-        match error {
-            Error::JsonStructure { message } => {
-                assert!(message.contains(formal), "{text}\n{message}");
-            }
-            other => panic!("{text}: {other:?}"),
-        }
+        let (_, _, message) = record_structure(text);
+        assert!(message.contains(formal), "{text}\n{message}");
     };
     for bad in [
         r#"{"$": "2011-11-16T16:05:33Z", "type": "xsd:string"}"#,
@@ -648,28 +646,33 @@ fn a_formal_object_of_the_wrong_shape_names_the_formal() {
         r#"{"$": "ex:a"}"#,
     ] {
         names_the_formal(
-            &format!(
-                r#"{{{PFX}, "wasGeneratedBy": {{"ex:g": {{"prov:entity": "ex:e", "prov:activity": {bad}}}}}}}"#
+            &record(
+                "wasGeneratedBy",
+                "ex:g",
+                &format!(r#""prov:entity": "ex:e", "prov:activity": {bad}"#),
             ),
             "prov:activity",
         );
         names_the_formal(
-            &format!(
-                r#"{{{PFX}, "hadMember": {{"ex:m": {{"prov:collection": "ex:c", "prov:entity": ["ex:a", {bad}]}}}}}}"#
+            &record(
+                "hadMember",
+                "ex:m",
+                &format!(r#""prov:collection": "ex:c", "prov:entity": ["ex:a", {bad}]"#),
             ),
             "prov:entity",
         );
     }
     // An undeclared prefix in the `type` is reported as such.
-    let (_, _, error) =
-        in_record(json::read(&generation(r#"{"$": "x", "type": "zz:t"}"#)).unwrap_err());
+    let (_, _, error) = record_error(&generation(r#"{"$": "x", "type": "zz:t"}"#));
     assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
 }
 
 #[test]
 fn an_empty_member_array_reads_as_one_membership_with_no_entity() {
-    let d = doc(&format!(
-        r#"{{{PFX}, "hadMember": {{"ex:m": {{"prov:collection": "ex:c", "prov:entity": []}}}}}}"#
+    let d = doc(&record(
+        "hadMember",
+        "ex:m",
+        r#""prov:collection": "ex:c", "prov:entity": []"#,
     ));
     assert_eq!(d.records.len(), 1);
     let Record::Membership(m) = &d.records[0] else {
@@ -683,8 +686,10 @@ fn an_empty_member_array_reads_as_one_membership_with_no_entity() {
 #[test]
 fn a_padded_time_formal_reads_as_the_trimmed_time() {
     let generation = |time: &str| {
-        format!(
-            r#"{{{PFX}, "wasGeneratedBy": {{"ex:g": {{"prov:entity": "ex:e", "prov:time": {time}}}}}}}"#
+        record(
+            "wasGeneratedBy",
+            "ex:g",
+            &format!(r#""prov:entity": "ex:e", "prov:time": {time}"#),
         )
     };
     let plain = doc(&generation(r#""2011-11-16T16:05:33Z""#));
@@ -696,8 +701,7 @@ fn a_padded_time_formal_reads_as_the_trimmed_time() {
         assert_eq!(doc(&generation(padded)), plain, "{padded}");
     }
     // Other white space is not trimmed.
-    let (_, _, error) =
-        in_record(json::read(&generation("\"\u{A0}2011-11-16T16:05:33Z\"")).unwrap_err());
+    let (_, _, error) = record_error(&generation("\"\u{A0}2011-11-16T16:05:33Z\""));
     assert!(matches!(error, Error::InvalidLiteral { .. }));
 }
 
@@ -708,8 +712,8 @@ fn an_ill_formed_time_formal_is_an_error() {
         ("activity", "prov:startTime"),
         ("activity", "prov:endTime"),
     ] {
-        let text = format!(r#"{{{PFX}, "{section}": {{"ex:x": {{"{key}": "nope"}}}}}}"#);
-        let (_, _, error) = in_record(json::read(&text).unwrap_err());
+        let text = record(section, "ex:x", &format!(r#""{key}": "nope""#));
+        let (_, _, error) = record_error(&text);
         assert!(
             matches!(&error, Error::InvalidLiteral { datatype, .. } if datatype == "xsd:dateTime"),
             "{key}"
@@ -737,8 +741,7 @@ fn literals_compare_by_value_and_keep_their_text() {
     assert_ne!(d, other);
     // A raw number or boolean and a `$` object are both written as a `$`
     // object, each with its own text.
-    let written = json::to_string(&d).unwrap();
-    let v: serde_json::Value = serde_json::from_str(&written).unwrap();
+    let (_, v) = written(&d);
     let body = &v["entity"]["ex:e"];
     assert_eq!(
         body["ex:n"],
@@ -777,8 +780,7 @@ fn equal_values_under_one_name_are_one_pair() {
 
 #[test]
 fn an_ill_formed_language_tag_is_an_error() {
-    let (_, _, error) =
-        in_record(json::read(&entity(r#""ex:k": {"$": "x", "lang": "en_US"}"#)).unwrap_err());
+    let (_, _, error) = record_error(&entity(r#""ex:k": {"$": "x", "lang": "en_US"}"#));
     assert!(matches!(error, Error::InvalidLanguageTag(tag) if tag == "en_US"));
     let d = doc(&entity(
         r#""ex:k": {"$": "x", "lang": "en-GB-x-averylongsubtag"}"#,
@@ -826,8 +828,10 @@ fn json_errors_name_the_problem() {
             "invalid type: integer `3`, expected a map",
         ),
         (
-            format!(
-                r#"{{{PFX}, "used": {{"_:u": {{"prov:entity": {{"$": "ex:e", "lang": "en"}}}}}}}}"#
+            record(
+                "used",
+                "_:u",
+                r#""prov:entity": {"$": "ex:e", "lang": "en"}"#,
             ),
             "`prov:entity` must be a name, not a language-tagged string",
         ),
@@ -860,7 +864,7 @@ fn json_errors_name_the_problem() {
             "unknown record kind `foo`",
         ),
         (
-            format!(r#"{{{PFX}, "bundle": {{"ex:b": {{"bundle": {{}}}}}}}}"#),
+            record("bundle", "ex:b", r#""bundle": {}"#),
             "a bundle cannot hold a bundle",
         ),
     ];
@@ -889,29 +893,18 @@ fn bundles_scope_their_prefixes() {
 
 #[test]
 fn strict_rules_and_shapes() {
-    let read = |s: &str| json::read(s);
-    let (_, _, error) =
-        in_record(read(&entity(r#""ex:a": {"$": "1", "type": "zz:t"}"#)).unwrap_err());
+    let (_, _, error) = record_error(&entity(r#""ex:a": {"$": "1", "type": "zz:t"}"#));
     assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
-    let (_, _, error) = in_record(
-        read(&entity(
-            r#""ex:a": {"$": "1", "type": "zz:t", "lang": "en"}"#,
-        ))
-        .unwrap_err(),
-    );
+    let (_, _, error) = record_error(&entity(
+        r#""ex:a": {"$": "1", "type": "zz:t", "lang": "en"}"#,
+    ));
     assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
-    let (_, _, error) = in_record(read(&entity(r#""ex:a": [["x"]]"#)).unwrap_err());
+    let (_, _, error) = record_error(&entity(r#""ex:a": [["x"]]"#));
     assert!(matches!(error, Error::JsonStructure { .. }));
-    let (_, _, error) = in_record(
-        read(&format!(
-            r#"{{{PFX}, "used": {{"_:u": {{"prov:entity": 5}}}}}}"#
-        ))
-        .unwrap_err(),
-    );
+    let (_, _, error) = record_error(&record("used", "_:u", r#""prov:entity": 5"#));
     assert!(matches!(error, Error::JsonStructure { .. }));
-    let (section, _, error) = in_record(
-        read(r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"_:b": {}}}"#).unwrap_err(),
-    );
+    let (section, _, error) =
+        record_error(r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"_:b": {}}}"#);
     assert_eq!(section, "bundle");
     assert!(matches!(error, Error::JsonStructure { .. }));
 }
@@ -928,7 +921,7 @@ fn repeated_keys_in_a_document_or_bundle() {
     for text in [
         format!(r#"{{{PFX}, "prefix": {{}}}}"#),
         format!(r#"{{{PFX}, "bundle": {{}}, "bundle": {{}}}}"#),
-        format!(r#"{{{PFX}, "bundle": {{"ex:b": {{"prefix": {{}}, "prefix": {{}}}}}}}}"#),
+        record("bundle", "ex:b", r#""prefix": {}, "prefix": {}"#),
     ] {
         assert!(
             matches!(json::read(&text), Err(Error::JsonStructure { .. })),
@@ -947,15 +940,17 @@ fn many_records_under_one_id() {
 
 #[test]
 fn end_time_and_false() {
-    let d = doc(&format!(
-        r#"{{{PFX}, "activity": {{"ex:a": {{"prov:endTime": "2011-11-16T16:05:33Z", "ex:f": false}}}}}}"#
+    let d = doc(&record(
+        "activity",
+        "ex:a",
+        r#""prov:endTime": "2011-11-16T16:05:33Z", "ex:f": false"#,
     ));
     let Record::Activity(a) = &d.records[0] else {
         panic!()
     };
     assert!(a.end_time.is_some() && a.start_time.is_none());
     assert_eq!(
-        a.attributes.get(&ex("f")).cloned().collect::<Vec<_>>(),
+        values(&d, "f"),
         [Value::typed("false", XSD_BOOLEAN.clone()).unwrap()]
     );
 }
@@ -1005,7 +1000,7 @@ fn a_formal_given_under_two_spellings_is_an_invalid_record() {
     // the only way to meet the check is to give one formal twice.
     let text = r#"{"prefix": {"ex": "http://example.org/", "w3": "http://www.w3.org/ns/"},
         "wasGeneratedBy": {"_:g": {"prov:activity": "ex:a", "w3:prov#activity": "ex:b"}}}"#;
-    let (section, _, error) = in_record(json::read(text).unwrap_err());
+    let (section, _, error) = record_error(text);
     assert_eq!(section, "wasGeneratedBy");
     assert!(
         matches!(
@@ -1068,10 +1063,12 @@ fn a_formal_written_as_a_one_element_array_is_an_error() {
         r#""prov:activity": ["ex:a"]"#,
         r#""prov:time": ["2011-11-16T16:05:33Z"]"#,
     ] {
-        let text = format!(
-            r#"{{{PFX}, "wasGeneratedBy": {{"ex:g": {{"prov:entity": "ex:e", {body}}}}}}}"#
+        let text = record(
+            "wasGeneratedBy",
+            "ex:g",
+            &format!(r#""prov:entity": "ex:e", {body}"#),
         );
-        let (_, _, error) = in_record(json::read(&text).unwrap_err());
+        let (_, _, error) = record_error(&text);
         assert!(matches!(error, Error::JsonStructure { .. }), "{body}");
     }
 }
@@ -1079,12 +1076,8 @@ fn a_formal_written_as_a_one_element_array_is_an_error() {
 #[test]
 fn a_null_attribute_value_is_an_error() {
     for body in [r#""ex:a": null"#, r#""ex:a": ["x", null]"#] {
-        match in_record(json::read(&entity(body)).unwrap_err()) {
-            (_, _, Error::JsonStructure { message }) => {
-                assert!(message.contains("null"), "{body}\n{message}");
-            }
-            other => panic!("{body}: expected JsonStructure, got {other:?}"),
-        }
+        let (_, _, message) = record_structure(&entity(body));
+        assert!(message.contains("null"), "{body}\n{message}");
     }
 }
 
@@ -1097,16 +1090,18 @@ fn a_value_object_with_an_unknown_key_or_a_non_string_dollar_is_an_error() {
         r#""ex:a": {"$": true, "type": "xsd:boolean"}"#,
         r#""ex:a": {"$": null}"#,
     ] {
-        let (_, _, error) = in_record(json::read(&entity(body)).unwrap_err());
+        let (_, _, error) = record_error(&entity(body));
         assert!(matches!(error, Error::JsonStructure { .. }), "{body}");
     }
 }
 
 #[test]
 fn a_member_fan_out_gives_every_record_the_identifier_and_the_attributes() {
-    let d = doc(&format!(
-        r#"{{{PFX}, "hadMember": {{"ex:m": {{"prov:collection": "ex:c",
-            "prov:entity": ["ex:a", "ex:b", "ex:c2"], "ex:tag": "t"}}}}}}"#
+    let d = doc(&record(
+        "hadMember",
+        "ex:m",
+        r#""prov:collection": "ex:c",
+            "prov:entity": ["ex:a", "ex:b", "ex:c2"], "ex:tag": "t""#,
     ));
     assert_eq!(d.records.len(), 3);
     for record in &d.records {
@@ -1115,24 +1110,14 @@ fn a_member_fan_out_gives_every_record_the_identifier_and_the_attributes() {
     }
 }
 
-/// The values under `ex:<local>` of `record`.
-fn values_of(record: &Record, local: &str) -> Vec<Value> {
-    record.attributes().get(&ex(local)).cloned().collect()
-}
-
 #[test]
 fn a_value_error_is_placed_at_its_token_and_names_its_record() {
     let text = "{\n  \"prefix\": {\"ex\": \"http://example.org/\"},\n  \"entity\": {\n    \"ex:e\": {\n      \"ex:a\": [\n        1,\n        {\"$\": 5},\n        2,\n        3\n      ]\n    }\n  }\n}\n";
-    let (section, key, error) = in_record(json::read(text).unwrap_err());
+    let (section, key, message) = record_structure(text);
     assert_eq!((section.as_str(), key.as_str()), ("entity", "ex:e"));
-    match error {
-        Error::JsonStructure { message } => {
-            // The `5` is the fifteenth byte of line 7.
-            assert!(message.ends_with(" at line 7 column 15"), "{message}");
-            assert!(message.contains("`$`"), "{message}");
-        }
-        other => panic!("expected JsonStructure, got {other:?}"),
-    }
+    // The `5` is the fifteenth byte of line 7.
+    assert!(message.ends_with(" at line 7 column 15"), "{message}");
+    assert!(message.contains("`$`"), "{message}");
 }
 
 #[test]
@@ -1148,20 +1133,17 @@ fn a_value_error_sits_where_serde_json_puts_it() {
         (r#"["é", null]"#, 81),
     ];
     for (value, column) in cases {
-        let text = format!(
-            r#"{{"prefix": {{"ex": "http://example.org/"}}, "entity": {{"ex:e": {{"ex:a": {value}}}}}}}"#
-        );
-        let (_, _, error) = in_record(json::read(&text).unwrap_err());
+        let text = one_record("entity", "ex:e", &format!(r#""ex:a": {value}"#));
+        let (_, _, error) = record_error(&text);
         let expected = format!(" at line 1 column {column}");
         assert!(error.to_string().ends_with(&expected), "{value}: {error}");
         // A byte order mark is not counted.
-        let (_, _, error) = in_record(json::read(&format!("\u{FEFF}{text}")).unwrap_err());
+        let (_, _, error) = record_error(&format!("\u{FEFF}{text}"));
         assert!(error.to_string().ends_with(&expected), "{value}: {error}");
     }
     // A value that spans lines: the column counts from its own line.
-    let text =
-        format!("{{{PFX}, \"entity\": {{\"ex:e\": {{\"ex:a\": {{\"$\": \"x\",\n \"zz\": 1}}}}}}}}");
-    let (_, _, error) = in_record(json::read(&text).unwrap_err());
+    let text = entity("\"ex:a\": {\"$\": \"x\",\n \"zz\": 1}");
+    let (_, _, error) = record_error(&text);
     assert!(
         error.to_string().ends_with(" at line 2 column 5"),
         "{error}"
@@ -1171,8 +1153,8 @@ fn a_value_error_sits_where_serde_json_puts_it() {
 #[test]
 fn every_kind_of_bad_value_names_its_record() {
     for value in ["null", "[1,[2]]", r#"{"$":5}"#, "{}", r#"{"$":"x","zz":1}"#] {
-        let text = format!(r#"{{{PFX}, "entity": {{"ex:e": {{"ex:a": {value}}}}}}}"#);
-        let (section, key, error) = in_record(json::read(&text).unwrap_err());
+        let text = entity(&format!(r#""ex:a": {value}"#));
+        let (section, key, error) = record_error(&text);
         assert_eq!(
             (section.as_str(), key.as_str()),
             ("entity", "ex:e"),
@@ -1181,10 +1163,12 @@ fn every_kind_of_bad_value_names_its_record() {
         assert!(matches!(error, Error::JsonStructure { .. }), "{value}");
     }
     // A record inside a bundle, and a formal.
-    let text = format!(
-        r#"{{{PFX}, "bundle": {{"ex:b": {{"used": {{"_:u": {{"prov:entity": null}}}}}}}}}}"#
+    let text = record(
+        "bundle",
+        "ex:b",
+        r#""used": {"_:u": {"prov:entity": null}}"#,
     );
-    let (section, key, error) = in_record(json::read(&text).unwrap_err());
+    let (section, key, error) = record_error(&text);
     assert_eq!((section.as_str(), key.as_str()), ("used", "_:u"));
     assert!(matches!(error, Error::JsonStructure { .. }));
 }
@@ -1202,11 +1186,6 @@ fn text_the_parser_rejects_is_a_json_error() {
     ] {
         assert!(matches!(json::read(text), Err(Error::Json(_))), "{text}");
     }
-}
-
-/// A one-line document with one record, `kind` `key`, whose body is `body`.
-fn one_record(kind: &str, key: &str, body: &str) -> String {
-    format!(r#"{{"prefix": {{"ex": "http://example.org/"}}, "{kind}": {{"{key}": {{{body}}}}}}}"#)
 }
 
 #[test]
@@ -1233,15 +1212,10 @@ fn a_string_that_cannot_be_decoded_in_a_value_is_a_structure_error_in_its_record
     ];
     for (kind, id, body, column) in cases {
         let text = one_record(kind, id, body);
-        let (section, key, error) = in_record(json::read(&text).unwrap_err());
+        let (section, key, message) = record_structure(&text);
         assert_eq!((section.as_str(), key.as_str()), (kind, id), "{body}");
-        match error {
-            Error::JsonStructure { message } => {
-                let expected = format!(" at line 1 column {column}");
-                assert!(message.ends_with(&expected), "{body}: {message}");
-            }
-            other => panic!("{body}: expected JsonStructure, got {other:?}"),
-        }
+        let expected = format!(" at line 1 column {column}");
+        assert!(message.ends_with(&expected), "{body}: {message}");
     }
 }
 
@@ -1251,14 +1225,9 @@ fn a_value_error_is_placed_whatever_comes_before_it() {
     // the escape has no second half. The `1e400` before it is a valid
     // number that does not fit an `f64`, and it is not the error.
     let text = one_record("entity", "ex:e", r#""ex:n": 1e400, "ex:a": "\ud800""#);
-    let (_, _, error) = in_record(json::read(&text).unwrap_err());
-    match error {
-        Error::JsonStructure { message } => {
-            assert!(message.ends_with(" at line 1 column 93"), "{message}");
-            assert!(message.contains("hex escape"), "{message}");
-        }
-        other => panic!("expected JsonStructure, got {other:?}"),
-    }
+    let (_, _, message) = record_structure(&text);
+    assert!(message.ends_with(" at line 1 column 93"), "{message}");
+    assert!(message.contains("hex escape"), "{message}");
 }
 
 #[test]
@@ -1270,22 +1239,19 @@ fn a_value_object_member_that_is_not_a_string_names_the_member() {
                 _ => format!(r#""ex:a": {{"$": "x", "{member}": {value}}}"#),
             };
             let text = one_record("entity", "ex:e", &body);
-            let (section, key, error) = in_record(json::read(&text).unwrap_err());
+            let (section, key, message) = record_structure(&text);
             assert_eq!(
                 (section.as_str(), key.as_str()),
                 ("entity", "ex:e"),
                 "{body}"
             );
             let expected = format!("expected a string as the `{member}` of a value object");
-            assert!(
-                matches!(&error, Error::JsonStructure { message } if message.contains(&expected)),
-                "{body}: {error}"
-            );
+            assert!(message.contains(&expected), "{body}: {message}");
         }
     }
     // The position is the first byte of the member's value.
     let text = one_record("entity", "ex:e", r#""ex:a": {"$": 1e400}"#);
-    let (_, _, error) = in_record(json::read(&text).unwrap_err());
+    let (_, _, error) = record_error(&text);
     assert!(
         error.to_string().ends_with(" at line 1 column 77"),
         "{error}"
@@ -1320,13 +1286,7 @@ fn an_error_under_a_duplicated_key_is_dropped_with_the_earlier_value() {
 
 #[test]
 fn a_later_member_of_a_value_object_replaces_an_earlier_one() {
-    let read = |value: &str| {
-        json::read(&one_record(
-            "entity",
-            "ex:e",
-            &format!(r#""ex:a": {value}"#),
-        ))
-    };
+    let text = |value: &str| one_record("entity", "ex:e", &format!(r#""ex:a": {value}"#));
     let cases = [
         (r#"{"$": 1, "$": "x"}"#, Value::Str("x".into())),
         (
@@ -1340,7 +1300,7 @@ fn a_later_member_of_a_value_object_replaces_an_earlier_one() {
         ),
     ];
     for (value, expected) in cases {
-        assert_eq!(values(&read(value).unwrap(), "a"), [expected], "{value}");
+        assert_eq!(values(&doc(&text(value)), "a"), [expected], "{value}");
     }
     // The last value given is the member, so a bad one after a good one is
     // an error. With several bad members, `$` is reported before `type`.
@@ -1353,13 +1313,10 @@ fn a_later_member_of_a_value_object_replaces_an_earlier_one() {
             112,
         ),
     ] {
-        let (_, _, error) = in_record(read(value).unwrap_err());
+        let (_, _, message) = record_structure(&text(value));
         let expected = format!(
             "expected a string as the `{member}` of a value object at line 1 column {column}"
         );
-        assert!(
-            matches!(&error, Error::JsonStructure { message } if *message == expected),
-            "{value}: {error}"
-        );
+        assert_eq!(message, expected, "{value}");
     }
 }

@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{JSON_CORPUS_SIZE, Report, corpus_dir, files, tsv};
+use common::{JSON_CORPUS_SIZE, Report, corpus_dir, files, only, pairs};
 use provkit::Document;
 use provkit::provn::Profile;
 
@@ -20,18 +20,15 @@ enum Difference {
 /// The twins not asserted equal, read from `tests/data/known_differences.tsv`
 /// (file name, tab, category). `ProvPy` 3.2.2 keeps the same list.
 fn known_differences() -> Vec<(String, Difference)> {
-    tsv(&common::data_path("known_differences.tsv"))
+    pairs("known_differences.tsv")
         .into_iter()
-        .map(|row| match row.as_slice() {
-            [name, category] => {
-                let category = match category.as_str() {
-                    "DynamicTimestamp" => Difference::DynamicTimestamp,
-                    "DatatypePalette" => Difference::DatatypePalette,
-                    other => panic!("unknown category {other} for {name}"),
-                };
-                (name.clone(), category)
-            }
-            other => panic!("expected a name and a category, got {other:?}"),
+        .map(|(name, category)| {
+            let category = match category.as_str() {
+                "DynamicTimestamp" => Difference::DynamicTimestamp,
+                "DatatypePalette" => Difference::DatatypePalette,
+                other => panic!("unknown category {other} for {name}"),
+            };
+            (name, category)
         })
         .collect()
 }
@@ -90,19 +87,18 @@ fn provtoolbox_corpus_equals_json_twins() {
             equal.join(" ")
         );
     }
-    if std::env::var("PROVKIT_ONLY").is_err() {
+    if only().is_none() {
         // The list is checked both ways: every row names a file that was
         // read, once.
-        let rows = tsv(&common::data_path("known_differences.tsv"));
-        assert_eq!(rows.len(), 159, "rows in known_differences.tsv");
+        assert_eq!(
+            known_differences.len(),
+            159,
+            "rows in known_differences.tsv"
+        );
         let mut listed = std::collections::HashSet::new();
-        for row in &rows {
-            assert!(listed.insert(row[0].as_str()), "{} is listed twice", row[0]);
-            assert!(
-                seen.contains(row[0].as_str()),
-                "{} names no corpus file",
-                row[0]
-            );
+        for (name, _) in &known_differences {
+            assert!(listed.insert(name), "{name} is listed twice");
+            assert!(seen.contains(name), "{name} names no corpus file");
         }
 
         let count = |want| known.iter().filter(|(_, c, _)| *c == want).count();
@@ -117,20 +113,10 @@ fn json_corpus_round_trips_through_provn() {
     let mut report = Report::default();
     for (name, text) in files(&corpus_dir("json"), "json") {
         report.checked += 1;
-        let Some(document) = report.read_json(&name, &text) else {
-            continue;
-        };
-        let provn = match provkit::provn::to_string(&document) {
-            Ok(s) => s,
-            Err(e) => {
-                report.fail(&name, format!("write: {e}"));
-                continue;
-            }
-        };
-        match provkit::provn::read_with(&provn, Profile::Default) {
-            Ok(back) if back == document => {}
-            Ok(_) => report.fail(&name, "differs after the PROV-N round trip"),
-            Err(e) => report.fail(&name, e),
+        if let Some(document) = report.read_json(&name, &text) {
+            report.round_trip(&name, &document, provkit::provn::to_string, |text| {
+                provkit::provn::read_with(text, Profile::Default)
+            });
         }
     }
     report.finish(JSON_CORPUS_SIZE);

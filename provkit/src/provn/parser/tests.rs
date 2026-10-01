@@ -1,5 +1,5 @@
 use crate::provn::Profile;
-use crate::test_util::ex;
+use crate::test_util::{ex, located, syntax};
 use crate::{Document, Error, Kind, QName, Record, Value, provn};
 
 const HEAD: &str = "document\n  default <http://default.org/>\n  prefix ex <http://example.org/>\n";
@@ -14,25 +14,6 @@ fn doc(body: &str, profile: Profile) -> Document {
 
 fn err(body: &str, profile: Profile) -> Error {
     read(body, profile).unwrap_err()
-}
-
-fn syntax_message(e: Error) -> String {
-    match e {
-        Error::Syntax { message, .. } => message,
-        other => panic!("expected a syntax error, got {other:?}"),
-    }
-}
-
-/// The position and the inner error of an [`Error::At`].
-fn located(e: Error) -> ((usize, usize), Error) {
-    match e {
-        Error::At {
-            line,
-            column,
-            error,
-        } => ((line, column), *error),
-        other => panic!("expected Error::At, got {other:?}"),
-    }
 }
 
 /// The values of the first record's attributes, in order.
@@ -114,21 +95,15 @@ fn attribute_values() {
     assert_eq!(*vals[7], Value::QName(ex("v")));
     assert_eq!(*vals[8], Value::QName(ex("w")));
     // An untyped dateTime is not a literal.
-    assert!(matches!(
-        err(
-            "entity(ex:e, [ex:d=2011-11-16T16:05:33Z])",
-            Profile::Default
-        ),
-        Error::Syntax { .. }
+    syntax(err(
+        "entity(ex:e, [ex:d=2011-11-16T16:05:33Z])",
+        Profile::Default,
     ));
 }
 
 #[test]
 fn profiles() {
-    assert!(matches!(
-        err("mentionOf(ex:a, ex:b, ex:c)", Profile::Strict),
-        Error::Syntax { .. }
-    ));
+    syntax(err("mentionOf(ex:a, ex:b, ex:c)", Profile::Strict));
     assert_eq!(
         doc("mentionOf(ex:a, ex:b, ex:c)", Profile::Default).records[0].kind(),
         Kind::Mention
@@ -137,10 +112,7 @@ fn profiles() {
         doc("prov:mentionOf(ex:a, ex:b, ex:c)", Profile::Strict).records[0].kind(),
         Kind::Mention
     );
-    assert!(matches!(
-        err("wasGeneratedBy(-, ex:a, -)", Profile::Strict),
-        Error::Syntax { .. }
-    ));
+    syntax(err("wasGeneratedBy(-, ex:a, -)", Profile::Strict));
     assert!(
         matches!(&doc("wasGeneratedBy(-, ex:a, -)", Profile::Default).records[0], Record::Generation(g) if g.entity.is_none())
     );
@@ -168,10 +140,7 @@ fn mention_takes_attributes() {
 fn a_bare_name_before_a_parenthesis_inside_an_extension_is_a_syntax_error() {
     for profile in [Profile::Strict, Profile::Default] {
         // The error sits at the `(` after `g`, on line 4 of the document.
-        let Error::Syntax { line, column, .. } = err("ex:f(g(1))", profile) else {
-            panic!("expected a syntax error under {profile:?}");
-        };
-        assert_eq!((line, column), (4, 7), "{profile:?}");
+        assert_eq!(syntax(err("ex:f(g(1))", profile)).0, (4, 7), "{profile:?}");
     }
 }
 
@@ -225,10 +194,7 @@ fn prov_mention_of_with_a_marker_is_an_extension_under_strict() {
     assert!(doc.records.is_empty(), "{:?}", doc.records);
     assert_eq!(ignored.len(), 1);
     assert_eq!(ignored[0].name, "prov:mentionOf");
-    assert!(matches!(
-        err("mentionOf(ex:e2, ex:e1, -)", Profile::Strict),
-        Error::Syntax { .. }
-    ));
+    syntax(err("mentionOf(ex:e2, ex:e1, -)", Profile::Strict));
 }
 
 /// `Default` reads `-` in a required position of `prov:mentionOf` as it
@@ -266,10 +232,7 @@ fn an_identifier_on_prov_mention_of_is_an_extension_under_strict() {
     assert!(matches!(&doc.records[0], Record::Mention(m) if m.id.is_none()));
     // Bare `mentionOf` with an identifier: a syntax error under `Strict`,
     // because the keyword is bare, and a mention under `Default`.
-    assert!(matches!(
-        err("mentionOf(ex:m; ex:e2, ex:e1, ex:b)", Profile::Strict),
-        Error::Syntax { .. }
-    ));
+    syntax(err("mentionOf(ex:m; ex:e2, ex:e1, ex:b)", Profile::Strict));
     let (doc, _) = report("mentionOf(ex:m; ex:e2, ex:e1, ex:b)", Profile::Default);
     assert!(matches!(&doc.records[0], Record::Mention(m) if m.id == Some(ex("m"))));
 }
@@ -319,12 +282,8 @@ fn strict_is_the_whole_grammar() {
     ];
     for (text, position) in cases {
         assert!(provn::read_with(&text, Profile::Default).is_ok(), "{text}");
-        match provn::read_with(&text, Profile::Strict) {
-            Err(Error::Syntax { line, column, .. }) => {
-                assert_eq!((line, column), position, "{text}");
-            }
-            other => panic!("{text}: expected a syntax error, got {other:?}"),
-        }
+        let found = syntax(provn::read_with(&text, Profile::Strict).unwrap_err()).0;
+        assert_eq!(found, position, "{text}");
     }
 }
 
@@ -343,14 +302,10 @@ fn a_second_default_and_a_moved_reserved_prefix_fail_under_both_profiles() {
     let twice = "document\ndefault <http://a/>\ndefault <http://b/>\nendDocument\n";
     let moved = "document\nprefix prov <http://other/>\nendDocument\n";
     for profile in [Profile::Strict, Profile::Default] {
-        assert!(matches!(
-            provn::read_with(twice, profile),
-            Err(Error::Syntax {
-                line: 3,
-                column: 1,
-                ..
-            })
-        ));
+        assert_eq!(
+            syntax(provn::read_with(twice, profile).unwrap_err()).0,
+            (3, 1)
+        );
         let (position, inner) = located(provn::read_with(moved, profile).unwrap_err());
         assert_eq!(position, (2, 8));
         assert!(matches!(inner, Error::ReservedPrefix { .. }), "{inner:?}");
@@ -396,29 +351,21 @@ fn a_bare_minus_zero_is_an_int_and_a_plus_sign_is_a_syntax_error() {
         Value::Typed(t) if t.lexical() == "-0" && t.datatype().local() == "int"
     ));
     for profile in [Profile::Strict, Profile::Default] {
-        assert!(matches!(
-            err("entity(ex:e, [ex:a=+5])", profile),
-            Error::Syntax { .. }
-        ));
+        syntax(err("entity(ex:e, [ex:a=+5])", profile));
     }
 }
 
 #[test]
 fn a_language_tag_ends_at_an_underscore_and_the_rest_is_a_syntax_error() {
     for profile in [Profile::Strict, Profile::Default] {
-        assert!(matches!(
-            err(r#"entity(ex:e, [ex:a="x" @en_US])"#, profile),
-            Error::Syntax { .. }
-        ));
+        syntax(err(r#"entity(ex:e, [ex:a="x" @en_US])"#, profile));
     }
 }
 
 #[test]
 fn a_brace_outside_a_dictionary_is_a_syntax_error_at_the_brace() {
-    match provn::read_with("document { endDocument", Profile::Default) {
-        Err(Error::Syntax { line, column, .. }) => assert_eq!((line, column), (1, 10)),
-        other => panic!("expected a syntax error, got {other:?}"),
-    }
+    let e = provn::read_with("document { endDocument", Profile::Default).unwrap_err();
+    assert_eq!(syntax(e).0, (1, 10));
 }
 
 #[test]
@@ -432,66 +379,34 @@ fn a_datatype_may_be_all_digits() {
 
 #[test]
 fn arity_and_structure_errors() {
-    let message = syntax_message(err("wasGeneratedBy(ex:e, ex:a)", Profile::Default));
+    let message = syntax(err("wasGeneratedBy(ex:e, ex:a)", Profile::Default)).1;
     assert!(message.contains("1 or 3"), "{message}");
     assert!(message.starts_with("expected"), "{message}");
-    assert!(matches!(
-        err("entity()", Profile::Default),
-        Error::Syntax { .. }
-    ));
-    assert!(matches!(
-        err(
-            "bundle ex:b\n bundle ex:c\n endBundle\nendBundle",
-            Profile::Default
-        ),
-        Error::Syntax { .. }
+    syntax(err("entity()", Profile::Default));
+    syntax(err(
+        "bundle ex:b\n bundle ex:c\n endBundle\nendBundle",
+        Profile::Default,
     ));
     assert!(matches!(
         located(err("entity(zz:e)", Profile::Default)),
         (_, Error::UndeclaredPrefix(p)) if p == "zz"
     ));
-    assert!(matches!(
-        provn::read("entity(ex:e)"),
-        Err(Error::Syntax {
-            line: 1,
-            column: 1,
-            ..
-        })
-    ));
+    assert_eq!(syntax(provn::read("entity(ex:e)").unwrap_err()).0, (1, 1));
     // A time where a name belongs, and a name where a time belongs.
-    assert!(matches!(
-        err(
-            "wasGeneratedBy(ex:e, 2011-11-16T16:05:33Z, -)",
-            Profile::Default
-        ),
-        Error::Syntax { .. }
+    syntax(err(
+        "wasGeneratedBy(ex:e, 2011-11-16T16:05:33Z, -)",
+        Profile::Default,
     ));
-    assert!(matches!(
-        err("wasGeneratedBy(ex:e, ex:a, ex:t)", Profile::Default),
-        Error::Syntax { .. }
-    ));
+    syntax(err("wasGeneratedBy(ex:e, ex:a, ex:t)", Profile::Default));
 }
 
 /// A syntax error sits at the token the grammar rejects, or at the end of
 /// the input when the text stops short.
 #[test]
 fn errors_carry_positions() {
-    assert!(matches!(
-        err("entity(ex:e]", Profile::Default),
-        Error::Syntax {
-            line: 4,
-            column: 12,
-            ..
-        }
-    ));
-    assert!(matches!(
-        provn::read("document\nprefix ex <http://e/>\nentity(ex:e)\n"),
-        Err(Error::Syntax {
-            line: 4,
-            column: 1,
-            ..
-        })
-    ));
+    assert_eq!(syntax(err("entity(ex:e]", Profile::Default)).0, (4, 12));
+    let e = provn::read("document\nprefix ex <http://e/>\nentity(ex:e)\n").unwrap_err();
+    assert_eq!(syntax(e).0, (4, 1));
 }
 
 #[test]
@@ -551,33 +466,22 @@ fn each_layer_error_sits_at_its_token() {
 
 #[test]
 fn only_a_closing_paren_follows_attributes() {
-    let message = syntax_message(err("entity(ex:e, [ex:a=1], ex:b)", Profile::Default));
+    let message = syntax(err("entity(ex:e, [ex:a=1], ex:b)", Profile::Default)).1;
     assert!(message.starts_with("expected ')'"), "{message}");
 }
 
 #[test]
 fn nothing_follows_end_document() {
-    match provn::read("document\nendDocument\nentity(ex:e)") {
-        Err(Error::Syntax {
-            line,
-            column,
-            message,
-            ..
-        }) => {
-            assert_eq!((line, column), (3, 1));
-            assert!(message.starts_with("expected end of input"), "{message}");
-        }
-        other => panic!("unexpected {other:?}"),
-    }
+    let (at, message) = syntax(provn::read("document\nendDocument\nentity(ex:e)").unwrap_err());
+    assert_eq!(at, (3, 1));
+    assert!(message.starts_with("expected end of input"), "{message}");
 }
 
 #[test]
 fn a_prefix_is_not_an_integer() {
     let text = "document\n prefix 123 <http://a/>\nendDocument";
-    assert!(matches!(
-        provn::read(text),
-        Err(Error::Syntax { line: 2, .. })
-    ));
+    let ((line, _), _) = syntax(provn::read(text).unwrap_err());
+    assert_eq!(line, 2);
 }
 
 #[test]
@@ -645,10 +549,7 @@ fn a_local_part_provn_cannot_write_is_a_syntax_error() {
     // The lexer ends a name at a `%` without two hex digits and takes
     // no `\u` escape in a name, so neither reaches the resolver.
     for body in [r"entity(ex:a%4)", r"entity(ex:a\u00E9)", "entity(ex:a b)"] {
-        assert!(
-            matches!(err(body, Profile::Strict), Error::Syntax { .. }),
-            "{body}"
-        );
+        syntax(err(body, Profile::Strict));
     }
 }
 
@@ -845,10 +746,8 @@ fn bundle_identifier_resolves_in_its_own_scope() {
 #[test]
 fn duplicate_prefix_in_one_scope_is_rejected() {
     let text = "document\n prefix ex <http://a/>\n prefix ex <http://b/>\nendDocument";
-    assert!(matches!(
-        provn::read(text),
-        Err(Error::Syntax { line: 3, .. })
-    ));
+    let ((line, _), _) = syntax(provn::read(text).unwrap_err());
+    assert_eq!(line, 3);
 }
 
 #[test]
@@ -856,12 +755,8 @@ fn a_prefix_is_a_pn_prefix_as_written() {
     for profile in [Profile::Strict, Profile::Default] {
         for prefix in [r"a\-b", r"a\.b", r"a\:b", "a%41", "_", "a/b"] {
             let text = format!("document\nprefix {prefix} <http://x/>\nentity(a-b:e)\nendDocument");
-            match provn::read_with(&text, profile) {
-                Err(Error::Syntax { line, column, .. }) => {
-                    assert_eq!((line, column), (2, 8), "{prefix}");
-                }
-                other => panic!("{prefix}: expected a syntax error, got {other:?}"),
-            }
+            let found = syntax(provn::read_with(&text, profile).unwrap_err()).0;
+            assert_eq!(found, (2, 8), "{prefix}");
         }
         // These prefixes need no escape, and each names an entity.
         for prefix in ["é", "a1", "a.b", "a-b", "a_b", "日本", "a·b"] {

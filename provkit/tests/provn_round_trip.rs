@@ -34,10 +34,12 @@ fn every_position(local: &str) -> Document {
     d.namespaces.set_default(default);
     for ns in ["http://example.org/", default] {
         let n = QName::new(ns, local).unwrap();
-        let mut a = Attributes::new();
-        a.insert(n.clone(), Value::QName(n.clone()));
-        a.insert(ex("t"), Value::typed("x", n.clone()).unwrap());
-        d.records.push(element(Kind::Entity, n.clone(), a));
+        let a = [
+            (n.clone(), Value::QName(n.clone())),
+            (ex("t"), Value::typed("x", n.clone()).unwrap()),
+        ];
+        d.records
+            .push(element(Kind::Entity, n.clone(), a.into_iter().collect()));
         d.records.push(relation(
             Kind::Usage,
             Some(n.clone()),
@@ -121,8 +123,8 @@ fn sample_texts() -> Vec<String> {
 }
 
 /// Values from every public constructor: the `From` conversions, and
-/// [`Value::typed`] over sample lexical forms and datatypes.
-fn sample_values() -> Vec<Value> {
+/// [`Value::typed`] over `texts` as lexical forms and sample datatypes.
+fn sample_values(texts: &[String]) -> Vec<Value> {
     let mut values = vec![
         Value::from(0i32),
         Value::from(i32::MIN),
@@ -141,9 +143,9 @@ fn sample_values() -> Vec<Value> {
         Value::from(LangStr::new("hi", "en-GB").unwrap()),
     ];
     values.extend(
-        sample_texts()
-            .into_iter()
-            .map(|text| Value::from(LangStr::new(text, "en-GB").unwrap())),
+        texts
+            .iter()
+            .map(|text| Value::from(LangStr::new(text.as_str(), "en-GB").unwrap())),
     );
     let datatypes = [
         XSD_INT.clone(),
@@ -155,7 +157,7 @@ fn sample_values() -> Vec<Value> {
         QName::new(well_known::XSD, "anyURI").unwrap(),
         ex("dt"),
     ];
-    for lexical in sample_texts() {
+    for lexical in texts {
         for datatype in &datatypes {
             values.push(Value::typed(lexical.as_str(), datatype.clone()).unwrap());
         }
@@ -226,8 +228,7 @@ fn a_qualified_name_literal_resolves_exactly_when_a_name_can_be_built() {
         .to_string();
         match (QName::new("http://example.org/", &local), json::read(&text)) {
             (Ok(q), Ok(d)) => {
-                let mut a = Attributes::new();
-                a.insert(ex("v"), Value::QName(q));
+                let a = [(ex("v"), Value::QName(q))].into_iter().collect();
                 let expected = document(vec![element(Kind::Entity, ex("e"), a)]);
                 assert_eq!(d, expected, "{local:?}");
                 // It is written, and reads back equal from both formats.
@@ -267,9 +268,8 @@ fn whatever_the_writer_accepts_reads_back_equal() {
 
     // Every value the public constructors build is accepted, and reads
     // back equal through PROV-JSON too.
-    for v in sample_values() {
-        let mut a = Attributes::new();
-        a.insert(ex("v"), v);
+    for v in sample_values(&locals) {
+        let a = [(ex("v"), v)].into_iter().collect();
         let d = document(vec![element(Kind::Entity, ex("e"), a)]);
         assert!(written_reads_back(&d));
         #[cfg(feature = "json")]

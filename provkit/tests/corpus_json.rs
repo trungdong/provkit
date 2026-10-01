@@ -2,7 +2,7 @@
 
 mod common;
 
-use common::{JSON_CORPUS_SIZE, Report, corpus_dir, files};
+use common::{JSON_CORPUS_SIZE, Report, corpus_dir, files, only};
 use provkit::FormalAttr;
 
 #[test]
@@ -20,20 +20,8 @@ fn round_trips_all_398() {
     let mut report = Report::default();
     for (name, text) in files(&corpus_dir("json"), "json") {
         report.checked += 1;
-        let Some(first) = report.read_json(&name, &text) else {
-            continue;
-        };
-        let written = match provkit::json::to_string(&first) {
-            Ok(s) => s,
-            Err(e) => {
-                report.fail(&name, format!("write: {e}"));
-                continue;
-            }
-        };
-        match provkit::json::read(&written) {
-            Ok(second) if second == first => {}
-            Ok(_) => report.fail(&name, "documents differ after round trip"),
-            Err(e) => report.fail(&name, format!("re-read: {e}")),
+        if let Some(first) = report.read_json(&name, &text) {
+            report.round_trip(&name, &first, provkit::json::to_string, provkit::json::read);
         }
     }
     report.finish(JSON_CORPUS_SIZE);
@@ -98,7 +86,7 @@ fn unification_over_the_corpus() {
         }
     }
     // The filter narrows the set, so the lists are checked only without it.
-    if std::env::var("PROVKIT_ONLY").is_err() {
+    if only().is_none() {
         if on_name != NAME_CONFLICTS {
             report.fail(
                 "scruffy-*",

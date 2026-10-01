@@ -5,7 +5,7 @@ mod common;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use common::{Report, corpus_dir, files, tsv};
+use common::{Report, corpus_dir, files, only, tsv};
 use provkit::provn::{self, Profile};
 
 /// Number of probes in the corpus.
@@ -104,7 +104,7 @@ fn probes_read_as_the_grammar_requires() {
             }
         }
     }
-    if std::env::var("PROVKIT_ONLY").is_err() {
+    if only().is_none() {
         for name in expected.keys() {
             if !names.contains(name.as_str()) {
                 report.fail(name, "row has no probe file");

@@ -4,7 +4,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use crate::{Agent, Attributes, Bundle, DateTime, Entity, Namespaces, QName, Record};
-use crate::{Document, Formal, FormalAttr, Kind};
+use crate::{Document, Error, Formal, FormalAttr, Kind};
 
 /// Hash a value with the default hasher.
 pub(crate) fn hash<T: Hash>(value: &T) -> u64 {
@@ -18,10 +18,23 @@ pub(crate) fn ex(local: &str) -> QName {
     QName::new("http://example.org/", local).unwrap()
 }
 
+/// A name in the PROV namespace.
+pub(crate) fn prov(local: &str) -> QName {
+    QName::new(crate::well_known::PROV, local).unwrap()
+}
+
 /// An entity with no attributes.
 pub(crate) fn entity(local: &str) -> Record {
     Record::Entity(Entity {
         id: ex(local),
+        attributes: Attributes::new(),
+    })
+}
+
+/// An entity named `local` in `namespace`, with no attributes.
+pub(crate) fn entity_in(namespace: &str, local: &str) -> Record {
+    Record::Entity(Entity {
+        id: QName::new(namespace, local).unwrap(),
         attributes: Attributes::new(),
     })
 }
@@ -81,4 +94,44 @@ impl std::io::Write for Broken {
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
+}
+
+/// The position and message of an [`Error::Syntax`].
+pub(crate) fn syntax(e: Error) -> ((usize, usize), String) {
+    match e {
+        Error::Syntax {
+            line,
+            column,
+            message,
+        } => ((line, column), message),
+        other => panic!("expected a syntax error, got {other:?}"),
+    }
+}
+
+/// The position and the inner error of an [`Error::At`].
+pub(crate) fn located(e: Error) -> ((usize, usize), Error) {
+    match e {
+        Error::At {
+            line,
+            column,
+            error,
+        } => ((line, column), *error),
+        other => panic!("expected Error::At, got {other:?}"),
+    }
+}
+
+/// `d` written as PROV-JSON, as text and as a JSON value.
+#[cfg(feature = "json")]
+pub(crate) fn written(d: &Document) -> (String, serde_json::Value) {
+    let text = crate::json::to_string(d).unwrap();
+    let value = serde_json::from_str(&text).unwrap();
+    (text, value)
+}
+
+/// As [`written`], after checking that the text reads back equal to `d`.
+#[cfg(feature = "json")]
+pub(crate) fn round_trip(d: &Document) -> (String, serde_json::Value) {
+    let (text, value) = written(d);
+    assert_eq!(crate::json::read(&text).unwrap(), *d, "{text}");
+    (text, value)
 }

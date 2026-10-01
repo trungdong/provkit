@@ -2,8 +2,20 @@
 
 use super::FormalAttr as F;
 use super::*;
-use crate::test_util::{dt, ex, hash};
+use crate::test_util::{dt, entity, ex, hash, prov, relation};
 use crate::{Attributes, Value};
+
+/// The generation of `ex:e1` at [`dt`].
+fn generation(id: Option<QName>) -> Record {
+    relation(
+        Kind::Generation,
+        id,
+        vec![
+            (F::Entity, Formal::Name(ex("e1"))),
+            (F::Time, Formal::Time(dt())),
+        ],
+    )
+}
 
 /// A value for `attr` whose text names the formal, so a swapped field shows.
 fn formal_for(attr: FormalAttr) -> Formal {
@@ -146,16 +158,7 @@ fn the_largest_arity_is_the_number_of_formals() {
 
 #[test]
 fn from_parts_builds_a_generation() {
-    let r = Record::from_parts(
-        Kind::Generation,
-        Some(ex("g1")),
-        vec![
-            (FormalAttr::Entity, Formal::Name(ex("e1"))),
-            (FormalAttr::Time, Formal::Time(dt())),
-        ],
-        Attributes::new(),
-    )
-    .unwrap();
+    let r = generation(Some(ex("g1")));
     assert_eq!(r.kind(), Kind::Generation);
     assert_eq!(r.id(), Some(&ex("g1")));
     let Record::Generation(g) = &r else { panic!() };
@@ -283,7 +286,6 @@ fn from_parts_rejects_bad_parts() {
 
 #[test]
 fn attribute_named_after_an_own_formal_is_rejected() {
-    let prov = |l: &str| QName::new(PROV, l).unwrap();
     let mut clash = Attributes::new();
     clash.insert(prov("activity"), Value::QName(ex("a2")));
     let e = Record::from_parts(Kind::Generation, None, vec![], clash).unwrap_err();
@@ -317,28 +319,24 @@ fn attribute_named_after_an_own_formal_is_rejected() {
 #[test]
 fn records_compare_and_hash_by_value() {
     let build = |id: &str| {
-        Record::from_parts(
+        relation(
             Kind::Usage,
             Some(ex(id)),
-            vec![(FormalAttr::Activity, Formal::Name(ex("a")))],
-            Attributes::new(),
+            vec![(F::Activity, Formal::Name(ex("a")))],
         )
-        .unwrap()
     };
     let r = build("u");
     assert_eq!(build("u"), r);
     assert_eq!(hash(&build("u")), hash(&r));
     assert_ne!(build("u"), build("v"));
-    let unnamed = Record::from_parts(
+    let unnamed = relation(
         Kind::Usage,
         None,
         r.formals()
             .into_iter()
             .map(|(a, v)| (a, v.to_formal()))
             .collect(),
-        Attributes::new(),
-    )
-    .unwrap();
+    );
     assert_ne!(unnamed, r);
 }
 
@@ -353,16 +351,7 @@ fn attributes_mut_edits_every_variant() {
 
 #[test]
 fn formal_reads_one_value() {
-    let r = Record::from_parts(
-        Kind::Generation,
-        None,
-        vec![
-            (FormalAttr::Entity, Formal::Name(ex("e1"))),
-            (FormalAttr::Time, Formal::Time(dt())),
-        ],
-        Attributes::new(),
-    )
-    .unwrap();
+    let r = generation(None);
     assert_eq!(
         r.formal(FormalAttr::Entity),
         Some(FormalRef::Name(&ex("e1")))
@@ -372,7 +361,7 @@ fn formal_reads_one_value() {
     assert_eq!(r.formal(FormalAttr::Activity), None);
     assert_eq!(r.formal(FormalAttr::Plan), None);
     // Every formal is absent from a record of a kind that has none.
-    let e = crate::test_util::entity("e");
+    let e = entity("e");
     assert!(FormalAttr::ALL.iter().all(|&a| e.formal(a).is_none()));
 }
 
@@ -386,7 +375,6 @@ fn formal_ref_to_formal_copies_the_value() {
 
 #[test]
 fn check_attributes_rejects_a_hand_built_own_formal() {
-    let prov = |l: &str| QName::new(PROV, l).unwrap();
     let usage = |name: QName| {
         let mut attributes = Attributes::new();
         attributes.insert(name, Value::QName(ex("x")));
