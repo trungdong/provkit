@@ -6,7 +6,7 @@ mod write;
 
 pub use write::{to_string, write};
 
-use crate::sink::DocumentBuilder;
+use crate::builder::DocumentBuilder;
 use crate::{Document, Error, Result, strip_bom};
 
 /// Read a PROV-JSON document.

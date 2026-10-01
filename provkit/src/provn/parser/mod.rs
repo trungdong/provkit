@@ -14,10 +14,10 @@ use std::collections::HashSet;
 
 use super::lexer::{Token, TokenKind};
 use super::{Ignored, Profile, Relaxation};
+use crate::builder::DocumentBuilder;
 use crate::error::clip;
 use crate::namespaces::Scope;
 use crate::pn;
-use crate::sink::DocumentBuilder;
 use crate::well_known::{PROV, XSD};
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
@@ -213,17 +213,17 @@ impl<'t> Parser<'t> {
 
     // document ::= "document" namespaceDeclarations? (expression | bundle)* "endDocument"
 
-    pub(super) fn document(&mut self, sink: &mut DocumentBuilder) -> Result<()> {
+    pub(super) fn document(&mut self, builder: &mut DocumentBuilder) -> Result<()> {
         self.keyword("document")?;
         self.document_ns = self.namespace_declarations()?;
-        sink.start_document(self.document_ns.clone());
+        builder.start_document(self.document_ns.clone());
         let mut after_bundle = false;
         while !self.is_keyword("endDocument") {
             if self.peek().kind == TokenKind::Eof {
                 return Err(self.expected("'endDocument'"));
             }
             if self.is_keyword("bundle") {
-                self.bundle(sink)?;
+                self.bundle(builder)?;
                 after_bundle = true;
             } else {
                 // Expressions come before bundles: production [1].
@@ -237,14 +237,14 @@ impl<'t> Parser<'t> {
                         ),
                     ));
                 }
-                self.statement(sink)?;
+                self.statement(builder)?;
             }
         }
         self.bump();
         if self.peek().kind != TokenKind::Eof {
             return Err(self.expected("end of input"));
         }
-        sink.end_document();
+        builder.end_document();
         Ok(())
     }
 
@@ -331,14 +331,16 @@ impl<'t> Parser<'t> {
 
     // bundle ::= "bundle" identifier namespaceDeclarations? expression* "endBundle"
 
-    fn bundle(&mut self, sink: &mut DocumentBuilder) -> Result<()> {
+    fn bundle(&mut self, builder: &mut DocumentBuilder) -> Result<()> {
         self.bump();
         let id = self.identifier("a bundle identifier")?;
         let ns = self.namespace_declarations()?;
         // The bundle's own name resolves in the bundle scope (PROV-N 3.7.4).
         self.bundle_ns = Some(ns.clone());
         let name = self.resolve(&id)?;
-        sink.start_bundle(name, ns).map_err(|e| at(id.token, e))?;
+        builder
+            .start_bundle(name, ns)
+            .map_err(|e| at(id.token, e))?;
         while !self.is_keyword("endBundle") {
             if self.peek().kind == TokenKind::Eof
                 || self.is_keyword("bundle")
@@ -346,20 +348,20 @@ impl<'t> Parser<'t> {
             {
                 return Err(self.expected("a statement or 'endBundle'"));
             }
-            self.statement(sink)?;
+            self.statement(builder)?;
         }
         self.bump();
         self.bundle_ns = None;
-        sink.end_bundle();
+        builder.end_bundle();
         Ok(())
     }
 
-    /// One statement: a PROV expression, sent to `sink` as a record, or an
+    /// One statement: a PROV expression, sent to `builder` as a record, or an
     /// extensibility expression, parsed and recorded in `ignored`. A keyword
     /// with a prefix starts an extensibility expression (section 5), except
     /// `prov:mentionOf` followed by the shape of a mention; a bare unknown
     /// keyword is a syntax error.
-    fn statement(&mut self, sink: &mut DocumentBuilder) -> Result<()> {
+    fn statement(&mut self, builder: &mut DocumentBuilder) -> Result<()> {
         let is_extension = match &self.peek().kind {
             TokenKind::Name { prefix, .. } if prefix.is_empty() => false,
             TokenKind::Name { prefix, local } => {
@@ -370,7 +372,7 @@ impl<'t> Parser<'t> {
         if is_extension {
             self.extensibility_expression()
         } else {
-            sink.record(self.expression()?);
+            builder.record(self.expression()?);
             Ok(())
         }
     }

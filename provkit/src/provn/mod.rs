@@ -6,7 +6,7 @@ mod lexer;
 mod parser;
 mod write;
 
-use crate::sink::DocumentBuilder;
+use crate::builder::DocumentBuilder;
 use crate::{Document, Result, strip_bom};
 
 pub use write::{name, statement, to_string, write};
@@ -136,26 +136,15 @@ pub fn read_with(text: &str, profile: Profile) -> Result<Document> {
 ///
 /// As [`read`].
 pub fn read_report(text: &str, profile: Profile) -> Result<ReadReport> {
-    let mut builder = DocumentBuilder::new();
-    let ignored = read_into_with(strip_bom(text), profile, &mut builder)?;
-    Ok(ReadReport {
-        document: builder.finish(),
-        ignored,
-    })
-}
-
-/// Read PROV-N text under `profile`, sending events to `builder` as each
-/// statement is parsed. Returns the extensibility expressions left out. On an
-/// error the builder has already received the events that came before it.
-pub(crate) fn read_into_with(
-    text: &str,
-    profile: Profile,
-    builder: &mut DocumentBuilder,
-) -> Result<Vec<Ignored>> {
+    let text = strip_bom(text);
     let tokens = lexer::tokenize(text)?;
     let mut parser = parser::Parser::new(text, &tokens, profile);
-    parser.document(builder)?;
-    Ok(parser.ignored)
+    let mut builder = DocumentBuilder::new();
+    parser.document(&mut builder)?;
+    Ok(ReadReport {
+        document: builder.finish(),
+        ignored: parser.ignored,
+    })
 }
 
 #[cfg(test)]

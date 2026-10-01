@@ -52,6 +52,8 @@
 struct ReadmeDoctests;
 
 mod attributes;
+#[cfg(any(feature = "json", feature = "provn"))]
+mod builder;
 mod datetime;
 mod document;
 mod error;
@@ -63,8 +65,6 @@ mod pn;
 pub mod provn;
 mod qname;
 mod record;
-#[cfg(any(feature = "json", feature = "provn"))]
-mod sink;
 mod unify;
 mod value;
 
