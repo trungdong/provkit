@@ -30,7 +30,8 @@ impl Record {
         Record::assemble(kind, id, formals, attributes)
     }
 
-    /// The formal attributes that are present, in table order.
+    /// The formal attributes that are present, in the order of
+    /// [`Kind::formals`].
     pub fn formals(&self) -> Vec<(FormalAttr, FormalRef<'_>)> {
         let present = |&attr: &FormalAttr| Some((attr, self.formal(attr)?));
         self.kind().formals().iter().filter_map(present).collect()
@@ -79,7 +80,8 @@ macro_rules! records {
         }
 
         impl Kind {
-            /// Every kind, in PROV-DM order.
+            /// Every kind: the elements first, then the relations in PROV-DM
+            /// order.
             pub const ALL: &'static [Kind] = &[$(Kind::$name),*];
 
             /// The kind's name, which is its PROV-N keyword and its PROV-JSON key.

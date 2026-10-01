@@ -276,6 +276,7 @@ mod tests {
             "a\u{A0}b",
             "\u{E000}",
             "\u{FFFE}",
+            "\u{FFFF}",
             "\u{F0000}",
         ] {
             assert!(

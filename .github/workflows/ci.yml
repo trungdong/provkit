@@ -14,7 +14,9 @@ jobs:
           submodules: true
       - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1 (2026-09-12)
         with:
-          toolchain: stable
+          # Pinned, so a new lint in a later toolchain does not fail a push that
+          # changed no code. Raise it with `rust-version`.
+          toolchain: "1.98"
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - run: cargo fmt --check
@@ -37,16 +39,6 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
       - run: cargo build -p provkit --target wasm32-unknown-unknown
-  msrv:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: true
-      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1 (2026-09-12)
-        with:
-          toolchain: "1.98"
-      - run: cargo check --workspace --all-features
   deny:
     runs-on: ubuntu-latest
     steps:

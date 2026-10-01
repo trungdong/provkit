@@ -246,7 +246,8 @@ fn value_wire(value: &Value, names: &mut WriteScope<'_>) -> JsonValue {
     };
     match value {
         Value::Str(s) => JsonValue::Str(s.clone()),
-        // The note requires `lang` alone: section 2.2.
+        // The PROV-JSON note, section 2.2, gives a language-tagged string
+        // `lang` and no `type`.
         Value::LangStr(l) => JsonValue::Typed {
             value: l.value().to_owned(),
             datatype: None,
@@ -499,6 +500,26 @@ mod tests {
         });
         let text = json::to_string(&d).unwrap();
         assert!(text.contains("\"ex:b\""), "key uses the bundle's table");
+        assert_eq!(json::read(&text).unwrap(), d);
+    }
+
+    #[test]
+    fn records_sharing_an_identifier_are_written_as_an_array() {
+        let tagged = |tag: &str| {
+            let mut attributes = Attributes::new();
+            attributes.insert(ex("tag"), tag.into());
+            Record::Entity(Entity {
+                id: ex("e"),
+                attributes,
+            })
+        };
+        let mut d = Document::new();
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        d.records = vec![tagged("one"), tagged("two"), entity_in(ex("single"))];
+        let text = json::to_string(&d).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["entity"]["ex:e"].as_array().map(Vec::len), Some(2));
+        assert!(v["entity"]["ex:single"].is_object());
         assert_eq!(json::read(&text).unwrap(), d);
     }
 

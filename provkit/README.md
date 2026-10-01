@@ -27,7 +27,8 @@ fn main() -> Result<(), provkit::Error> {
 ```
 
 `==` on `Document` is set-based. It ignores record order, attribute order,
-namespace tables and the spelling of a number, boolean or `dateTime`.
+namespace tables, blank-node labels and the spelling of a number, boolean or
+`dateTime`.
 `Document::unified()` merges records that share an identifier and kind, and
 fails where PROV-CONSTRAINTS 53 to 55 forbid the sharing or where formal
 attributes conflict. `provn::read_with` takes a `provn::Profile`: `Strict`

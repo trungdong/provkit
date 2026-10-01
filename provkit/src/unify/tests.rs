@@ -206,6 +206,28 @@ fn an_absent_formal_unifies_with_a_present_one_in_every_position() {
     d.records = vec![association(None), association(Some(ex("pl")))];
     let u = d.unified().unwrap();
     assert_eq!(u.records, vec![association(Some(ex("pl")))]);
+
+    // Every formal of every kind that merges, in either order.
+    for &kind in Kind::ALL.iter().filter(|k| !k.is_bare()) {
+        for &attr in kind.formals() {
+            let present = if attr.is_time() {
+                t("2011-11-16T16:05:33Z")
+            } else {
+                name("v")
+            };
+            let with = rec(kind, "x", vec![(attr, present)], None);
+            let without = rec(kind, "x", vec![], None);
+            for pair in [[&with, &without], [&without, &with]] {
+                let mut d = Document::new();
+                d.records = pair.iter().map(|&r| r.clone()).collect();
+                assert_eq!(
+                    d.unified().unwrap().records,
+                    vec![with.clone()],
+                    "{kind:?} {attr}"
+                );
+            }
+        }
+    }
 }
 
 fn pair(a: Kind, b: Kind) -> crate::Result<Document> {

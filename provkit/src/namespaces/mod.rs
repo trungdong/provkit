@@ -59,9 +59,10 @@ impl Namespaces {
     ///
     /// # Errors
     ///
-    /// [`Error::InvalidPrefix`] if `prefix` is not a `PN_PREFIX`: empty,
-    /// containing `:` or whitespace, not starting with a letter, or ending
-    /// in `.`. `_`, which introduces blank nodes, is never a prefix.
+    /// [`Error::InvalidPrefix`] if `prefix` is not a `PN_PREFIX`: it must
+    /// start with a letter, continue with letters, digits, `-`, `_`, `.` or
+    /// another `PN_CHARS` character such as U+00B7, and not end in `.`. `_`,
+    /// which introduces blank nodes, is never a prefix.
     /// [`Error::ReservedPrefix`] if `prefix` is `prov` or `xsd` and `iri` is
     /// not its fixed IRI.
     pub fn declare(&mut self, prefix: &str, iri: &str) -> Result<()> {

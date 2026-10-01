@@ -184,39 +184,50 @@ mod tests {
         let huge_name = QName::new("http://example.org/", &long).unwrap();
         // A name displays as its whole IRI, which is longer than its local part.
         let name_count = format!("({} characters)", huge_name.to_string().chars().count());
+        let text_count = "(1048576 characters)".to_owned();
+        // Each error with the length its message must report.
         let errors = [
-            Error::InvalidQName(long.clone()),
-            Error::InvalidPrefix(long.clone()),
-            Error::InvalidLanguageTag(long.clone()),
-            Error::UndeclaredPrefix(long.clone()),
-            Error::NoDefaultNamespace(long.clone()),
-            Error::InvalidLiteral {
-                datatype: "xsd:dateTime".into(),
-                lexical: long.clone(),
-                reason: "missing 'T'".into(),
-            },
-            Error::Unification {
-                id: huge_name.clone(),
-                reason: "kinds differ".into(),
-            },
-            Error::DuplicateBundle(huge_name.clone()),
-            Error::Unwritable {
-                name: huge_name,
-                reason: "the namespace IRI contains '>' (U+003E)".into(),
-            },
-            Error::InRecord {
-                section: "entity".into(),
-                key: long.clone(),
-                error: Box::new(Error::InvalidQName("a b".into())),
-            },
+            (Error::InvalidQName(long.clone()), &text_count),
+            (Error::InvalidPrefix(long.clone()), &text_count),
+            (Error::InvalidLanguageTag(long.clone()), &text_count),
+            (Error::UndeclaredPrefix(long.clone()), &text_count),
+            (Error::NoDefaultNamespace(long.clone()), &text_count),
+            (
+                Error::InvalidLiteral {
+                    datatype: "xsd:dateTime".into(),
+                    lexical: long.clone(),
+                    reason: "missing 'T'".into(),
+                },
+                &text_count,
+            ),
+            (
+                Error::Unification {
+                    id: huge_name.clone(),
+                    reason: "kinds differ".into(),
+                },
+                &name_count,
+            ),
+            (Error::DuplicateBundle(huge_name.clone()), &name_count),
+            (
+                Error::Unwritable {
+                    name: huge_name,
+                    reason: "the namespace IRI contains '>' (U+003E)".into(),
+                },
+                &name_count,
+            ),
+            (
+                Error::InRecord {
+                    section: "entity".into(),
+                    key: long.clone(),
+                    error: Box::new(Error::InvalidQName("a b".into())),
+                },
+                &text_count,
+            ),
         ];
-        for e in errors {
+        for (e, count) in errors {
             let text = e.to_string();
             assert!(text.len() < 300, "{} bytes", text.len());
-            assert!(
-                text.contains("(1048576 characters)") || text.contains(&name_count),
-                "{text}"
-            );
+            assert!(text.contains(count.as_str()), "{text}");
         }
         // The payload is whole.
         let Error::InvalidQName(payload) = Error::InvalidQName(long.clone()) else {

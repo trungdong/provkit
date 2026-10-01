@@ -11,7 +11,8 @@ use crate::{QName, Value};
 ///
 /// Insertion order is kept for output. A pair already present is not added
 /// again. Two sets are equal when they hold the same pairs in any order.
-/// Inserting and looking up a pair take constant time on average.
+/// Inserting a pair takes constant time on average, and so does the check
+/// for a pair already present. [`Attributes::get`] by name walks the pairs.
 ///
 /// Clones share one allocation. The first write to a clone copies the pairs.
 #[derive(Clone, Debug, Default)]

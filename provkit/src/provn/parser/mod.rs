@@ -144,7 +144,8 @@ impl<'t> Parser<'t> {
         }
     }
 
-    /// "expected `what`, found ..." at `token`.
+    /// "expected `what`, found ..." at `token`. A message whose "found" part
+    /// is not the bare token goes through [`Self::error_at`] instead.
     pub(super) fn expected_at(token: &Token, what: &str) -> Error {
         Self::error_at(
             token,

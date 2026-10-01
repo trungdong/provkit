@@ -16,7 +16,7 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
   - Every relation formal attribute is optional.
   - `Kind`, the type of a record. `Kind::name` is both the PROV-N keyword and
     the PROV-JSON key, `Kind::from_name` is its inverse, and `Kind::ALL` lists
-    the eighteen kinds in PROV-DM order. `Kind::is_element` tells an element
+    the eighteen kinds, elements first, then relations in PROV-DM order. `Kind::is_element` tells an element
     (`entity`, `activity`, `agent`) from a relation.
   - `Record::formal` reads one formal attribute and `Record::formals` lists
     those present. `FormalRef::to_formal`, and `From<FormalRef>` for
@@ -92,7 +92,7 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     implements `FromStr`.
   - PROV-JSON read and write (`json` module). The writer writes a
     language-tagged string as `{"$": ..., "lang": ...}`, with no `type`, as
-    the note requires. The reader accepts both forms.
+    the PROV-JSON note, section 2.2, requires. The reader accepts both forms.
   - PROV-N read and write (`provn` module), with the `Strict` and `Default`
     read profiles.
   - The PROV-N reader lexes the terminals of the Recommendation and SPARQL
@@ -109,7 +109,7 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     attributes on `alternateOf`, `specializationOf` and `hadMember`
     (productions [24] to [26]), an identifier on `mentionOf`, a declaration
     of `prov` or `xsd` at its own IRI (section 3.7.4), bare `mentionOf` and
-    `-` in a required position. `Profile::Default` reads all of these. Both
+    `-` in a required argument of a relation. `Profile::Default` reads all of these. Both
     profiles reject a second `default` and a prefix that is not a
     `PN_PREFIX`.
   - `prov:mentionOf` is a mention only when three names follow it, with or
@@ -168,11 +168,15 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     for text the grammar rejects, and `Error::At` around the error for a
     name, literal or record. `Error::DuplicateBundle` reports two bundles
     with one identifier in either reader.
+    A message quotes at most 80 characters of rejected input and gives
+    the full length, and the error holds the whole text.
   - Public modules `json`, `provn` and `well_known`. Every other public item
     has one path. It is at the crate root, except `provn::Profile` and
     `provn::Ignored`, which live under `provn`. `well_known` holds the
     `QName` statics and the `PROV` and `XSD` namespace IRIs.
-  - Namespace arguments and results are `&str`.
+  - Namespace arguments and results are `&str`, except
+    `Namespaces::ensure_prefix`, which returns the prefix as a `String`
+    because it may mint one.
   - Cargo features `json` and `provn`, both on by default.
 - `provkit` binary (crate `provkit-cli`):
   - `provkit convert` between PROV-JSON and PROV-N, with pandoc-style format
@@ -205,7 +209,7 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
 - `CONFORMANCE.md`, listing the departures from the Recommendations, the
   differences from ProvPy 3.2.2 with their issue numbers, and the
   implementation limits, each with its test.
-- Corpus tests over prov-corpus v2.1.0, including the 204 shared PROV-N
+- Corpus tests over prov-corpus v2.2.0, including the 215 shared PROV-N
   probes read under both profiles, and a CI build for
   `wasm32-unknown-unknown`.
 
