@@ -19,7 +19,10 @@ use crate::{Document, Error, Result, strip_bom};
 ///   error found while reading the JSON ends with the line and column of
 ///   the offending token. For a key the reader refuses (an unknown section,
 ///   a key given twice in one object, a `bundle` inside a bundle) the
-///   position is just past that key's value. An attribute value the reader
+///   position is where `serde_json` puts an error raised once the key's
+///   value has been read: past the white space after the value, and past a
+///   closing brace that follows it. A bundle key given twice is the
+///   exception, below. An attribute value the reader
 ///   cannot decode is such an error, a string with a `\u` escape that names
 ///   a lone surrogate included. An error found while building a record (a
 ///   formal of the wrong form, a blank identifier on an element or bundle)

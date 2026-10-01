@@ -1,6 +1,7 @@
 //! The PROV-JSON shape, as serde sees it. Private; the model never sees these types.
 
 use indexmap::IndexMap;
+use indexmap::map::Entry;
 use serde::de::{self, DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -169,12 +170,15 @@ impl<'de, V: Deserialize<'de>> Deserialize<'de> for Unique<V> {
             fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Unique<V>, A::Error> {
                 let mut out = IndexMap::new();
                 while let Some(key) = map.next_key::<String>()? {
-                    if out.contains_key(&key) {
-                        map.next_value::<IgnoredAny>()?;
-                        return Err(de::Error::custom(duplicate(&key)));
+                    match out.entry(key) {
+                        Entry::Vacant(entry) => {
+                            entry.insert(map.next_value()?);
+                        }
+                        Entry::Occupied(entry) => {
+                            map.next_value::<IgnoredAny>()?;
+                            return Err(de::Error::custom(duplicate(entry.key())));
+                        }
                     }
-                    let value = map.next_value()?;
-                    out.insert(key, value);
                 }
                 Ok(Unique(out))
             }
@@ -265,11 +269,12 @@ impl<'de> Deserialize<'de> for OneOrMany<JsonRecord> {
 ///
 /// A value that cannot be read is [`JsonValue::Invalid`], not an error: an
 /// error raised here would be placed where the outer parser stands, past
-/// the whole value, and would not name its record. A key given twice is an
-/// invalid value placed just past its second value and moved to the end of
-/// the record, so the record's invalid values stay in the order of the
-/// text. An invalid value under the key's first use stays where it is, as
-/// it comes first.
+/// the whole value, and would not name its record. The reader reports the
+/// first invalid value of a record, so the first one in the text is the
+/// first in the map. A key given twice, in a record that holds no invalid
+/// value yet, takes the place of the key's value as an invalid value, which
+/// is then the only one in the map. In a record that already holds one, a
+/// repeat changes nothing, because the earlier error is reported.
 struct Body;
 
 impl<'de> DeserializeSeed<'de> for Body {
@@ -286,17 +291,20 @@ impl<'de> Visitor<'de> for Body {
     }
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<JsonRecord, A::Error> {
         let mut body = JsonRecord::new();
+        let mut invalid = false;
         while let Some(key) = map.next_key::<String>()? {
             let text = map.next_value::<&RawValue>()?.get();
-            match body.get_index_of(&key) {
-                None => {
-                    body.insert(key, from_raw(text));
+            match body.entry(key) {
+                Entry::Vacant(entry) => {
+                    let value = from_raw(text);
+                    invalid |= matches!(value, JsonValue::Invalid(_));
+                    entry.insert(value);
                 }
-                Some(i) if matches!(body[i], JsonValue::Invalid(_)) => {}
-                Some(i) => {
-                    body.shift_remove_index(i);
-                    let invalid = InvalidValue::after(text, duplicate(&key));
-                    body.insert(key, JsonValue::Invalid(invalid));
+                Entry::Occupied(_) if invalid => {}
+                Entry::Occupied(mut entry) => {
+                    let message = duplicate(entry.key());
+                    entry.insert(JsonValue::Invalid(InvalidValue::after(text, message)));
+                    invalid = true;
                 }
             }
         }
@@ -483,10 +491,18 @@ impl<'de> Visitor<'de> for ValueVisitor {
                 }
             };
             let text = map.next_value::<&RawValue>()?.get();
-            if member.is_some() {
-                return Err(de::Error::custom(duplicate(&key)));
+            if member.is_none() {
+                *member = Some(member_string(&key, text));
+                continue;
             }
-            *member = Some(member_string(&key, text));
+            // A member given twice. An invalid member read before it comes
+            // first in the text, so it is reported instead, by the order
+            // below.
+            let mut earlier = [value, datatype, lang].into_iter().flatten();
+            return match earlier.find_map(Result::err) {
+                Some(invalid) => Ok(JsonValue::Invalid(invalid)),
+                None => Err(de::Error::custom(duplicate(&key))),
+            };
         }
         // Of several invalid members, `$` is reported before `type`, and
         // `type` before `lang`.

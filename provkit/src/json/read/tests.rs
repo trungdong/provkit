@@ -1323,6 +1323,8 @@ fn a_repeated_key_is_an_error_after_its_second_value() {
         ("\n}", 4, 1, 1),
         ("\n, \"ex:z\": {}}", 4, 0, 0),
         ("  }", 3, 12, 15),
+        ("\r\n}", 4, 1, 1),
+        ("\r\n, \"ex:z\": {}}", 4, 0, 0),
     ] {
         let text = format!(
             "{{\"prefix\": {{\"ex\": \"http://example.org/\"}},\n\"entity\": {{\"ex:e\": {{\"ex:a\": 1,\n\"ex:a\": 2{tail}}}}}"
@@ -1364,8 +1366,47 @@ fn errors_in_a_record_are_reported_in_the_order_of_the_text() {
             r#""ex:a": 1, "ex:a": 2, "ex:b": null"#,
             "duplicate field `ex:a`",
         ),
+        // Inside a value object, an invalid member before a repeated one.
+        (
+            r#""ex:a": {"$": 1, "$": "x"}"#,
+            "expected a string as the `$` of a value object",
+        ),
+        (
+            r#""ex:a": {"$": "\ud800", "lang": "en", "lang": "fr"}"#,
+            "unexpected end of hex escape",
+        ),
+        (
+            r#""ex:a": {"$": "x", "lang": "en", "lang": "fr"}"#,
+            "duplicate field `lang`",
+        ),
     ] {
         let (_, _, message) = record_structure(&one_record("entity", "ex:e", body));
         assert!(message.starts_with(first), "{body}\n{message}");
     }
+}
+
+#[test]
+fn of_several_invalid_members_the_dollar_comes_first() {
+    for value in [
+        r#"{"type": 5, "$": 1}"#,
+        r#"{"lang": 5, "type": 5, "$": 1}"#,
+        r#"{"type": 5, "lang": 5, "$": 1, "$": "x"}"#,
+    ] {
+        let text = one_record("entity", "ex:e", &format!(r#""ex:a": {value}"#));
+        let (_, _, message) = record_structure(&text);
+        assert!(
+            message.starts_with("expected a string as the `$` of a value object"),
+            "{value}\n{message}"
+        );
+    }
+    let text = one_record(
+        "entity",
+        "ex:e",
+        r#""ex:a": {"lang": 5, "$": "x", "type": 5}"#,
+    );
+    let (_, _, message) = record_structure(&text);
+    assert!(
+        message.starts_with("expected a string as the `type` of a value object"),
+        "{message}"
+    );
 }
