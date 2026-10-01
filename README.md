@@ -34,8 +34,10 @@ provkit compare --unified a.json b.provn
 ```
 
 Input format comes from `-f json|provn`, else the file extension, else the
-content. `document` followed by whitespace, a comment or the end of input
-marks PROV-N, and `{` marks PROV-JSON. Output format comes from `-t`, else the `-o`
+content. The sniffer treats `document` followed by whitespace, a comment or
+the end of input as PROV-N, and `{` as PROV-JSON. A comment glued to the
+keyword is part of the name in PROV-N, so the reader then rejects it; the
+departures in CONFORMANCE.md say why. Output format comes from `-t`, else the `-o`
 extension (`.json` or `.provn`, in any letter case). PROV-N is the default on
 standard output only, so `-o out.txt` needs `-t json` or `-t provn`. `-` means
 standard input or output.

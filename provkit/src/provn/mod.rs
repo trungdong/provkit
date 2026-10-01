@@ -31,7 +31,7 @@ pub enum Profile {
     ///
     /// `prov:mentionOf` (PROV-LINKS) is a mention only when three names
     /// follow it, with or without an attribute block. Under `Strict` an
-    /// identifier or any other argument makes it an extensibility
+    /// identifier, a `-` or any other argument makes it an extensibility
     /// expression (production \[49\]), parsed and left out of the document.
     ///
     /// Both profiles reject a repeated `default`, a prefix that is not a
@@ -39,7 +39,8 @@ pub enum Profile {
     Strict,
     /// The grammar plus the six extensions that `Strict` rejects, which
     /// `ProvToolbox` and `ProvPy` write. `prov:mentionOf` with an identifier
-    /// is a mention under `Default`, as bare `mentionOf` is.
+    /// or with `-` for a name is a mention under `Default`, as bare
+    /// `mentionOf` is.
     #[default]
     Default,
 }

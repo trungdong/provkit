@@ -103,8 +103,9 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     profiles reject a second `default` and a prefix that is not a
     `PN_PREFIX`.
   - `prov:mentionOf` is a mention only when three names follow it, with or
-    without an attribute block. With any other arguments, or under `Strict`
-    with an identifier, it is an extensibility expression.
+    without an attribute block. With any other arguments it is an
+    extensibility expression; under `Strict` an identifier or a `-` also
+    makes it one, and under `Default` both read as for bare `mentionOf`.
   - A datatype of digits, as in `"x" %% 123`, reads as a name in the default
     namespace.
   - Both readers type an integer by range: `xsd:int` within `i32`, `xsd:long`
@@ -149,9 +150,9 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     name, literal or record. `Error::DuplicateBundle` reports two bundles
     with one identifier in either reader.
   - Public modules `json`, `provn` and `well_known`. Every other public item
-    has one path: at the crate root, except `provn::Profile` and
-    `provn::Ignored`, which live under `provn`. `well_known` holds the
-    `QName` statics and the `PROV` and `XSD` namespace IRIs.
+    has one path at the crate root. `provn::Profile` and `provn::Ignored`
+    live under `provn`. `well_known` holds the `QName` statics and the
+    `PROV` and `XSD` namespace IRIs.
   - Namespace arguments and results are `&str`.
   - Cargo features `json` and `provn`, both on by default.
 - `provkit` binary (crate `provkit-cli`):

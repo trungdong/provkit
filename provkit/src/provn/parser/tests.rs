@@ -185,7 +185,6 @@ fn prov_mention_of_is_a_statement_only_in_its_own_shape() {
         }
         for body in [
             "prov:mentionOf(ex:e2, ex:e1)",
-            "prov:mentionOf(ex:e2, ex:e1, -)",
             "prov:mentionOf(ex:e2, ex:e1, \"b\")",
             "prov:mentionOf(ex:e2, ex:e1, ex:b, 5)",
             "prov:mentionOf(ex:e2, ex:e1, {ex:b})",
@@ -197,11 +196,39 @@ fn prov_mention_of_is_a_statement_only_in_its_own_shape() {
             assert_eq!(ignored[0].name, "prov:mentionOf", "{body}");
         }
     }
-    // Bare `mentionOf` is never an extensibility expression, so `-` in its
-    // third position is the mention with no bundle that `Default` reads.
-    let (doc, ignored) = report("mentionOf(ex:e2, ex:e1, -)", Profile::Default);
-    assert!(ignored.is_empty());
-    assert!(matches!(&doc.records[0], Record::Mention(m) if m.bundle.is_none()));
+}
+
+/// Under `Strict` a `-` in `prov:mentionOf` is outside the mention shape,
+/// so the statement is an extensibility expression.
+#[test]
+fn prov_mention_of_with_a_marker_is_an_extension_under_strict() {
+    let (doc, ignored) = report("prov:mentionOf(ex:e2, ex:e1, -)", Profile::Strict);
+    assert!(doc.records.is_empty(), "{:?}", doc.records);
+    assert_eq!(ignored.len(), 1);
+    assert_eq!(ignored[0].name, "prov:mentionOf");
+    assert!(matches!(
+        err("mentionOf(ex:e2, ex:e1, -)", Profile::Strict),
+        Error::Syntax { .. }
+    ));
+}
+
+/// `Default` reads `-` in a required position of `prov:mentionOf` as it
+/// does for bare `mentionOf`: a mention with that formal absent.
+#[test]
+fn prov_mention_of_with_a_marker_is_a_mention_under_default() {
+    for body in [
+        "prov:mentionOf(ex:e2, ex:e1, -)",
+        "mentionOf(ex:e2, ex:e1, -)",
+        "prov:mentionOf(-, -, -)",
+    ] {
+        let (doc, ignored) = report(body, Profile::Default);
+        assert!(ignored.is_empty(), "{body}");
+        assert!(
+            matches!(&doc.records[0], Record::Mention(m) if m.bundle.is_none()),
+            "{body}: {:?}",
+            doc.records
+        );
+    }
 }
 
 /// PROV-DM gives `mentionOf` no identifier. Under `Strict` one makes

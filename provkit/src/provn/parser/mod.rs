@@ -358,18 +358,24 @@ impl<'t> Parser<'t> {
     /// Whether the tokens after the current `prov:mentionOf` have the shape
     /// of a mention (PROV-LINKS): `(`, three names separated by `,`, then
     /// `)` or `, [`. [`Profile::Default`] also takes an `identifierOrMarker`
-    /// and `;` before the names. Any other shape is an extensibility
-    /// expression under production [49].
+    /// and `;` before the names, and `-` for a name, as it does for bare
+    /// `mentionOf`. Any other shape is an extensibility expression under
+    /// production [49].
     fn mention_shape_follows(&self) -> bool {
         let kind = |i: usize| self.tokens.get(self.pos + i).map(|t| &t.kind);
+        let relaxed = self.profile == Profile::Default;
         let is_name = |i: usize| {
-            kind(i).is_some_and(|k| matches!(k, TokenKind::Name { .. }) || k.digit_name().is_some())
+            kind(i).is_some_and(|k| {
+                matches!(k, TokenKind::Name { .. })
+                    || k.digit_name().is_some()
+                    || (relaxed && *k == TokenKind::Marker)
+            })
         };
         if kind(1) != Some(&TokenKind::LParen) {
             return false;
         }
         let mut i = 2;
-        if self.profile == Profile::Default
+        if relaxed
             && kind(i + 1) == Some(&TokenKind::Semicolon)
             && (is_name(i) || kind(i) == Some(&TokenKind::Marker))
         {
