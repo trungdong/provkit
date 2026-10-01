@@ -9,7 +9,7 @@ use common::{Report, corpus_dir, files, tsv};
 use provkit::provn::{self, Profile};
 
 /// Number of probes in the corpus.
-const PROBE_COUNT: usize = 204;
+const PROBE_COUNT: usize = 215;
 
 /// The columns of `expected.tsv`.
 const HEADER: [&str; 5] = ["name", "strict", "default", "rule", "provpy"];
