@@ -54,23 +54,12 @@ fn position_of(input: &str, start: usize) -> Option<(usize, usize)> {
     Some((line, offset - line_start + 1))
 }
 
-/// The error for a value the wire layer could not read. `input` is the
-/// text the document was read from.
-///
-/// Text that is not JSON gives the error `serde_json` raises for the whole
-/// input, which is the one a reader of plain JSON would see. The second
-/// parse runs only for such an error.
-///
-/// JSON of the wrong shape gives the wire layer's message and the position
-/// of the error in `input`. That is the fragment's position, moved on by
-/// the error's position inside the fragment, and it equals the position
-/// `serde_json` gives the same error when it reads the document in one pass.
+/// The error for a value the wire layer could not read. It holds the wire
+/// layer's message and the position of the error in `input`, the text the
+/// document was read from. The position is the fragment's, moved on by the
+/// error's position inside the fragment. It equals the position `serde_json` gives the same
+/// error when it reads the document in one pass.
 fn invalid_value(invalid: &InvalidValue, input: &str) -> Error {
-    if invalid.syntax
-        && let Err(e) = serde_json::from_str::<serde_json::Value>(input)
-    {
-        return Error::Json(e);
-    }
     let position = position_of(input, invalid.start)
         .filter(|_| invalid.line > 0)
         .map(|(line, column)| match invalid.line {
@@ -97,10 +86,7 @@ fn refuse_invalid(sections: &IndexMap<Kind, JsonSection>, input: &str) -> Result
                     _ => None,
                 });
             if let Some(invalid) = invalid {
-                return Err(match invalid_value(invalid, input) {
-                    e @ Error::Json(_) => e,
-                    e => in_record(kind.name(), key, e),
-                });
+                return Err(in_record(kind.name(), key, invalid_value(invalid, input)));
             }
         }
     }
@@ -239,7 +225,11 @@ fn formal_value(value: &JsonValue, key: &str, time: bool, scope: Scope<'_>) -> R
             datatype: Some(datatype),
             ..
         } => (value, Some(scope.resolve(datatype)?)),
-        _ => return Err(wrong("a number, boolean or array")),
+        // `emit` refuses invalid values first, so this is not reached.
+        JsonValue::Invalid(invalid) => return Err(structure(invalid.message.as_str())),
+        JsonValue::Number(_) | JsonValue::Bool(_) | JsonValue::Many(_) => {
+            return Err(wrong("a number, boolean or array"));
+        }
     };
     if time {
         if let Some(datatype) = datatype
@@ -277,10 +267,9 @@ fn decode_value(v: &JsonValue, scope: Scope<'_>) -> Result<Value> {
         JsonValue::Number(text) => number(text)?,
         JsonValue::Bool(b) => Value::from(*b),
         // The wire layer makes an array inside an array an invalid value,
-        // and `emit` refuses invalid values first, so this is not reached.
-        JsonValue::Many(_) | JsonValue::Invalid(_) => {
-            return Err(structure("not an attribute value"));
-        }
+        // and `emit` refuses invalid values first, so neither is reached.
+        JsonValue::Many(_) => return Err(structure("nested arrays are not allowed")),
+        JsonValue::Invalid(invalid) => return Err(structure(invalid.message.as_str())),
         JsonValue::Typed {
             value,
             datatype,

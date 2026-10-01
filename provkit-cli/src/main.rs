@@ -194,7 +194,7 @@ fn convert(args: &ConvertArgs) -> Result<()> {
         })?,
     };
     let doc = read_document(&args.input, args.from, Hint::FromFlag)?;
-    let name = file.map_or_else(|| "-".to_owned(), |p| p.display().to_string());
+    let name = file.map_or_else(|| "<stdout>".to_owned(), |p| p.display().to_string());
 
     // Serialise first, so a library error never leaves a partial file.
     let mut buf = Vec::new();

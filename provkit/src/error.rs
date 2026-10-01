@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use crate::{Kind, QName};
 
 /// The most characters of rejected input that a message quotes.
-const QUOTED: usize = 80;
+pub(crate) const QUOTED: usize = 80;
 
 /// `text` as a message quotes it: whole when short, otherwise its first
 /// characters and its length. The error's payload keeps the whole text.

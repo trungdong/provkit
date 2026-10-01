@@ -43,7 +43,7 @@ pub fn run(args: &CompareArgs) -> Result<ExitCode> {
     let mut report = String::new();
     report_side(&mut report, &args.a, &a, &b)?;
     report_side(&mut report, &args.b, &b, &a)?;
-    write_stdout(report.as_bytes()).context("-")?;
+    write_stdout(report.as_bytes()).context("<stdout>")?;
     Ok(ExitCode::from(1))
 }
 

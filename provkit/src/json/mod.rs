@@ -7,7 +7,7 @@ mod write;
 pub use write::{to_string, write};
 
 use crate::builder::DocumentBuilder;
-use crate::error::clip;
+use crate::error::QUOTED;
 use crate::{Document, Error, Result, strip_bom};
 
 /// Read a PROV-JSON document.
@@ -42,19 +42,24 @@ fn shape_error(e: serde_json::Error) -> Error {
     }
 }
 
-/// A serde message with the string it quotes cut as [`clip`] cuts it. serde
-/// quotes a string it did not expect whole, between double quotes and in
-/// front of `, expected` (`invalid type: string "...", expected a map`).
+/// A serde message with the string it quotes cut to the length every
+/// message keeps to. serde quotes a string it did not expect whole, between
+/// double quotes and in front of `, expected` (`invalid type: string "...",
+/// expected a map`).
+///
+/// serde prints the string escaped, so its true length is not known here
+/// and the cut is marked with `...` alone. A backslash at the cut is
+/// dropped, because it would be half an escape.
 fn clip_quoted(message: &str) -> String {
     let quoted = message.rfind("\", expected").and_then(|close| {
         let open = message[..close].find('"')? + 1;
-        Some((open, close))
+        let (cut, _) = message[open..close].char_indices().nth(QUOTED)?;
+        Some((open + cut, close))
     });
     match quoted {
-        Some((open, close)) => format!(
-            "{}{}{}",
-            &message[..open],
-            clip(&message[open..close]),
+        Some((cut, close)) => format!(
+            "{}...{}",
+            message[..cut].trim_end_matches('\\'),
             &message[close..]
         ),
         None => message.to_owned(),
@@ -75,12 +80,12 @@ mod tests {
     #[test]
     fn a_quoted_string_in_a_serde_message_is_clipped() {
         let long = "x".repeat(200);
-        let clipped = format!("{}... (200 characters)", "x".repeat(80));
+        let eighty = "x".repeat(80);
         assert_eq!(
             clip_quoted(&format!(
                 "invalid type: string \"{long}\", expected a map at line 1 column 9"
             )),
-            format!("invalid type: string \"{clipped}\", expected a map at line 1 column 9")
+            format!("invalid type: string \"{eighty}...\", expected a map at line 1 column 9")
         );
         // The quoted string may itself hold a quote and the word `expected`.
         let tricky = format!("a\\\", expected {long}");
@@ -89,8 +94,19 @@ mod tests {
                 "invalid type: string \"{tricky}\", expected a map"
             )),
             format!(
-                "invalid type: string \"{}... (214 characters)\", expected a map",
+                "invalid type: string \"{}...\", expected a map",
                 &tricky[..80]
+            )
+        );
+        // A backslash where the cut falls is dropped with what follows it.
+        let escaped = format!("{}\\\"{long}", "x".repeat(79));
+        assert_eq!(
+            clip_quoted(&format!(
+                "invalid type: string \"{escaped}\", expected a map"
+            )),
+            format!(
+                "invalid type: string \"{}...\", expected a map",
+                "x".repeat(79)
             )
         );
         // A short string, and a message that quotes nothing, are unchanged.

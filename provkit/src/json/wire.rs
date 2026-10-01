@@ -2,10 +2,9 @@
 
 use indexmap::IndexMap;
 use serde::de::value::{MapAccessDeserializer, SeqAccessDeserializer};
-use serde::de::{self, DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
+use serde::de::{self, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::error::Category;
 use serde_json::value::RawValue;
 use std::fmt;
 use std::marker::PhantomData;
@@ -175,27 +174,6 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for OneOrMany<T> {
     }
 }
 
-/// A string under a named key of a value object, with an error that names
-/// the key.
-struct StrAt(&'static str);
-
-impl<'de> DeserializeSeed<'de> for StrAt {
-    type Value = String;
-    fn deserialize<D: Deserializer<'de>>(self, d: D) -> Result<String, D::Error> {
-        struct V(&'static str);
-        impl Visitor<'_> for V {
-            type Value = String;
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "a string as the `{}` of a value object", self.0)
-            }
-            fn visit_str<E: de::Error>(self, v: &str) -> Result<String, E> {
-                Ok(v.to_owned())
-            }
-        }
-        d.deserialize_str(V(self.0))
-    }
-}
-
 impl<T> OneOrMany<T> {
     /// The records as a slice, one or many.
     pub fn as_slice(&self) -> &[T] {
@@ -230,9 +208,6 @@ pub(super) enum JsonValue {
 pub(super) struct InvalidValue {
     /// What was wrong, without a position.
     pub message: String,
-    /// Whether the fragment is not JSON at all (a syntax error), as
-    /// opposed to JSON of the wrong shape.
-    pub syntax: bool,
     /// The address of the fragment's first byte, to find it in the input.
     pub start: usize,
     /// 1-based line of the error inside the fragment.
@@ -246,18 +221,16 @@ impl InvalidValue {
     fn from_error(fragment: &str, e: &serde_json::Error) -> Self {
         InvalidValue {
             message: without_position(e),
-            syntax: e.classify() != Category::Data,
             start: fragment.as_ptr().addr(),
             line: e.line(),
             column: e.column(),
         }
     }
 
-    /// An array that begins `fragment`, where an array cannot be.
-    fn nested_array(fragment: &str) -> Self {
+    /// An error at the first byte of `fragment`.
+    fn at_start(fragment: &str, message: impl Into<String>) -> Self {
         InvalidValue {
-            message: "nested arrays are not allowed in an attribute value".to_owned(),
-            syntax: false,
+            message: message.into(),
             start: fragment.as_ptr().addr(),
             line: 1,
             column: 1,
@@ -317,15 +290,16 @@ impl<'de> Deserialize<'de> for Element {
 
 /// A value from its JSON text. The text is one complete JSON value, which
 /// the outer parser has skipped over. That checks everything but the
-/// surrogates of a string's `\u` escapes, so parsing the text here can still
-/// find a syntax error.
+/// surrogates of a string's `\u` escapes, so a string can still fail to
+/// decode here. It is an invalid value like any other.
 fn from_raw(text: &str, nesting: Nesting) -> JsonValue {
     let text = text.trim_start_matches([' ', '\t', '\r', '\n']);
     match text.as_bytes().first() {
         Some(b'-' | b'0'..=b'9') => JsonValue::Number(text.to_owned()),
-        Some(b'[') if nesting == Nesting::Inside => {
-            JsonValue::Invalid(InvalidValue::nested_array(text))
-        }
+        Some(b'[') if nesting == Nesting::Inside => JsonValue::Invalid(InvalidValue::at_start(
+            text,
+            "nested arrays are not allowed in an attribute value",
+        )),
         _ => {
             let mut fragment = serde_json::Deserializer::from_str(text);
             fragment
@@ -381,12 +355,19 @@ impl<'de> Visitor<'de> for ValueVisitor {
         Ok(invalid.map_or(JsonValue::Many(items), JsonValue::Invalid))
     }
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<JsonValue, A::Error> {
+        // As for an array, the object is read to its end after a member
+        // that is invalid, and the first such member stands for the object.
         let (mut value, mut datatype, mut lang) = (None, None, None);
+        let mut invalid = None;
         while let Some(key) = map.next_key::<String>()? {
-            match key.as_str() {
-                "$" => value = Some(map.next_value_seed(StrAt("$"))?),
-                "type" => datatype = Some(map.next_value_seed(StrAt("type"))?),
-                "lang" => lang = Some(map.next_value_seed(StrAt("lang"))?),
+            if invalid.is_some() {
+                map.next_value::<IgnoredAny>()?;
+                continue;
+            }
+            let member = match key.as_str() {
+                "$" => &mut value,
+                "type" => &mut datatype,
+                "lang" => &mut lang,
                 other => {
                     return Err(de::Error::custom(format!(
                         "unknown key `{}` in a value object, expected `$`, \
@@ -394,7 +375,14 @@ impl<'de> Visitor<'de> for ValueVisitor {
                         clip(other)
                     )));
                 }
+            };
+            match member_string(&key, map.next_value::<&RawValue>()?.get()) {
+                Ok(text) => *member = Some(text),
+                Err(found) => invalid = Some(found),
             }
+        }
+        if let Some(invalid) = invalid {
+            return Ok(JsonValue::Invalid(invalid));
         }
         let value = value.ok_or_else(|| de::Error::custom("a value object needs a `$` key"))?;
         Ok(JsonValue::Typed {
@@ -403,6 +391,20 @@ impl<'de> Visitor<'de> for ValueVisitor {
             lang,
         })
     }
+}
+
+/// The string under `key` of a value object, from its JSON text. Text that
+/// is not a string is refused by its first byte, without being parsed: how
+/// a number is parsed depends on the features of `serde_json`.
+fn member_string(key: &str, text: &str) -> Result<String, InvalidValue> {
+    let text = text.trim_start_matches([' ', '\t', '\r', '\n']);
+    if !text.starts_with('"') {
+        return Err(InvalidValue::at_start(
+            text,
+            format!("expected a string as the `{key}` of a value object"),
+        ));
+    }
+    serde_json::from_str(text).map_err(|e| InvalidValue::from_error(text, &e))
 }
 
 impl Serialize for JsonValue {

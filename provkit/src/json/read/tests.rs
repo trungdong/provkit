@@ -221,13 +221,6 @@ fn a_megabyte_of_input_text_stays_out_of_every_message() {
             json!({"prefix": prefix, "entity": {format!("{big}y:e"): {}}}),
             "undeclared prefix",
         ),
-        // A string where a record belongs, which serde quotes.
-        (
-            json!({"entity": {"ex:e": big.as_str()}}),
-            "expected a record object or an array of record objects",
-        ),
-        // A string where the namespace table belongs.
-        (json!({"prefix": big.as_str()}), "expected a map"),
     ];
     for (document, fragment) in cases {
         let text = document.to_string();
@@ -243,6 +236,36 @@ fn a_megabyte_of_input_text_stays_out_of_every_message() {
             &message[..200]
         );
         assert!(message.len() < 400, "{fragment}: {} bytes", message.len());
+    }
+}
+
+#[test]
+fn a_string_serde_quotes_is_cut_without_a_count() {
+    use serde_json::json;
+    // serde prints the string escaped: each `"` as two characters, and the
+    // odd one out puts a backslash where the cut falls.
+    let quotes = "\"".repeat(1 << 20);
+    let odd = format!("x{quotes}");
+    let cases = [
+        // A string where a record belongs.
+        (
+            json!({"entity": {"ex:e": quotes.as_str()}}),
+            "expected a record object or an array of record objects",
+        ),
+        // A string where the namespace table belongs.
+        (json!({"prefix": odd.as_str()}), "expected a map"),
+        (json!({"prefix": "x".repeat(1 << 20)}), "expected a map"),
+    ];
+    for (document, fragment) in cases {
+        let message = json::read(&document.to_string())
+            .map(|_| ())
+            .unwrap_err()
+            .to_string();
+        assert!(message.len() < 300, "{fragment}: {} bytes", message.len());
+        assert!(message.contains(fragment), "{message}");
+        assert!(message.contains("...\", expected"), "{message}");
+        assert!(!message.contains("\\...\", expected"), "{message}");
+        assert!(!message.contains("characters)"), "{message}");
     }
 }
 
@@ -771,7 +794,7 @@ fn json_errors_name_the_problem() {
     let cases = [
         (
             entity(r#""ex:a": {"$": 1}"#),
-            "invalid type: integer `1`, expected a string as the `$` of a value object",
+            "expected a string as the `$` of a value object",
         ),
         (
             entity(r#""ex:a": {"$": "1", "type": 2}"#),
@@ -1167,18 +1190,130 @@ fn every_kind_of_bad_value_names_its_record() {
 }
 
 #[test]
-fn text_that_is_not_json_is_a_json_error_wherever_it_is() {
+fn text_the_parser_rejects_is_a_json_error() {
     for text in [
-        r#"{"prefix": {"ex": "\ud800"}}"#.to_owned(),
-        format!(r#"{{{PFX}, "entity": {{"ex:e": {{"ex:a": "\ud800"}}}}}}"#),
-        format!(r#"{{{PFX}, "entity": {{"ex:e": {{"ex:a": ["ok", "\ud800"]}}}}}}"#),
-        // An undeclared prefix in an earlier record does not hide it.
-        format!(r#"{{{PFX}, "entity": {{"zz:e": {{}}, "ex:e": {{"ex:a": "\ud800"}}}}}}"#),
-        r#"{"zzz" 1}"#.to_owned(),
-        r#"{"zzz": 01}"#.to_owned(),
-        r#"{"prefix": {}, "prefix" 1}"#.to_owned(),
-        format!(r#"{{{PFX}, "bundle": {{"ex:b": {{"bundle" 1}}}}}}"#),
+        "{",
+        r#"{"zzz" 1}"#,
+        r#"{"zzz": 01}"#,
+        r#"{"entity": 01}"#,
+        r#"{"prefix": {"ex": "\ud800"}}"#,
+        r#"{"prefix": {}, "prefix" 1}"#,
+        r#"{"bundle": {"ex:b": {"bundle" 1}}}"#,
     ] {
-        assert!(matches!(json::read(&text), Err(Error::Json(_))), "{text}");
+        assert!(matches!(json::read(text), Err(Error::Json(_))), "{text}");
     }
+}
+
+/// A one-line document with one record, `kind` `key`, whose body is `body`.
+fn one_record(kind: &str, key: &str, body: &str) -> String {
+    format!(r#"{{"prefix": {{"ex": "http://example.org/"}}, "{kind}": {{"{key}": {{{body}}}}}}}"#)
+}
+
+#[test]
+fn a_string_that_cannot_be_decoded_in_a_value_is_a_structure_error_in_its_record() {
+    // Each body with the column of the closing quote of its `"\ud800"`,
+    // which is where serde_json finds the escape has no second half.
+    let cases = [
+        ("entity", "ex:e", r#""ex:a": "\ud800""#, 78),
+        ("entity", "ex:e", r#""ex:a": ["ok", "\ud800"]"#, 85),
+        ("entity", "ex:e", r#""ex:a": {"$": "\ud800"}"#, 84),
+        (
+            "entity",
+            "ex:e",
+            r#""ex:a": {"$": "x", "type": "\ud800"}"#,
+            97,
+        ),
+        (
+            "entity",
+            "ex:e",
+            r#""ex:a": {"$": "x", "lang": "\ud800"}"#,
+            97,
+        ),
+        ("used", "_:u", r#""prov:entity": "\ud800""#, 82),
+    ];
+    for (kind, id, body, column) in cases {
+        let text = one_record(kind, id, body);
+        let (section, key, error) = in_record(json::read(&text).unwrap_err());
+        assert_eq!((section.as_str(), key.as_str()), (kind, id), "{body}");
+        match error {
+            Error::JsonStructure { message } => {
+                let expected = format!(" at line 1 column {column}");
+                assert!(message.ends_with(&expected), "{body}: {message}");
+            }
+            other => panic!("{body}: expected JsonStructure, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_value_error_is_placed_whatever_comes_before_it() {
+    // Column 93 is the closing quote of `"\ud800"`, where serde_json finds
+    // the escape has no second half. The `1e400` before it is a valid
+    // number that does not fit an `f64`, and it is not the error.
+    let text = one_record("entity", "ex:e", r#""ex:n": 1e400, "ex:a": "\ud800""#);
+    let (_, _, error) = in_record(json::read(&text).unwrap_err());
+    match error {
+        Error::JsonStructure { message } => {
+            assert!(message.ends_with(" at line 1 column 93"), "{message}");
+            assert!(message.contains("hex escape"), "{message}");
+        }
+        other => panic!("expected JsonStructure, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_value_object_member_that_is_not_a_string_names_the_member() {
+    for member in ["$", "type", "lang"] {
+        for value in ["1e400", "5", "true", "null", "[1]", r#"{"a": 1}"#] {
+            let body = match member {
+                "$" => format!(r#""ex:a": {{"$": {value}}}"#),
+                _ => format!(r#""ex:a": {{"$": "x", "{member}": {value}}}"#),
+            };
+            let text = one_record("entity", "ex:e", &body);
+            let (section, key, error) = in_record(json::read(&text).unwrap_err());
+            assert_eq!(
+                (section.as_str(), key.as_str()),
+                ("entity", "ex:e"),
+                "{body}"
+            );
+            let expected = format!("expected a string as the `{member}` of a value object");
+            assert!(
+                matches!(&error, Error::JsonStructure { message } if message.contains(&expected)),
+                "{body}: {error}"
+            );
+        }
+    }
+    // The position is the first byte of the member's value.
+    let text = one_record("entity", "ex:e", r#""ex:a": {"$": 1e400}"#);
+    let (_, _, error) = in_record(json::read(&text).unwrap_err());
+    assert!(
+        error.to_string().ends_with(" at line 1 column 77"),
+        "{error}"
+    );
+}
+
+#[test]
+fn an_error_under_a_duplicated_key_is_dropped_with_the_earlier_value() {
+    // An attribute given twice.
+    let d = doc(&one_record("entity", "ex:e", r#""ex:a": null, "ex:a": 1"#));
+    assert_eq!(values(&d, "a"), [Value::integer("1")]);
+    // A record given twice.
+    let d = doc(
+        r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e": {"ex:a": "\ud800"}, "ex:e": {}}}"#,
+    );
+    assert_eq!(d.records.len(), 1);
+    assert!(d.records[0].attributes().is_empty());
+    // A section given twice.
+    let d = doc(
+        r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e": {"ex:a": null}}, "entity": {"ex:f": {}}}"#,
+    );
+    assert_eq!(d.records.len(), 1);
+    assert_eq!(d.records[0].id(), Some(&ex("f")));
+    // A bundle given twice.
+    let d = doc(
+        r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"ex:b": {"entity": {"ex:e": {"ex:a": [[1]]}}}, "ex:b": {"entity": {"ex:f": {}}}}}"#,
+    );
+    assert_eq!(d.bundles.len(), 1);
+    assert_eq!(d.bundles[0].records.len(), 1);
+    assert_eq!(d.bundles[0].records[0].id(), Some(&ex("f")));
 }
