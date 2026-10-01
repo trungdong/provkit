@@ -5,6 +5,19 @@ fn typed(lexical: &str, datatype: &QName) -> Value {
     Value::typed(lexical, datatype.clone()).unwrap()
 }
 
+/// Whether `value` is the one representation of what it denotes: no typed
+/// literal holds a datatype that another variant owns.
+fn has_one_representation(value: &Value) -> bool {
+    let Value::Typed(t) = value else {
+        return true;
+    };
+    let folded = *t.datatype() == *XSD_STRING
+        || *t.datatype() == *XSD_QNAME
+        || *t.datatype() == *PROV_QUALIFIED_NAME
+        || (*t.datatype() == *XSD_DATETIME && DateTime::parse(trim_xsd_space(t.lexical())).is_ok());
+    !folded
+}
+
 /// Every form in `forms` is one value of `datatype`: equal and hashing alike.
 fn assert_one_value(datatype: &QName, forms: &[&str]) {
     let first = typed(forms[0], datatype);
@@ -57,17 +70,11 @@ fn a_padded_datetime_reads_as_a_datetime_and_prints_trimmed() {
     };
     assert_eq!(parsed.to_string(), "2011-11-16T16:05:33Z");
     assert_eq!(padded, typed("2011-11-16T16:05:33Z", &XSD_DATETIME));
-    assert!(padded.has_one_representation());
+    assert!(has_one_representation(&padded));
     // Other white space is not trimmed, so the text stays ill-formed.
     let other = typed("\u{A0}2011-11-16T16:05:33Z", &XSD_DATETIME);
-    assert!(matches!(other, Value::Typed { .. }));
-    assert!(other.has_one_representation());
-    // A padded `Typed` that should have been parsed is reported.
-    let unfolded = Value::Typed {
-        lexical: " 2011-11-16T16:05:33Z ".into(),
-        datatype: XSD_DATETIME.clone(),
-    };
-    assert!(!unfolded.has_one_representation());
+    assert!(matches!(other, Value::Typed(_)));
+    assert!(has_one_representation(&other));
 }
 
 #[test]
@@ -91,36 +98,111 @@ fn ill_formed_literals_are_kept() {
     ] {
         let value = Value::typed(lexical, datatype.clone()).unwrap();
         assert!(
-            matches!(&value, Value::Typed { lexical: l, .. } if l == lexical),
+            matches!(&value, Value::Typed(t) if t.lexical() == lexical),
             "{lexical}"
         );
         assert_eq!(value.datatype().as_ref(), Some(datatype));
     }
 }
 
+/// The thirteen XSD integer datatypes, by IRI, with their bounds as text.
+/// `None` is unbounded on that side.
+const INTEGER_BOUNDS: [(&str, Option<&str>, Option<&str>); 13] = [
+    ("int", Some("-2147483648"), Some("2147483647")),
+    (
+        "long",
+        Some("-9223372036854775808"),
+        Some("9223372036854775807"),
+    ),
+    ("integer", None, None),
+    ("short", Some("-32768"), Some("32767")),
+    ("byte", Some("-128"), Some("127")),
+    ("nonNegativeInteger", Some("0"), None),
+    ("positiveInteger", Some("1"), None),
+    ("nonPositiveInteger", None, Some("0")),
+    ("negativeInteger", None, Some("-1")),
+    ("unsignedLong", Some("0"), Some("18446744073709551615")),
+    ("unsignedInt", Some("0"), Some("4294967295")),
+    ("unsignedShort", Some("0"), Some("65535")),
+    ("unsignedByte", Some("0"), Some("255")),
+];
+
+fn xsd(local: &str) -> QName {
+    QName::new("http://www.w3.org/2001/XMLSchema#", local).unwrap()
+}
+
 #[test]
 fn integers_compare_by_value_under_one_datatype() {
-    let long = "1234567890123456789012345678901234567890";
-    for datatype in INTEGER_TYPES {
-        assert_one_value(datatype, &[" 5 ", "5", "+5", "005", "\t5\r\n", "+0005"]);
-        assert_one_value(datatype, &["0", "-0", "+0", "000", "-000"]);
-        assert_one_value(datatype, &["-5", "-05", " -5"]);
-        // Forty digits compare exactly, and no range is checked.
-        assert_one_value(datatype, &[long, &format!("+000{long}")]);
-        assert_distinct_values(
-            datatype,
-            &[
-                "5",
-                "-5",
-                "6",
-                "50",
-                "0",
-                long,
-                &format!("{}1", &long[..39]),
-                &format!("-{long}"),
-            ],
-        );
+    for (local, min, max) in INTEGER_BOUNDS {
+        let datatype = &xsd(local);
+        if let Some(max) = max {
+            let digits = max.trim_start_matches('-');
+            let sign = if max.starts_with('-') { "-" } else { "" };
+            assert_one_value(
+                datatype,
+                &[max, &format!("{sign}00{digits}"), &format!(" {max} ")],
+            );
+        }
+        if let Some(min) = min {
+            let digits = min.trim_start_matches('-');
+            let sign = if min.starts_with('-') { "-" } else { "" };
+            assert_one_value(datatype, &[min, &format!("{sign}00{digits}")]);
+        }
     }
+    // Unbounded both ways: forty digits compare exactly.
+    let long = "1234567890123456789012345678901234567890";
+    let integer = &xsd("integer");
+    assert_one_value(integer, &[long, &format!("+000{long}")]);
+    assert_one_value(integer, &["0", "-0", "+0", "000", "-000"]);
+    assert_distinct_values(
+        integer,
+        &[
+            "5",
+            "-5",
+            "6",
+            "50",
+            "0",
+            long,
+            &format!("{}1", &long[..39]),
+            &format!("-{long}"),
+        ],
+    );
+}
+
+#[test]
+fn an_integer_outside_its_datatype_range_compares_by_text() {
+    for (local, min, max) in INTEGER_BOUNDS {
+        let datatype = &xsd(local);
+        // One past each bound: the same value in two spellings is two texts.
+        if let Some(max) = max {
+            let over = one_further(max, true);
+            assert_distinct_values(datatype, &[&over, &format!("+{over}"), &format!(" {over}")]);
+        }
+        if let Some(min) = min {
+            let under = one_further(min, false);
+            assert_distinct_values(datatype, &[&under, &format!("{under} ")]);
+        }
+    }
+    let byte = &xsd("byte");
+    assert_distinct_values(byte, &["300", "0300", "+300"]);
+    assert_one_value(byte, &["127", "0127", "+127"]);
+    assert_one_value(&xsd("unsignedByte"), &["0", "-0", "+0"]);
+    assert_distinct_values(&xsd("positiveInteger"), &["0", "000"]);
+}
+
+/// The decimal text one above `bound` (`up`) or one below it.
+fn one_further(bound: &str, up: bool) -> String {
+    let n: i128 = bound.parse().unwrap();
+    (if up { n + 1 } else { n - 1 }).to_string()
+}
+
+#[test]
+fn a_typed_literal_gives_its_text_and_datatype() {
+    let Value::Typed(literal) = typed(" 5 ", &XSD_INT) else {
+        panic!("an xsd:int is a typed literal");
+    };
+    assert_eq!(literal.lexical(), " 5 ");
+    assert_eq!(*literal.datatype(), *XSD_INT);
 }
 
 #[test]
@@ -202,7 +284,7 @@ fn spellings_outside_the_xsd_pattern_are_not_numbers() {
             assert_ne!(typed(form, dt), typed(&format!(" {form}"), dt), "{form:?}");
         }
     }
-    for dt in INTEGER_TYPES {
+    for (dt, _, _) in INTEGER_TYPES {
         assert_distinct_values(dt, &["5", "5.0", "5e0", "+", "-", "", "5 5", "٥", "0x5"]);
         // Only space, tab, CR and LF are trimmed.
         assert_distinct_values(dt, &["5", "\u{A0}5", "5\u{2003}", "\u{C}5", "5\u{B}"]);
@@ -260,9 +342,7 @@ fn each_value_keeps_its_text() {
         ("1E0", &*XSD_DOUBLE),
         ("1", &*XSD_BOOLEAN),
     ] {
-        assert!(
-            matches!(typed(lexical, datatype), Value::Typed { lexical: l, .. } if l == lexical)
-        );
+        assert!(matches!(typed(lexical, datatype), Value::Typed(t) if t.lexical() == lexical));
     }
 }
 
@@ -319,7 +399,7 @@ fn typed_in_resolves_qualified_names_and_delegates_the_rest() {
     );
     assert!(matches!(
         Value::typed_in(&ns, "nope", XSD_DATETIME.clone()).unwrap(),
-        Value::Typed { lexical, .. } if lexical == "nope"
+        Value::Typed(t) if t.lexical() == "nope"
     ));
 }
 
@@ -405,21 +485,7 @@ fn every_constructor_keeps_one_representation() {
         Value::typed("x", QName::new("http://example.org/", "dt").unwrap()).unwrap(),
         Value::typed_in(&ns, "ex:foo", XSD_QNAME.clone()).unwrap(),
     ];
-    assert!(values.iter().all(Value::has_one_representation));
-    // The shapes no constructor builds.
-    let typed = |lexical: &str, datatype: &QName| Value::Typed {
-        lexical: lexical.to_owned(),
-        datatype: datatype.clone(),
-    };
-    for folded in [
-        typed("x", &XSD_STRING),
-        typed("2011-11-16T16:05:33Z", &XSD_DATETIME),
-        typed("ex:foo", &XSD_QNAME),
-        typed("foo", &PROV_QUALIFIED_NAME),
-        typed("not a name", &XSD_QNAME),
-    ] {
-        assert!(!folded.has_one_representation(), "{folded:?}");
-    }
+    assert!(values.iter().all(has_one_representation));
 }
 
 #[test]
@@ -520,7 +586,7 @@ fn native_floats_equal_their_xsd_spellings() {
 #[test]
 fn non_finite_floats_use_xsd_spellings() {
     let lexical = |v: Value| match v {
-        Value::Typed { lexical, .. } => lexical,
+        Value::Typed(t) => t.lexical().to_owned(),
         other => panic!("expected Typed, got {other:?}"),
     };
     assert_eq!(lexical(Value::from(f64::NAN)), "NaN");

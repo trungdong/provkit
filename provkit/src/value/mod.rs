@@ -74,6 +74,65 @@ impl Hash for LangStr {
     }
 }
 
+/// A typed literal kept as written: its text and its datatype.
+///
+/// The fields are private, so each value has one representation. Build one
+/// through [`Value::typed`] or a `From` conversion; a `TypedLiteral` never
+/// holds an `xsd:string`, a well-formed `xsd:dateTime` or a qualified-name
+/// datatype.
+///
+/// ```compile_fail,E0451
+/// use provkit::{TypedLiteral, well_known::XSD_INT};
+///
+/// let literal = TypedLiteral { lexical: "1".into(), datatype: XSD_INT.clone() };
+/// ```
+///
+/// ```compile_fail,E0616
+/// use provkit::{Value, well_known::XSD_STRING};
+///
+/// let mut value = Value::from(5i32);
+/// if let Value::Typed(literal) = &mut value {
+///     literal.datatype = XSD_STRING.clone();
+/// }
+/// ```
+#[derive(Clone, Debug)]
+pub struct TypedLiteral {
+    lexical: String,
+    datatype: QName,
+}
+
+impl TypedLiteral {
+    /// The text as written.
+    #[must_use]
+    pub fn lexical(&self) -> &str {
+        &self.lexical
+    }
+
+    /// The datatype.
+    #[must_use]
+    pub fn datatype(&self) -> &QName {
+        &self.datatype
+    }
+}
+
+impl PartialEq for TypedLiteral {
+    fn eq(&self, other: &Self) -> bool {
+        self.datatype == other.datatype
+            && (self.lexical == other.lexical
+                || Key::of(&self.lexical, &self.datatype)
+                    == Key::of(&other.lexical, &other.datatype))
+    }
+}
+
+impl Eq for TypedLiteral {}
+
+impl Hash for TypedLiteral {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.datatype.hash(state);
+        Key::of(&self.lexical, &self.datatype).hash(state);
+    }
+}
+
 /// The value of a non-formal attribute.
 ///
 /// Values compare and hash by what they denote. Under one datatype, two
@@ -81,8 +140,9 @@ impl Hash for LangStr {
 /// spelling, so `"5"`, `" 5 "`, `"+5"` and `"005"` are one `xsd:int`. This
 /// holds for the XSD integer types, `xsd:decimal`, `xsd:double`,
 /// `xsd:float` and `xsd:boolean`. A literal of any other datatype, or one
-/// whose text is ill-formed for its datatype, compares by its text. Values
-/// of different datatypes are never equal.
+/// whose text is outside its datatype's lexical space (`"abc"` or `"300"`
+/// as `xsd:byte`), compares by its text. Values of different datatypes are
+/// never equal.
 ///
 /// ```
 /// use provkit::{Value, well_known::{XSD_DOUBLE, XSD_INT, XSD_LONG}};
@@ -105,43 +165,30 @@ pub enum Value {
     QName(QName),
     /// An `xsd:dateTime`.
     DateTime(DateTime),
-    /// Any other typed literal, kept as written.
-    ///
-    /// Build it through [`Value::typed`] or a `From` conversion. The variant
-    /// is `#[non_exhaustive]`, so code outside this crate cannot build it
-    /// directly, and each value has one representation: a `Typed` never
-    /// holds an `xsd:string`, a well-formed `xsd:dateTime` or a well-formed
-    /// qualified name. Patterns outside the crate need `..`.
-    ///
-    /// ```compile_fail,E0639
-    /// use provkit::{Value, well_known::XSD_INT};
-    ///
-    /// let v = Value::Typed { lexical: "1".into(), datatype: XSD_INT.clone() };
-    /// ```
-    #[non_exhaustive]
-    Typed {
-        /// The text as written.
-        lexical: String,
-        /// The datatype.
-        datatype: QName,
-    },
+    /// Any other typed literal, kept as written. See [`TypedLiteral`].
+    Typed(TypedLiteral),
 }
 
-/// The XSD integer datatypes, whose literals compare by integer value.
-static INTEGER_TYPES: [&LazyLock<QName>; 13] = [
-    &XSD_INT,
-    &XSD_LONG,
-    &XSD_INTEGER,
-    &XSD_SHORT,
-    &XSD_BYTE,
-    &XSD_NON_NEGATIVE_INTEGER,
-    &XSD_POSITIVE_INTEGER,
-    &XSD_NON_POSITIVE_INTEGER,
-    &XSD_NEGATIVE_INTEGER,
-    &XSD_UNSIGNED_LONG,
-    &XSD_UNSIGNED_INT,
-    &XSD_UNSIGNED_SHORT,
-    &XSD_UNSIGNED_BYTE,
+/// The XSD integer datatypes with their inclusive bounds as decimal digits.
+/// `None` is unbounded on that side. Their literals compare by integer value.
+static INTEGER_TYPES: [(&LazyLock<QName>, Option<&str>, Option<&str>); 13] = [
+    (&XSD_INT, Some("-2147483648"), Some("2147483647")),
+    (
+        &XSD_LONG,
+        Some("-9223372036854775808"),
+        Some("9223372036854775807"),
+    ),
+    (&XSD_INTEGER, None, None),
+    (&XSD_SHORT, Some("-32768"), Some("32767")),
+    (&XSD_BYTE, Some("-128"), Some("127")),
+    (&XSD_NON_NEGATIVE_INTEGER, Some("0"), None),
+    (&XSD_POSITIVE_INTEGER, Some("1"), None),
+    (&XSD_NON_POSITIVE_INTEGER, None, Some("0")),
+    (&XSD_NEGATIVE_INTEGER, None, Some("-1")),
+    (&XSD_UNSIGNED_LONG, Some("0"), Some("18446744073709551615")),
+    (&XSD_UNSIGNED_INT, Some("0"), Some("4294967295")),
+    (&XSD_UNSIGNED_SHORT, Some("0"), Some("65535")),
+    (&XSD_UNSIGNED_BYTE, Some("0"), Some("255")),
 ];
 
 /// The reason [`Value::typed`] gives for a qualified-name datatype.
@@ -176,7 +223,7 @@ impl Value {
         } else if datatype == *XSD_DATETIME {
             Ok(match DateTime::parse(trim_xsd_space(&lexical)) {
                 Ok(parsed) => Value::DateTime(parsed),
-                Err(_) => Value::Typed { lexical, datatype },
+                Err(_) => Value::literal(lexical, datatype),
             })
         } else if is_qname_datatype(&datatype) {
             let shown = if datatype == *XSD_QNAME {
@@ -190,8 +237,15 @@ impl Value {
                 reason: QNAME_REASON.into(),
             })
         } else {
-            Ok(Value::Typed { lexical, datatype })
+            Ok(Value::literal(lexical, datatype))
         }
+    }
+
+    /// A typed literal as given. The callers keep the one-representation
+    /// rule: none passes `xsd:string`, a well-formed `xsd:dateTime` or a
+    /// qualified-name datatype.
+    fn literal(lexical: String, datatype: QName) -> Value {
+        Value::Typed(TypedLiteral { lexical, datatype })
     }
 
     /// An integer written as digits, with an optional sign: `xsd:int`,
@@ -206,10 +260,7 @@ impl Value {
             Ok(_) => XSD_LONG.clone(),
             Err(_) => XSD_INTEGER.clone(),
         };
-        Value::Typed {
-            lexical: lexical.to_owned(),
-            datatype,
-        }
+        Value::literal(lexical.to_owned(), datatype)
     }
 
     /// The rule both readers use for `"lexical" %% datatype` and
@@ -239,23 +290,8 @@ impl Value {
             Value::LangStr(_) => None,
             Value::QName(_) => Some(XSD_QNAME.clone()),
             Value::DateTime(_) => Some(XSD_DATETIME.clone()),
-            Value::Typed { datatype, .. } => Some(datatype.clone()),
+            Value::Typed(t) => Some(t.datatype.clone()),
         }
-    }
-
-    /// False for a `Typed` that another variant owns: an `xsd:string`, a
-    /// well-formed `xsd:dateTime` or a qualified-name datatype. The
-    /// writers assert this in debug builds.
-    // Only the writers call this, and both are feature-gated.
-    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
-    pub(crate) fn has_one_representation(&self) -> bool {
-        let Value::Typed { lexical, datatype } = self else {
-            return true;
-        };
-        let folded = *datatype == *XSD_STRING
-            || is_qname_datatype(datatype)
-            || (*datatype == *XSD_DATETIME && DateTime::parse(trim_xsd_space(lexical)).is_ok());
-        !folded
     }
 }
 
@@ -276,16 +312,7 @@ impl PartialEq for Value {
             (Value::LangStr(a), Value::LangStr(b)) => a == b,
             (Value::QName(a), Value::QName(b)) => a == b,
             (Value::DateTime(a), Value::DateTime(b)) => a == b,
-            (
-                Value::Typed {
-                    lexical: a,
-                    datatype: s,
-                },
-                Value::Typed {
-                    lexical: b,
-                    datatype: t,
-                },
-            ) => s == t && (a == b || Key::of(a, s) == Key::of(b, t)),
+            (Value::Typed(a), Value::Typed(b)) => a == b,
             _ => false,
         }
     }
@@ -301,10 +328,7 @@ impl Hash for Value {
             Value::LangStr(l) => l.hash(state),
             Value::QName(q) => q.hash(state),
             Value::DateTime(d) => d.hash(state),
-            Value::Typed { lexical, datatype } => {
-                datatype.hash(state);
-                Key::of(lexical, datatype).hash(state);
-            }
+            Value::Typed(t) => t.hash(state),
         }
     }
 }
@@ -332,8 +356,10 @@ impl<'a> Key<'a> {
     /// and LF around a number or boolean before reading it.
     fn of(lexical: &'a str, datatype: &QName) -> Self {
         let text = trim_xsd_space(lexical);
-        let key = if INTEGER_TYPES.iter().any(|&t| **t == *datatype) {
-            Key::integer(text)
+        let key = if let Some(&(_, min, max)) =
+            INTEGER_TYPES.iter().find(|(t, _, _)| ***t == *datatype)
+        {
+            Key::integer(text, min, max)
         } else if *datatype == *XSD_DECIMAL {
             Key::decimal(text)
         } else if *datatype == *XSD_DOUBLE {
@@ -348,14 +374,18 @@ impl<'a> Key<'a> {
         key.unwrap_or(Key::Text(lexical))
     }
 
-    /// `[+-]?[0-9]+`
-    fn integer(text: &'a str) -> Option<Self> {
+    /// `[+-]?[0-9]+` within `min` and `max`. Text outside the range is not
+    /// in the datatype's lexical space, so it has no integer key.
+    fn integer(text: &'a str, min: Option<&str>, max: Option<&str>) -> Option<Self> {
         let (negative, digits) = split_sign(text);
         if digits.is_empty() || !all_digits(digits) {
             return None;
         }
         let digits = digits.trim_start_matches('0');
-        Some(Key::Integer(negative && !digits.is_empty(), digits))
+        let negative = negative && !digits.is_empty();
+        let below = min.is_some_and(|min| compare_integers((negative, digits), parts(min)).is_lt());
+        let above = max.is_some_and(|max| compare_integers((negative, digits), parts(max)).is_gt());
+        (!below && !above).then_some(Key::Integer(negative, digits))
     }
 
     /// `[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)`
@@ -409,6 +439,26 @@ fn split_sign(text: &str) -> (bool, &str) {
     }
 }
 
+/// The sign and the digits without leading zeros of a bound from
+/// `INTEGER_TYPES`. Zero has no digits and is never negative.
+fn parts(bound: &str) -> (bool, &str) {
+    let (negative, digits) = split_sign(bound);
+    let digits = digits.trim_start_matches('0');
+    (negative && !digits.is_empty(), digits)
+}
+
+/// Order two integers given as a sign and digits without leading zeros.
+/// More digits is the larger magnitude; equal lengths compare as text.
+fn compare_integers(a: (bool, &str), b: (bool, &str)) -> std::cmp::Ordering {
+    let magnitude = |x: &str, y: &str| x.len().cmp(&y.len()).then_with(|| x.cmp(y));
+    match (a.0, b.0) {
+        (false, false) => magnitude(a.1, b.1),
+        (true, true) => magnitude(b.1, a.1),
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+    }
+}
+
 fn all_digits(text: &str) -> bool {
     text.bytes().all(|b| b.is_ascii_digit())
 }
@@ -436,7 +486,7 @@ macro_rules! from_native {
         $(
             impl From<$t> for Value {
                 fn from(v: $t) -> Self {
-                    Value::Typed { lexical: v.to_string(), datatype: $dt.clone() }
+                    Value::literal(v.to_string(), $dt.clone())
                 }
             }
         )*
@@ -456,7 +506,7 @@ macro_rules! from_float {
                     } else {
                         v.to_string()
                     };
-                    Value::Typed { lexical, datatype: $dt.clone() }
+                    Value::literal(lexical, $dt.clone())
                 }
             }
         )*

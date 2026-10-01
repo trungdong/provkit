@@ -311,11 +311,10 @@ fn bare_int(lexical: &str, datatype: &QName) -> bool {
     let digits = lexical.strip_prefix('-').unwrap_or(lexical);
     !digits.is_empty()
         && digits.bytes().all(|b| b.is_ascii_digit())
-        && matches!(Value::integer(lexical), Value::Typed { datatype: read, .. } if read == *datatype)
+        && matches!(Value::integer(lexical), Value::Typed(read) if read.datatype() == datatype)
 }
 
 fn value(v: &Value, names: &mut Namespaces) -> Result<String> {
-    debug_assert!(v.has_one_representation(), "{v:?} has a folded datatype");
     Ok(match v {
         Value::Str(s) => string(s),
         Value::LangStr(l) => format!("{}@{}", string(l.value()), l.lang()),
@@ -325,10 +324,8 @@ fn value(v: &Value, names: &mut Namespaces) -> Result<String> {
             string(&d.to_string()),
             name(&XSD_DATETIME, names)?
         ),
-        Value::Typed { lexical, datatype } if bare_int(lexical, datatype) => lexical.clone(),
-        Value::Typed { lexical, datatype } => {
-            format!("{} %% {}", string(lexical), name(datatype, names)?)
-        }
+        Value::Typed(t) if bare_int(t.lexical(), t.datatype()) => t.lexical().to_owned(),
+        Value::Typed(t) => format!("{} %% {}", string(t.lexical()), name(t.datatype(), names)?),
     })
 }
 

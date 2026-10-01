@@ -60,6 +60,10 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     for them and `Document` equality ignores the spelling. Ill-formed text
     and every other datatype compare by text, and values of different
     datatypes are never equal.
+  - `Value::Typed` holds a `TypedLiteral`, whose text and datatype are read
+    through `lexical()` and `datatype()` and cannot be set from outside the
+    crate. The XSD integer datatypes with a range compare by value inside the
+    range and by text outside it.
   - Both readers resolve every qualified-name literal (`xsd:QName`,
     `prov:QUALIFIED_NAME`) to a `Value::QName`. Text that spells no
     qualified name is `Error::InvalidQName`; an undeclared prefix or a bare

@@ -216,10 +216,6 @@ fn record_wire(record: &Record, table: &mut Namespaces) -> Result<JsonRecord> {
 /// Only plain strings are written bare. Everything else is a `$` object, so
 /// the reader never sees a raw JSON number or boolean.
 fn value_wire(value: &Value, table: &mut Namespaces) -> JsonValue {
-    debug_assert!(
-        value.has_one_representation(),
-        "{value:?} has a folded datatype"
-    );
     let mut typed = |value: String, datatype: &QName| JsonValue::Typed {
         value,
         datatype: Some(table.render(datatype)),
@@ -241,7 +237,7 @@ fn value_wire(value: &Value, table: &mut Namespaces) -> JsonValue {
             }
         }
         Value::DateTime(d) => typed(d.to_string(), &XSD_DATETIME),
-        Value::Typed { lexical, datatype } => typed(lexical.clone(), datatype),
+        Value::Typed(t) => typed(t.lexical().to_owned(), t.datatype()),
     }
 }
 

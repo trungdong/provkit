@@ -281,7 +281,7 @@ mod tests {
         assert_eq!(dt("u64"), *XSD_INTEGER);
         assert!(matches!(
             e.attributes.get(&ex("u64")).next(),
-            Some(Value::Typed { lexical, .. }) if &**lexical == "9223372036854775808"
+            Some(Value::Typed(t)) if t.lexical() == "9223372036854775808"
         ));
         assert_eq!(dt("neg"), *XSD_LONG);
         // Beyond `u64`, serde_json gives a double, and its text is the
@@ -289,7 +289,7 @@ mod tests {
         assert_eq!(dt("huge"), *XSD_DOUBLE);
         assert!(matches!(
             e.attributes.get(&ex("huge")).next(),
-            Some(Value::Typed { lexical, .. }) if &**lexical == "12345678901234568000000"
+            Some(Value::Typed(t)) if t.lexical() == "12345678901234568000000"
         ));
         assert_eq!(dt("exp"), *XSD_DOUBLE);
     }
@@ -306,9 +306,9 @@ mod tests {
         let v = e.attributes.get(&name).next().unwrap();
         assert!(matches!(
             v,
-            Value::Typed { lexical, datatype }
-                if &**lexical == "http://x.example/"
-                    && datatype.iri() == "http://www.w3.org/2001/XMLSchema#anyURI"
+            Value::Typed(t)
+                if t.lexical() == "http://x.example/"
+                    && t.datatype().iri() == "http://www.w3.org/2001/XMLSchema#anyURI"
         ));
     }
 
@@ -426,7 +426,7 @@ mod tests {
         for (i, (text, datatype)) in literals.iter().enumerate() {
             let value = &values(&d, &format!("k{i}"))[0];
             assert!(
-                matches!(value, Value::Typed { lexical, .. } if lexical == text),
+                matches!(value, Value::Typed(t) if t.lexical() == *text),
                 "{text:?} as {datatype}: {value:?}"
             );
         }
@@ -672,7 +672,7 @@ mod tests {
         // The first spelling stays; the `xsd:long` is another value.
         let read = values(&d, "v");
         assert_eq!(read.len(), 2);
-        assert!(matches!(&read[0], Value::Typed { lexical, .. } if lexical == " 5 "));
+        assert!(matches!(&read[0], Value::Typed(t) if t.lexical() == " 5 "));
         assert_eq!(read[1].datatype(), Some(XSD_LONG.clone()));
     }
 

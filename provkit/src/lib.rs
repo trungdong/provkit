@@ -82,7 +82,7 @@ pub use record::{
     End, Entity, Formal, FormalAttr, FormalRef, Generation, Influence, Invalidation, Kind,
     Membership, Mention, Record, Specialization, Start, Usage,
 };
-pub use value::{LangStr, Value};
+pub use value::{LangStr, TypedLiteral, Value};
 
 /// `text` without one leading byte-order mark.
 #[cfg(any(feature = "json", feature = "provn"))]

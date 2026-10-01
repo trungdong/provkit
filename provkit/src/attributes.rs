@@ -266,7 +266,7 @@ mod tests {
         assert!(a.insert(ex("w"), int("5")));
         assert_eq!(a.len(), 3);
         let (_, first) = a.iter().next().unwrap();
-        assert!(matches!(first, Value::Typed { lexical, .. } if lexical == " 5 "));
+        assert!(matches!(first, Value::Typed(t) if t.lexical() == " 5 "));
 
         // A set spelled another way is the same set.
         let mut b = Attributes::new();

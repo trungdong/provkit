@@ -105,11 +105,11 @@ fn attribute_values() {
     };
     let vals: Vec<&Value> = e.attributes.iter().map(|(_, v)| v).collect();
     assert!(matches!(vals[0], Value::QName(q) if *q == ex("T")));
-    assert!(matches!(vals[1], Value::Typed { lexical, .. } if lexical == "1"));
+    assert!(matches!(vals[1], Value::Typed(t) if t.lexical() == "1"));
     assert_eq!(*vals[2], Value::Str("a\"b".into()));
     assert!(matches!(vals[3], Value::LangStr(_)));
     assert!(matches!(vals[4], Value::DateTime(_)));
-    assert!(matches!(vals[5], Value::Typed { lexical, .. } if lexical == "1.5"));
+    assert!(matches!(vals[5], Value::Typed(t) if t.lexical() == "1.5"));
     assert_eq!(*vals[6], Value::Str("t".into()));
     assert_eq!(*vals[7], Value::QName(ex("v")));
     assert_eq!(*vals[8], Value::QName(ex("w")));
@@ -353,7 +353,7 @@ fn integer_literals_type_by_range() {
     let texts: Vec<_> = values(&d)
         .iter()
         .map(|v| match v {
-            Value::Typed { lexical, .. } => lexical.as_str(),
+            Value::Typed(t) => t.lexical(),
             other => panic!("{other:?}"),
         })
         .collect();
@@ -374,7 +374,7 @@ fn a_bare_minus_zero_is_an_int_and_a_plus_sign_is_a_syntax_error() {
     let d = doc("entity(ex:e, [ex:a=-0])", Profile::Strict);
     assert!(matches!(
         values(&d)[0],
-        Value::Typed { lexical, datatype } if lexical == "-0" && datatype.local() == "int"
+        Value::Typed(t) if t.lexical() == "-0" && t.datatype().local() == "int"
     ));
     for profile in [Profile::Strict, Profile::Default] {
         assert!(matches!(
@@ -658,7 +658,7 @@ fn ill_formed_literals_read_and_round_trip() {
     assert_eq!(read.len(), literals.len());
     for (value, (literal, text)) in read.iter().zip(literals) {
         assert!(
-            matches!(value, Value::Typed { lexical, .. } if lexical == text),
+            matches!(value, Value::Typed(t) if t.lexical() == text),
             "{literal}: {value:?}"
         );
     }
@@ -733,7 +733,7 @@ fn literals_compare_by_value_and_keep_their_text() {
         values(d)
             .into_iter()
             .map(|v| match v {
-                Value::Typed { lexical, .. } => lexical.clone(),
+                Value::Typed(t) => t.lexical().to_owned(),
                 other => panic!("expected a typed literal, got {other:?}"),
             })
             .collect()
@@ -755,7 +755,7 @@ fn equal_values_under_one_name_are_one_pair() {
     // The first spelling stays; the `xsd:long` is another value.
     let read = values(&d);
     assert_eq!(read.len(), 2);
-    assert!(matches!(read[0], Value::Typed { lexical, .. } if lexical == " 5 "));
+    assert!(matches!(read[0], Value::Typed(t) if t.lexical() == " 5 "));
     assert_eq!(
         read[1].datatype(),
         Some(crate::well_known::XSD_LONG.clone())
