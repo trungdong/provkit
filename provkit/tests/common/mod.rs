@@ -63,6 +63,15 @@ pub fn corpus_dir(sub: &str) -> PathBuf {
 /// Every file with `ext` in `dir`, sorted by name, as (file name, contents).
 /// `PROVKIT_ONLY=<substring>` narrows the set for debugging one case.
 pub fn files(dir: &Path, ext: &str) -> Vec<(String, String)> {
+    let found = files_unchecked(dir, ext);
+    require_a_match(!found.is_empty());
+    found
+}
+
+/// As [`files`], without failing when the filter leaves nothing, for a test
+/// that reads several directories and checks the union with
+/// [`require_a_match`].
+pub fn files_unchecked(dir: &Path, ext: &str) -> Vec<(String, String)> {
     let only = std::env::var("PROVKIT_ONLY").ok();
     let mut entries: Vec<PathBuf> = fs::read_dir(dir)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()))
@@ -70,7 +79,7 @@ pub fn files(dir: &Path, ext: &str) -> Vec<(String, String)> {
         .filter(|p| p.extension().is_some_and(|x| x == ext))
         .collect();
     entries.sort();
-    let found: Vec<(String, String)> = entries
+    entries
         .into_iter()
         .map(|p| {
             let name = p.file_name().unwrap().to_string_lossy().into_owned();
@@ -78,11 +87,7 @@ pub fn files(dir: &Path, ext: &str) -> Vec<(String, String)> {
             (name, text)
         })
         .filter(|(name, _)| only.as_ref().is_none_or(|o| name.contains(o.as_str())))
-        .collect();
-    if let Some(only) = &only {
-        assert!(!found.is_empty(), "no file matches PROVKIT_ONLY={only}");
-    }
-    found
+        .collect()
 }
 
 /// Whether `PROVKIT_ONLY` leaves `name` in the run.

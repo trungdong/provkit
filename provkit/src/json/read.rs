@@ -422,36 +422,55 @@ mod tests {
             "d": format!("http://{big}/"),
             big.as_str(): "http://www.w3.org/ns/prov#",
         });
-        let documents = [
+        // Each document with the fragment its message must hold, so the
+        // case reaches the site it names.
+        let cases = [
             // An unknown section name.
-            json!({big.as_str(): {}}),
+            (json!({big.as_str(): {}}), "unknown record kind"),
             // An unknown key in a value object.
-            json!({"prefix": prefix, "entity": {"ex:e": {"ex:a": {"$": "v", big.as_str(): "w"}}}}),
+            (
+                json!({"prefix": prefix, "entity": {"ex:e": {"ex:a": {"$": "v", big.as_str(): "w"}}}}),
+                "unknown key",
+            ),
             // A formal key, under a prefix bound to the PROV namespace.
-            json!({"prefix": prefix, "wasGeneratedBy": {"ex:g": {format!("{big}:activity"): 5}}}),
+            (
+                json!({"prefix": prefix, "wasGeneratedBy": {"ex:g": {format!("{big}:activity"): 5}}}),
+                "must be a name, not a number",
+            ),
             // A datatype in a namespace of that length, on a time formal.
-            json!({"prefix": prefix, "wasGeneratedBy": {"ex:g": {
-                "prov:time": {"$": "2011-11-16T16:05:33Z", "type": "d:t"}
-            }}}),
+            (
+                json!({"prefix": prefix, "wasGeneratedBy": {"ex:g": {
+                    "prov:time": {"$": "2011-11-16T16:05:33Z", "type": "d:t"}
+                }}}),
+                "must be a dateTime, not a value typed <",
+            ),
             // The same, on a name formal.
-            json!({"prefix": prefix, "wasGeneratedBy": {"ex:g": {
-                "prov:activity": {"$": "ex:a", "type": "d:t"}
-            }}}),
+            (
+                json!({"prefix": prefix, "wasGeneratedBy": {"ex:g": {
+                    "prov:activity": {"$": "ex:a", "type": "d:t"}
+                }}}),
+                "must be a name, not a value typed <",
+            ),
             // A record key with an undeclared prefix of that length.
-            json!({"prefix": prefix, "entity": {format!("{big}y:e"): {}}}),
+            (
+                json!({"prefix": prefix, "entity": {format!("{big}y:e"): {}}}),
+                "undeclared prefix",
+            ),
         ];
-        for (i, document) in documents.into_iter().enumerate() {
+        for (document, fragment) in cases {
             let text = document.to_string();
-            let message = json::read(&text)
-                .map(|_| ())
-                .expect_err(&i.to_string())
-                .to_string();
+            let message = json::read(&text).map(|_| ()).unwrap_err().to_string();
             assert!(
-                message.len() < 400,
-                "{} bytes: {}",
-                message.len(),
+                message.contains(fragment),
+                "{fragment}: {}",
                 &message[..200]
             );
+            assert!(
+                message.contains("characters)"),
+                "{fragment}: {}",
+                &message[..200]
+            );
+            assert!(message.len() < 400, "{fragment}: {} bytes", message.len());
         }
     }
 
@@ -756,7 +775,6 @@ mod tests {
             );
         }
         for bad in [
-            r#"{"$": "ex:a", "type": "zz:undeclared"}"#,
             r#"{"$": "ex:a", "type": "xsd:string"}"#,
             r#"{"$": "ex:a", "lang": "en"}"#,
             r#"{"$": "ex:a", "type": "prov:QUALIFIED_NAME", "lang": "en"}"#,
@@ -766,10 +784,15 @@ mod tests {
                 Error::JsonStructure { message } => {
                     assert!(message.contains("prov:activity"), "{bad}\n{message}");
                 }
-                Error::UndeclaredPrefix(prefix) => assert_eq!(prefix, "zz", "{bad}"),
                 other => panic!("{bad}: {other:?}"),
             }
         }
+        let undeclared = r#"{"$": "ex:a", "type": "zz:undeclared"}"#;
+        let (_, _, error) = in_record(json::read(&doc(undeclared)).unwrap_err());
+        assert!(
+            matches!(error, Error::UndeclaredPrefix(ref p) if p == "zz"),
+            "{error:?}"
+        );
     }
 
     #[test]

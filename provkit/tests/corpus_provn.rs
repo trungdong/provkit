@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{Report, corpus_dir, files};
+use common::{Report, corpus_dir, files, files_unchecked, require_a_match};
 use provkit::Error;
 use provkit::provn::Profile;
 
@@ -56,8 +56,10 @@ fn spec_examples_parse_under_strict() {
     let mut report = Report::default();
     let excluded_examples = excluded_spec_examples();
     let mut excluded = 0;
+    let mut any_selected = false;
     for sub in ["provn/spec/prov-n", "provn/spec/prov-dm"] {
-        for (name, text) in files(&corpus_dir(sub), "provn") {
+        for (name, text) in files_unchecked(&corpus_dir(sub), "provn") {
+            any_selected = true;
             let result = provkit::provn::read_report(&text, Profile::Strict);
             if let Some(why) = reason(&excluded_examples, &name) {
                 excluded += 1;
@@ -86,6 +88,7 @@ fn spec_examples_parse_under_strict() {
             }
         }
     }
+    require_a_match(any_selected);
     if std::env::var("PROVKIT_ONLY").is_err() {
         assert_eq!(excluded, excluded_examples.len());
     }
@@ -146,5 +149,5 @@ fn corpus_extensibility_expressions_are_reported() {
                 .all(|i| i.name == "prov:derivedByInsertionFrom")
         );
     }
-    common::require_a_match(any_selected);
+    require_a_match(any_selected);
 }

@@ -167,7 +167,11 @@ fn mention_takes_attributes() {
 #[test]
 fn a_bare_name_before_a_parenthesis_inside_an_extension_is_a_syntax_error() {
     for profile in [Profile::Strict, Profile::Default] {
-        assert!(matches!(err("ex:f(g(1))", profile), Error::Syntax { .. }));
+        // The error sits at the `(` after `g`, on line 4 of the document.
+        let Error::Syntax { line, column, .. } = err("ex:f(g(1))", profile) else {
+            panic!("expected a syntax error under {profile:?}");
+        };
+        assert_eq!((line, column), (4, 7), "{profile:?}");
     }
 }
 
