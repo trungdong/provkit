@@ -3,6 +3,7 @@
 use indexmap::IndexMap;
 
 use super::wire::{JsonDocument, JsonRecord, JsonSection, JsonValue};
+use crate::namespaces::Scope;
 use crate::sink::DocumentBuilder;
 use crate::value::trim_xsd_space;
 use crate::well_known::{XSD_DATETIME, XSD_DOUBLE};
@@ -32,17 +33,17 @@ fn namespaces(prefix: &IndexMap<String, String>) -> Result<Namespaces> {
 pub(super) fn emit(wire: &JsonDocument, sink: &mut DocumentBuilder) -> Result<()> {
     let doc_ns = namespaces(&wire.prefix)?;
     sink.start_document(doc_ns.clone());
-    emit_sections(&wire.sections, &doc_ns, sink)?;
+    emit_sections(&wire.sections, Scope::of(&doc_ns), sink)?;
     for (key, bundle) in &wire.bundle {
         let bundle_ns = namespaces(&bundle.prefix)?;
-        let scope = bundle_ns.with_fallback(&doc_ns);
+        let scope = Scope::within(&bundle_ns, &doc_ns);
         if key.starts_with("_:") {
             return Err(structure(format!("bundle `{key}` needs a real identifier")));
         }
         // The bundle's own name resolves in the bundle scope (PROV-N 3.7.4).
         let id = scope.resolve(key)?;
         sink.start_bundle(id, bundle_ns.clone())?;
-        emit_sections(&bundle.sections, &scope, sink)?;
+        emit_sections(&bundle.sections, scope, sink)?;
         sink.end_bundle();
     }
     sink.end_document();
@@ -51,7 +52,7 @@ pub(super) fn emit(wire: &JsonDocument, sink: &mut DocumentBuilder) -> Result<()
 
 fn emit_sections(
     sections: &IndexMap<String, JsonSection>,
-    scope: &Namespaces,
+    scope: Scope<'_>,
     sink: &mut DocumentBuilder,
 ) -> Result<()> {
     for (section, records) in sections {
@@ -70,7 +71,7 @@ fn emit_sections(
 }
 
 /// `_:x` keys mean "no identifier" and are never resolved; elements must have one.
-fn record_id(kind: Kind, key: &str, scope: &Namespaces) -> Result<Option<QName>> {
+fn record_id(kind: Kind, key: &str, scope: Scope<'_>) -> Result<Option<QName>> {
     if key.starts_with("_:") {
         if kind.is_element() {
             return Err(structure(format!(
@@ -88,7 +89,7 @@ fn records_from(
     kind: Kind,
     id: Option<&QName>,
     body: &JsonRecord,
-    scope: &Namespaces,
+    scope: Scope<'_>,
 ) -> Result<Vec<Record>> {
     let mut formals: Vec<(FormalAttr, Formal)> = Vec::new();
     let mut members: Vec<Formal> = Vec::new();
@@ -135,7 +136,7 @@ fn records_from(
 /// typed literals and must give a `Value::QName` for a name; for a time its
 /// `type` must resolve to `xsd:dateTime`. Anything else is not a formal
 /// value.
-fn formal_value(value: &JsonValue, key: &str, time: bool, scope: &Namespaces) -> Result<Formal> {
+fn formal_value(value: &JsonValue, key: &str, time: bool, scope: Scope<'_>) -> Result<Formal> {
     let expected = if time { "a dateTime" } else { "a name" };
     let wrong = |found: &str| structure(format!("`{key}` must be {expected}, not {found}"));
     let (text, datatype) = match value {
@@ -173,7 +174,7 @@ fn formal_value(value: &JsonValue, key: &str, time: bool, scope: &Namespaces) ->
 /// an integer takes the narrowest of `xsd:int`, `xsd:long` and `xsd:integer`
 /// and any other number is `xsd:double`, each keeping its text, a boolean is
 /// `xsd:boolean`, and a value object is read by its `lang` or `type`.
-fn decode_value(v: &JsonValue, scope: &Namespaces) -> Result<Value> {
+fn decode_value(v: &JsonValue, scope: Scope<'_>) -> Result<Value> {
     Ok(match v {
         JsonValue::Str(s) => Value::Str(s.clone()),
         JsonValue::Number(text) => number(text)?,

@@ -5,6 +5,7 @@ use std::io::Write;
 use indexmap::IndexMap;
 
 use super::wire::{JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany};
+use crate::namespaces::WriteScope;
 use crate::well_known::{XSD_DATETIME, XSD_QNAME};
 use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
 
@@ -54,22 +55,44 @@ const DEFAULT: &str = "default";
 fn to_wire(document: &Document) -> Result<JsonDocument> {
     // A copy of the document's table, so minting a prefix never touches the
     // caller's document. It is written last, after every name has been seen.
-    let mut table = document.namespaces.clone();
-    // `default` is the default-namespace key in PROV-JSON, so a prefix of that
-    // name is dropped and its names get a minted `nsN`.
-    table.forget(DEFAULT);
+    let mut table = working_table(&document.namespaces)?;
     let mut next_blank = 0;
-    let sections = sections(&document.records, &mut table, &mut next_blank)?;
+    let sections = sections(
+        &document.records,
+        &mut WriteScope::of(&mut table),
+        &mut next_blank,
+    )?;
     let mut bundles = IndexMap::new();
     for bundle in document.merged_bundles().iter() {
-        let (key, wire) = bundle_wire(bundle, &table, &bundles, &mut next_blank)?;
-        bundles.insert(key, wire);
+        let (bundle_key, wire) = bundle_wire(bundle, &table, &bundles, &mut next_blank)?;
+        bundles.insert(bundle_key, wire);
     }
     Ok(JsonDocument {
         prefix: prefix_table(&table, |_| true, document.namespaces.default_namespace()),
         sections,
         bundle: bundles,
     })
+}
+
+/// `namespaces` without a prefix named `default`: PROV-JSON reads that key
+/// as the default namespace, so names under such a prefix get a minted `nsN`.
+fn working_table(namespaces: &Namespaces) -> Result<Namespaces> {
+    let mut table = Namespaces::new();
+    if let Some(default) = namespaces.default_namespace() {
+        table.set_default(default);
+    }
+    for (prefix, iri) in namespaces.iter().filter(|(p, _)| *p != DEFAULT) {
+        table.declare(prefix, iri)?;
+    }
+    Ok(table)
+}
+
+/// The key or value text that writes `name`.
+fn key(name: &QName, names: &mut WriteScope<'_>) -> String {
+    match names.render_parts(name) {
+        Some(prefix) => format!("{prefix}:{}", name.local()),
+        None => name.local().to_owned(),
+    }
 }
 
 /// A bundle and its key, both written against the bundle's table over the
@@ -84,30 +107,31 @@ fn bundle_wire(
     written: &IndexMap<String, JsonBundle>,
     next_blank: &mut usize,
 ) -> Result<(String, JsonBundle)> {
-    let mut table = outer.clone();
-    for (prefix, iri) in bundle.namespaces.iter().filter(|(p, _)| *p != DEFAULT) {
-        table.declare(prefix, iri)?;
-    }
-    if let Some(default) = bundle.namespaces.default_namespace() {
-        table.set_default(default);
-    }
-    let mut key = table.render(&bundle.id);
-    if written.contains_key(&key) {
-        let local = bundle.id.local();
-        let prefix = table.mint_prefix(bundle.id.namespace(), |p| {
-            !written.contains_key(&format!("{p}:{local}"))
-        });
-        key = format!("{prefix}:{local}");
-    }
-    let sections = sections(&bundle.records, &mut table, next_blank)?;
+    // The bundle's own table, which also takes the prefixes minted for it.
+    let mut own = working_table(&bundle.namespaces)?;
+    let (bundle_key, sections) = {
+        let mut names = WriteScope::within(&mut own, outer);
+        let mut bundle_key = key(&bundle.id, &mut names);
+        if written.contains_key(&bundle_key) {
+            let local = bundle.id.local();
+            let prefix = names.mint_prefix(bundle.id.namespace(), |p| {
+                !written.contains_key(&format!("{p}:{local}"))
+            });
+            bundle_key = format!("{prefix}:{local}");
+        }
+        (
+            bundle_key,
+            sections(&bundle.records, &mut names, next_blank)?,
+        )
+    };
     // Entries the document already declares are inherited, not repeated.
     let inherited = |prefix: &str, iri: &str| outer.lookup(prefix) == Some(iri);
     let prefix = prefix_table(
-        &table,
+        &own,
         |(p, iri)| !inherited(p, iri),
         bundle.namespaces.default_namespace(),
     );
-    Ok((key, JsonBundle { prefix, sections }))
+    Ok((bundle_key, JsonBundle { prefix, sections }))
 }
 
 /// The `prefix` object: declared prefixes that pass `keep`, then `default`.
@@ -132,7 +156,7 @@ fn prefix_table(
 /// labels follow record order, whatever the grouping.
 fn sections(
     records: &[Record],
-    table: &mut Namespaces,
+    names: &mut WriteScope<'_>,
     next_blank: &mut usize,
 ) -> Result<IndexMap<String, JsonSection>> {
     let blanks: Vec<Option<String>> = records
@@ -152,15 +176,15 @@ fn sections(
             .zip(&blanks)
             .filter(|(r, _)| r.kind() == kind)
         {
-            let key = match (record.id(), blank) {
-                (Some(id), _) => table.render(id),
+            let id = match (record.id(), blank) {
+                (Some(id), _) => key(id, names),
                 (None, Some(label)) => label.clone(),
                 (None, None) => unreachable!("a record without an id has a label"),
             };
             section
-                .entry(key)
+                .entry(id)
                 .or_default()
-                .push(record_wire(record, table)?);
+                .push(record_wire(record, names)?);
         }
         if section.is_empty() {
             continue;
@@ -183,12 +207,12 @@ fn sections(
 
 /// A record's body. An attribute spelling one of the record's own formals
 /// would overwrite or pose as that formal, so it is an error.
-fn record_wire(record: &Record, table: &mut Namespaces) -> Result<JsonRecord> {
+fn record_wire(record: &Record, names: &mut WriteScope<'_>) -> Result<JsonRecord> {
     record.check_attributes()?;
     let mut body = JsonRecord::new();
     for (attr, value) in record.formals() {
         let text = match value {
-            FormalRef::Name(q) => table.render(q),
+            FormalRef::Name(q) => key(q, names),
             FormalRef::Time(t) => t.to_string(),
         };
         body.insert(format!("prov:{}", attr.local_name()), JsonValue::Str(text));
@@ -196,11 +220,10 @@ fn record_wire(record: &Record, table: &mut Namespaces) -> Result<JsonRecord> {
     // Several values under one name become an array, in insertion order.
     let mut grouped: IndexMap<String, Vec<JsonValue>> = IndexMap::new();
     for (name, value) in record.attributes() {
-        let key = table.render(name);
         grouped
-            .entry(key)
+            .entry(key(name, names))
             .or_default()
-            .push(value_wire(value, table));
+            .push(value_wire(value, names));
     }
     for (name, mut values) in grouped {
         let value = if values.len() == 1 {
@@ -215,10 +238,10 @@ fn record_wire(record: &Record, table: &mut Namespaces) -> Result<JsonRecord> {
 
 /// Only plain strings are written bare. Everything else is a `$` object, so
 /// the reader never sees a raw JSON number or boolean.
-fn value_wire(value: &Value, table: &mut Namespaces) -> JsonValue {
+fn value_wire(value: &Value, names: &mut WriteScope<'_>) -> JsonValue {
     let mut typed = |value: String, datatype: &QName| JsonValue::Typed {
         value,
-        datatype: Some(table.render(datatype)),
+        datatype: Some(key(datatype, names)),
         lang: None,
     };
     match value {
@@ -230,10 +253,10 @@ fn value_wire(value: &Value, table: &mut Namespaces) -> JsonValue {
             lang: Some(l.lang().to_owned()),
         },
         Value::QName(q) => {
-            let text = table.render(q);
+            let text = key(q, names);
             JsonValue::Typed {
                 value: text,
-                datatype: Some(table.render(&XSD_QNAME)),
+                datatype: Some(key(&XSD_QNAME, names)),
                 lang: None,
             }
         }

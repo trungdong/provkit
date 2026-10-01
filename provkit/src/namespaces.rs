@@ -114,14 +114,6 @@ impl Namespaces {
         }
     }
 
-    /// Remove the binding of `prefix`, keeping the order of the rest.
-    // Only the JSON writer calls this, and it is feature-gated.
-    #[cfg_attr(not(feature = "json"), allow(dead_code))]
-    pub(crate) fn forget(&mut self, prefix: &str) {
-        self.unindex(prefix);
-        self.prefixes.shift_remove(prefix);
-    }
-
     /// Declared prefixes and their IRIs, in declaration order. The reserved
     /// `prov` and `xsd` are not listed.
     pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
@@ -155,12 +147,7 @@ impl Namespaces {
     ///   uses the blank-node prefix `_`, or has a local part PROV-N cannot
     ///   write (see [`QName::new`]).
     pub fn resolve(&self, text: &str) -> Result<QName> {
-        match text.split_once(':') {
-            // `_:` marks a blank node; readers handle it before resolving.
-            Some(("" | "_", _)) => Err(Error::InvalidQName(text.into())),
-            Some((prefix, local)) => self.resolve_parts(prefix, local),
-            None => self.resolve_parts("", text),
-        }
+        Scope::of(self).resolve(text)
     }
 
     /// Resolve a name already split into `prefix` and `local`; an empty
@@ -169,53 +156,45 @@ impl Namespaces {
     /// # Errors
     ///
     /// As [`resolve`](Self::resolve).
+    #[cfg(test)]
     pub(crate) fn resolve_parts(&self, prefix: &str, local: &str) -> Result<QName> {
-        if prefix.is_empty() {
-            if local.is_empty() {
-                return Err(Error::InvalidQName(String::new()));
-            }
-            let ns = self
-                .default
-                .clone()
-                .ok_or_else(|| Error::NoDefaultNamespace(local.into()))?;
-            return QName::in_namespace(ns, local).map_err(|e| with_text(e, local));
-        }
-        if prefix == "_" {
-            return Err(Error::InvalidQName(format!("{prefix}:{local}")));
-        }
-        let ns = self
-            .lookup_shared(prefix)
-            .ok_or_else(|| Error::UndeclaredPrefix(prefix.into()))?;
-        QName::in_namespace(ns, local).map_err(|e| with_text(e, &format!("{prefix}:{local}")))
+        Scope::of(self).resolve_parts(prefix, local)
     }
 
     /// The prefix bound to `namespace`, if any (`prov` and `xsd` included).
     /// When several prefixes share the IRI, the first declared answers. The
     /// default namespace has no prefix and never answers.
     pub fn prefix_for(&self, namespace: &str) -> Option<&str> {
-        if namespace == PROV {
-            return Some("prov");
-        }
-        if namespace == XSD {
-            return Some("xsd");
-        }
-        self.by_iri
+        self.prefixes_for(namespace).next()
+    }
+
+    /// Every prefix bound to `namespace`, in declaration order (`prov` and
+    /// `xsd` included).
+    fn prefixes_for<'a>(&'a self, namespace: &str) -> impl Iterator<Item = &'a str> {
+        let reserved = if namespace == PROV {
+            Some("prov")
+        } else if namespace == XSD {
+            Some("xsd")
+        } else {
+            None
+        };
+        let bound = self
+            .by_iri
             .get(namespace)
-            .and_then(|bound| bound.first())
-            .map(|p| &**p)
+            .into_iter()
+            .flatten()
+            .map(|p| &**p);
+        reserved.into_iter().chain(bound)
     }
 
     /// The prefix for `namespace`, minting `ns1`, `ns2`, ... when none exists.
     pub fn ensure_prefix(&mut self, namespace: &str) -> String {
-        if let Some(p) = self.prefix_for(namespace) {
-            return p.to_owned();
-        }
-        self.mint_prefix(namespace, |_| true)
+        WriteScope::of(self).ensure_prefix(namespace)
     }
 
     /// Bind the first `nsN` that this table does not use and that `accept`
     /// takes to `namespace`, even when `namespace` already has a prefix.
-    pub(crate) fn mint_prefix(&mut self, namespace: &str, accept: impl Fn(&str) -> bool) -> String {
+    fn mint_prefix(&mut self, namespace: &str, accept: impl Fn(&str) -> bool) -> String {
         let mut n = 1;
         loop {
             let candidate = format!("ns{n}");
@@ -255,23 +234,131 @@ impl Namespaces {
         table
     }
 
-    /// The text that writes `name` against this table.
-    ///
-    /// A declared prefix wins, then the default namespace for a bare name,
-    /// then a freshly minted `nsN` prefix, which is added to this table.
-    /// Callers that must not change a document pass a clone.
-    // Only the JSON writer calls this, and it is feature-gated.
-    #[cfg_attr(not(feature = "json"), allow(dead_code))]
-    pub(crate) fn render(&mut self, name: &QName) -> String {
-        match self.render_parts(name) {
-            Some(prefix) => format!("{prefix}:{}", name.local()),
-            None => name.local().to_owned(),
+    /// As [`WriteScope::render_parts`], with nothing behind this table.
+    #[cfg(test)]
+    pub(crate) fn render_parts(&mut self, name: &QName) -> Option<String> {
+        WriteScope::of(self).render_parts(name)
+    }
+}
+
+/// A table read through to a parent table, without merging the two. A
+/// bundle's table in front of its document's is the case it serves: the
+/// bundle's bindings and default win, and anything the bundle leaves out
+/// falls back to the document.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Scope<'a> {
+    own: &'a Namespaces,
+    parent: Option<&'a Namespaces>,
+}
+
+impl<'a> Scope<'a> {
+    /// One table with nothing behind it.
+    pub(crate) fn of(own: &'a Namespaces) -> Self {
+        Scope { own, parent: None }
+    }
+
+    /// `own` in front of `parent`.
+    // Only the readers call this, and both are feature-gated.
+    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
+    pub(crate) fn within(own: &'a Namespaces, parent: &'a Namespaces) -> Self {
+        Scope {
+            own,
+            parent: Some(parent),
         }
     }
 
-    /// As [`render`](Self::render), split into the prefix and the local part.
-    /// `None` means the name is written bare. The local part is always
-    /// `name.local()`, so a writer can escape it on its own.
+    fn tables(self) -> impl Iterator<Item = &'a Namespaces> {
+        std::iter::once(self.own).chain(self.parent)
+    }
+
+    /// Resolve `prefix:local` or a bare `local` to a name.
+    ///
+    /// # Errors
+    ///
+    /// As [`Namespaces::resolve`].
+    pub(crate) fn resolve(self, text: &str) -> Result<QName> {
+        match text.split_once(':') {
+            // `_:` marks a blank node; readers handle it before resolving.
+            Some(("" | "_", _)) => Err(Error::InvalidQName(text.into())),
+            Some((prefix, local)) => self.resolve_parts(prefix, local),
+            None => self.resolve_parts("", text),
+        }
+    }
+
+    /// Resolve a name already split into `prefix` and `local`; an empty
+    /// prefix means a bare name. A colon in `local` stays in the local part.
+    ///
+    /// # Errors
+    ///
+    /// As [`Namespaces::resolve`].
+    pub(crate) fn resolve_parts(self, prefix: &str, local: &str) -> Result<QName> {
+        if prefix.is_empty() {
+            if local.is_empty() {
+                return Err(Error::InvalidQName(String::new()));
+            }
+            let ns = self
+                .tables()
+                .find_map(|table| table.default.clone())
+                .ok_or_else(|| Error::NoDefaultNamespace(local.into()))?;
+            return QName::in_namespace(ns, local).map_err(|e| with_text(e, local));
+        }
+        if prefix == "_" {
+            return Err(Error::InvalidQName(format!("{prefix}:{local}")));
+        }
+        let ns = self
+            .tables()
+            .find_map(|table| table.lookup_shared(prefix))
+            .ok_or_else(|| Error::UndeclaredPrefix(prefix.into()))?;
+        QName::in_namespace(ns, local).map_err(|e| with_text(e, &format!("{prefix}:{local}")))
+    }
+}
+
+/// The writers' side of a scope: names render against `own`, then against
+/// `parent`, and a minted prefix is added to `own`.
+#[derive(Debug)]
+pub(crate) struct WriteScope<'a> {
+    own: &'a mut Namespaces,
+    parent: Option<&'a Namespaces>,
+}
+
+impl<'a> WriteScope<'a> {
+    /// One table with nothing behind it.
+    pub(crate) fn of(own: &'a mut Namespaces) -> Self {
+        WriteScope { own, parent: None }
+    }
+
+    /// `own` in front of `parent`.
+    // Only the writers call this, and both are feature-gated.
+    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
+    pub(crate) fn within(own: &'a mut Namespaces, parent: &'a Namespaces) -> Self {
+        WriteScope {
+            own,
+            parent: Some(parent),
+        }
+    }
+
+    /// The prefix that writes `namespace`: one of `own`'s, or the first of
+    /// the parent's that `own` does not bind to something else.
+    fn prefix_for(&self, namespace: &str) -> Option<&str> {
+        if let Some(prefix) = self.own.prefix_for(namespace) {
+            return Some(prefix);
+        }
+        self.parent?
+            .prefixes_for(namespace)
+            .find(|prefix| self.own.lookup(prefix).is_none())
+    }
+
+    fn default_namespace(&self) -> Option<&str> {
+        self.own
+            .default_namespace()
+            .or_else(|| self.parent?.default_namespace())
+    }
+
+    /// The prefix that writes `name`, or `None` when it is written bare.
+    ///
+    /// A declared prefix wins, then the default namespace for a bare name,
+    /// then a freshly minted `nsN` prefix, which is added to `own`. The local
+    /// part is always `name.local()`, so a writer can escape it on its own.
     // Only the writers call this, and both are feature-gated.
     #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
     pub(crate) fn render_parts(&mut self, name: &QName) -> Option<String> {
@@ -282,14 +369,28 @@ impl Namespaces {
         // and an empty local part would vanish.
         let bare = !name.local().is_empty()
             && !name.local().contains(':')
-            && self
-                .default
-                .as_deref()
-                .is_some_and(|d| d == name.namespace());
+            && self.default_namespace() == Some(name.namespace());
         if bare {
             return None;
         }
         Some(self.ensure_prefix(name.namespace()))
+    }
+
+    /// The prefix for `namespace`, minting `ns1`, `ns2`, ... when none exists.
+    pub(crate) fn ensure_prefix(&mut self, namespace: &str) -> String {
+        if let Some(prefix) = self.prefix_for(namespace) {
+            return prefix.to_owned();
+        }
+        self.mint_prefix(namespace, |_| true)
+    }
+
+    /// Bind the first `nsN` that neither table uses and that `accept` takes
+    /// to `namespace`, in `own`.
+    pub(crate) fn mint_prefix(&mut self, namespace: &str, accept: impl Fn(&str) -> bool) -> String {
+        let parent = self.parent;
+        self.own.mint_prefix(namespace, |candidate| {
+            parent.is_none_or(|p| p.lookup(candidate).is_none()) && accept(candidate)
+        })
     }
 }
 
@@ -444,63 +545,56 @@ mod tests {
         assert_eq!(ns.prefix_for(PROV), Some("prov"));
     }
 
+    /// The text that writes `name` against `ns`.
+    fn rendered(ns: &mut Namespaces, name: &QName) -> String {
+        match ns.render_parts(name) {
+            Some(prefix) => format!("{prefix}:{}", name.local()),
+            None => name.local().to_owned(),
+        }
+    }
+
     #[test]
-    fn render_prefers_prefix_then_default_then_mints() {
+    fn render_parts_prefer_prefix_then_default_then_mint() {
         let mut ns = Namespaces::new();
         ns.declare("ex", "http://example.org/").unwrap();
         ns.set_default("http://default.org/");
         assert_eq!(
-            ns.render(&QName::new("http://example.org/", "a").unwrap()),
+            rendered(&mut ns, &QName::new("http://example.org/", "a").unwrap()),
             "ex:a"
         );
         assert_eq!(
-            ns.render(&QName::new("http://default.org/", "b").unwrap()),
+            rendered(&mut ns, &QName::new("http://default.org/", "b").unwrap()),
             "b"
         );
-        assert_eq!(ns.render(&QName::new(PROV, "type").unwrap()), "prov:type");
-        assert_eq!(ns.render(&QName::new("http://new/", "c").unwrap()), "ns1:c");
+        assert_eq!(
+            rendered(&mut ns, &QName::new(PROV, "type").unwrap()),
+            "prov:type"
+        );
+        assert_eq!(
+            rendered(&mut ns, &QName::new("http://new/", "c").unwrap()),
+            "ns1:c"
+        );
         assert_eq!(ns.iter().count(), 2);
         // A name in the default namespace never mints a prefix.
         let mut plain = Namespaces::new();
         plain.set_default("http://default.org/");
         assert_eq!(
-            plain.render(&QName::new("http://default.org/", "b").unwrap()),
+            rendered(&mut plain, &QName::new("http://default.org/", "b").unwrap()),
             "b"
         );
         assert_eq!(plain.iter().count(), 0);
         // A colon in the local part cannot be written bare.
         assert_eq!(
-            plain.render(&QName::new("http://default.org/", "x:y").unwrap()),
+            rendered(
+                &mut plain,
+                &QName::new("http://default.org/", "x:y").unwrap()
+            ),
             "ns1:x:y"
         );
         assert_eq!(
-            plain.render(&QName::new("http://default.org/", "").unwrap()),
+            rendered(&mut plain, &QName::new("http://default.org/", "").unwrap()),
             "ns1:"
         );
-    }
-
-    #[test]
-    fn render_parts_split_the_prefix_from_the_local_part() {
-        let mut ns = Namespaces::new();
-        ns.declare("ex", "http://example.org/").unwrap();
-        ns.set_default("http://default.org/");
-        let names = [
-            QName::new("http://example.org/", "a").unwrap(),
-            QName::new("http://default.org/", "b").unwrap(),
-            QName::new("http://default.org/", "x:y").unwrap(),
-            QName::new("http://new/", "c").unwrap(),
-        ];
-        for name in &names {
-            let rendered = ns.render(name);
-            let text = match ns.render_parts(name) {
-                Some(prefix) => format!("{prefix}:{}", name.local()),
-                None => name.local().to_owned(),
-            };
-            assert_eq!(rendered, text);
-        }
-        let mut fresh = Namespaces::new();
-        fresh.set_default("http://default.org/");
-        assert_eq!(fresh.render_parts(&names[1]), None);
     }
 
     #[test]
@@ -602,18 +696,6 @@ mod tests {
     }
 
     #[test]
-    fn a_forgotten_prefix_stops_answering() {
-        let mut ns = Namespaces::new();
-        ns.declare("a", "http://x.org/").unwrap();
-        ns.declare("b", "http://x.org/").unwrap();
-        ns.forget("a");
-        assert_eq!(ns.prefix_for("http://x.org/"), Some("b"));
-        ns.forget("b");
-        assert_eq!(ns.prefix_for("http://x.org/"), None);
-        ns.forget("b");
-    }
-
-    #[test]
     fn the_default_namespace_has_no_prefix() {
         let mut ns = Namespaces::new();
         ns.set_default("http://x.org/");
@@ -697,5 +779,102 @@ mod tests {
         let mut empty = Namespaces::new();
         empty.absorb(&second);
         assert_eq!(empty.default_namespace(), Some("http://second.org/"));
+    }
+
+    /// A document table and a bundle table that shadow, share and extend
+    /// each other, with a default on each.
+    fn layered() -> (Namespaces, Namespaces) {
+        let mut document = Namespaces::new();
+        document.set_default("http://doc.org/");
+        document.declare("ex", "http://document.org/").unwrap();
+        document.declare("o", "http://other.org/").unwrap();
+        document.declare("alias", "http://other.org/").unwrap();
+        document.declare("ns1", "http://taken.org/").unwrap();
+        let mut bundle = Namespaces::new();
+        bundle.declare("ex", "http://bundle.org/").unwrap();
+        bundle.declare("o", "http://shadow.org/").unwrap();
+        bundle.declare("b", "http://only-bundle.org/").unwrap();
+        (document, bundle)
+    }
+
+    #[test]
+    fn a_scope_resolves_as_the_merged_table_does() {
+        let (document, bundle) = layered();
+        let merged = bundle.with_fallback(&document);
+        let scope = Scope::within(&bundle, &document);
+        for text in [
+            "ex:a",
+            "o:a",
+            "alias:a",
+            "b:a",
+            "ns1:a",
+            "prov:type",
+            "xsd:int",
+            "bare",
+            "zz:a",
+            "_:x",
+            ":a",
+            "",
+            "ex:a b",
+        ] {
+            match (scope.resolve(text), merged.resolve(text)) {
+                (Ok(a), Ok(b)) => assert_eq!(a, b, "{text}"),
+                (Err(a), Err(b)) => assert_eq!(a.to_string(), b.to_string(), "{text}"),
+                (a, b) => panic!("{text}: {a:?} against {b:?}"),
+            }
+        }
+        // With no default of its own, a bare name takes the document's.
+        assert_eq!(
+            scope.resolve("bare").unwrap().namespace(),
+            "http://doc.org/"
+        );
+        let mut with_default = bundle.clone();
+        with_default.set_default("http://bundle-default.org/");
+        let scope = Scope::within(&with_default, &document);
+        assert_eq!(
+            scope.resolve("bare").unwrap().namespace(),
+            "http://bundle-default.org/"
+        );
+    }
+
+    #[test]
+    fn a_write_scope_renders_as_the_merged_table_does() {
+        let (document, bundle) = layered();
+        let names = [
+            ("http://bundle.org/", "a"),
+            ("http://document.org/", "a"),
+            ("http://shadow.org/", "a"),
+            // `o` is shadowed in the bundle, so the document's second prefix serves.
+            ("http://other.org/", "a"),
+            ("http://only-bundle.org/", "a"),
+            ("http://taken.org/", "a"),
+            ("http://doc.org/", "bare"),
+            ("http://doc.org/", "with:colon"),
+            ("http://doc.org/", ""),
+            ("http://new.org/", "a"),
+            ("http://newer.org/", "a"),
+            ("http://new.org/", "b"),
+            ("http://www.w3.org/ns/prov#", "type"),
+        ];
+        let mut merged = bundle.with_fallback(&document);
+        let mut own = bundle.clone();
+        let mut scope = WriteScope::within(&mut own, &document);
+        for (namespace, local) in names {
+            let name = QName::new(namespace, local).unwrap();
+            assert_eq!(
+                scope.render_parts(&name),
+                merged.render_parts(&name),
+                "{namespace}{local}"
+            );
+        }
+        // The minted prefixes went to the bundle's table and skipped `ns1`,
+        // which the document binds. The bundle shadows the document's `ex`,
+        // and a default namespace cannot write a colon or an empty local
+        // part, so those two namespaces take a prefix as well.
+        assert_eq!(own.lookup("ns2"), Some("http://document.org/"));
+        assert_eq!(own.lookup("ns3"), Some("http://doc.org/"));
+        assert_eq!(own.lookup("ns4"), Some("http://new.org/"));
+        assert_eq!(own.lookup("ns5"), Some("http://newer.org/"));
+        assert_eq!(own.lookup("ns1"), None);
     }
 }

@@ -5,6 +5,7 @@ use std::io;
 
 use super::chars;
 use super::lexer::{Token, TokenKind, tokenize};
+use crate::namespaces::WriteScope;
 use crate::pn;
 use crate::well_known::XSD_DATETIME;
 use crate::{
@@ -45,10 +46,13 @@ pub fn to_string(document: &Document) -> Result<String> {
     // prefix minted along the way is declared.
     let mut names = document.namespaces.clone();
     let mut body = String::new();
-    for record in &document.records {
-        body.push_str("  ");
-        expression(record, &mut names, &mut body)?;
-        body.push('\n');
+    {
+        let mut top = WriteScope::of(&mut names);
+        for record in &document.records {
+            body.push_str("  ");
+            expression(record, &mut top, &mut body)?;
+            body.push('\n');
+        }
     }
     for bundle in document.merged_bundles().iter() {
         write_bundle(bundle, &names, &mut body)?;
@@ -76,7 +80,7 @@ pub fn to_string(document: &Document) -> Result<String> {
 /// As [`to_string`].
 pub fn statement(record: &Record, namespaces: &mut Namespaces) -> Result<String> {
     let mut s = String::new();
-    expression(record, namespaces, &mut s)?;
+    expression(record, &mut WriteScope::of(namespaces), &mut s)?;
     Ok(s)
 }
 
@@ -106,13 +110,18 @@ pub fn statement(record: &Record, namespaces: &mut Namespaces) -> Result<String>
 /// [`Error::Unwritable`] if the name's namespace IRI holds a character
 /// `IRI_REF` forbids. `namespaces` is then untouched.
 pub fn name(name: &QName, namespaces: &mut Namespaces) -> Result<String> {
+    name_in(name, &mut WriteScope::of(namespaces))
+}
+
+/// As [`name`], against a scope.
+fn name_in(name: &QName, names: &mut WriteScope<'_>) -> Result<String> {
     if let Some(reason) = iri_problem(name.namespace()) {
         return Err(unwritable(name, reason));
     }
     let local = escape_local(name);
-    let prefix = match namespaces.render_parts(name) {
+    let prefix = match names.render_parts(name) {
         None if !lexes_as_bare_name(&local, name.local()) => {
-            Some(namespaces.ensure_prefix(name.namespace()))
+            Some(names.ensure_prefix(name.namespace()))
         }
         other => other,
     };
@@ -181,22 +190,26 @@ fn declarations(
 }
 
 fn write_bundle(bundle: &Bundle, outer: &Namespaces, s: &mut String) -> Result<()> {
-    let mut names = bundle.namespaces.with_fallback(outer);
+    // The bundle's own table, which also takes the prefixes minted for it.
+    let mut own = bundle.namespaces.clone();
     let mut body = String::new();
-    for record in &bundle.records {
-        body.push_str("    ");
-        expression(record, &mut names, &mut body)?;
-        body.push('\n');
-    }
-    let id = name(&bundle.id, &mut names)?;
+    let id = {
+        let mut names = WriteScope::within(&mut own, outer);
+        for record in &bundle.records {
+            body.push_str("    ");
+            expression(record, &mut names, &mut body)?;
+            body.push('\n');
+        }
+        name_in(&bundle.id, &mut names)?
+    };
     let _ = writeln!(s, "  bundle {id}");
-    declarations(&names, Some(outer), "    ", s)?;
+    declarations(&own, Some(outer), "    ", s)?;
     s.push_str(&body);
     s.push_str("  endBundle\n");
     Ok(())
 }
 
-fn expression(r: &Record, names: &mut Namespaces, s: &mut String) -> Result<()> {
+fn expression(r: &Record, names: &mut WriteScope<'_>, s: &mut String) -> Result<()> {
     // The reader would reject such an attribute, so the writer does too.
     r.check_attributes()?;
     let kind = r.kind();
@@ -207,7 +220,7 @@ fn expression(r: &Record, names: &mut Namespaces, s: &mut String) -> Result<()> 
     if kind.is_element() {
         // Elements never take `-` for the identifier.
         if let Some(id) = r.id() {
-            parts.push(name(id, names)?);
+            parts.push(name_in(id, names)?);
         }
         // An element with any formal present writes all of them, so an
         // activity writes both times or neither.
@@ -222,7 +235,7 @@ fn expression(r: &Record, names: &mut Namespaces, s: &mut String) -> Result<()> 
         // or a hand-built record), so the output reads back equal under
         // `Profile::Default`.
         if let Some(id) = r.id() {
-            let _ = write!(s, "{}; ", name(id, names)?);
+            let _ = write!(s, "{}; ", name_in(id, names)?);
         }
         for &attr in kind.formals() {
             parts.push(formal(r, attr, names)?);
@@ -240,7 +253,7 @@ fn expression(r: &Record, names: &mut Namespaces, s: &mut String) -> Result<()> 
             if i > 0 {
                 s.push_str(", ");
             }
-            let _ = write!(s, "{}={}", name(n, names)?, value(v, names)?);
+            let _ = write!(s, "{}={}", name_in(n, names)?, value(v, names)?);
         }
         s.push(']');
     }
@@ -249,9 +262,9 @@ fn expression(r: &Record, names: &mut Namespaces, s: &mut String) -> Result<()> 
 }
 
 /// The formal `attr` of `record`, or `-` when it is absent.
-fn formal(record: &Record, attr: FormalAttr, names: &mut Namespaces) -> Result<String> {
+fn formal(record: &Record, attr: FormalAttr, names: &mut WriteScope<'_>) -> Result<String> {
     Ok(match record.formal(attr) {
-        Some(FormalRef::Name(q)) => name(q, names)?,
+        Some(FormalRef::Name(q)) => name_in(q, names)?,
         Some(FormalRef::Time(t)) => t.to_string(),
         None => "-".to_owned(),
     })
@@ -314,18 +327,22 @@ fn bare_int(lexical: &str, datatype: &QName) -> bool {
         && matches!(Value::integer(lexical), Value::Typed(read) if read.datatype() == datatype)
 }
 
-fn value(v: &Value, names: &mut Namespaces) -> Result<String> {
+fn value(v: &Value, names: &mut WriteScope<'_>) -> Result<String> {
     Ok(match v {
         Value::Str(s) => string(s),
         Value::LangStr(l) => format!("{}@{}", string(l.value()), l.lang()),
-        Value::QName(q) => format!("'{}'", name(q, names)?),
+        Value::QName(q) => format!("'{}'", name_in(q, names)?),
         Value::DateTime(d) => format!(
             "{} %% {}",
             string(&d.to_string()),
-            name(&XSD_DATETIME, names)?
+            name_in(&XSD_DATETIME, names)?
         ),
         Value::Typed(t) if bare_int(t.lexical(), t.datatype()) => t.lexical().to_owned(),
-        Value::Typed(t) => format!("{} %% {}", string(t.lexical()), name(t.datatype(), names)?),
+        Value::Typed(t) => format!(
+            "{} %% {}",
+            string(t.lexical()),
+            name_in(t.datatype(), names)?
+        ),
     })
 }
 

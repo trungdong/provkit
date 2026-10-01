@@ -1,4 +1,5 @@
 use super::*;
+use crate::Namespaces;
 use crate::test_util::hash;
 
 fn typed(lexical: &str, datatype: &QName) -> Value {
@@ -385,20 +386,20 @@ fn typed_in_resolves_qualified_names_and_delegates_the_rest() {
     let foo = QName::new("http://example.org/", "foo").unwrap();
     for datatype in [XSD_QNAME.clone(), PROV_QUALIFIED_NAME.clone()] {
         assert_eq!(
-            Value::typed_in(&ns, "ex:foo", datatype).unwrap(),
+            Value::typed_in(Scope::of(&ns), "ex:foo", datatype).unwrap(),
             Value::QName(foo.clone())
         );
     }
     assert_eq!(
-        Value::typed_in(&ns, "x", XSD_STRING.clone()).unwrap(),
+        Value::typed_in(Scope::of(&ns), "x", XSD_STRING.clone()).unwrap(),
         Value::Str("x".into())
     );
     assert_eq!(
-        Value::typed_in(&ns, "1", XSD_INT.clone()).unwrap(),
+        Value::typed_in(Scope::of(&ns), "1", XSD_INT.clone()).unwrap(),
         Value::from(1i32)
     );
     assert!(matches!(
-        Value::typed_in(&ns, "nope", XSD_DATETIME.clone()).unwrap(),
+        Value::typed_in(Scope::of(&ns), "nope", XSD_DATETIME.clone()).unwrap(),
         Value::Typed(t) if t.lexical() == "nope"
     ));
 }
@@ -413,7 +414,7 @@ fn typed_in_rejects_text_that_is_not_a_qualified_name() {
             for text in ["", ":foo", "_:foo"] {
                 assert!(
                     matches!(
-                        Value::typed_in(ns, text, datatype.clone()),
+                        Value::typed_in(Scope::of(ns), text, datatype.clone()),
                         Err(Error::InvalidQName(t)) if t == text
                     ),
                     "{text:?}"
@@ -425,24 +426,24 @@ fn typed_in_rejects_text_that_is_not_a_qualified_name() {
             let text = format!("ex:{local}");
             assert!(
                 matches!(
-                    Value::typed_in(&with_default, &text, datatype.clone()),
+                    Value::typed_in(Scope::of(&with_default), &text, datatype.clone()),
                     Err(Error::InvalidQName(t)) if t == text
                 ),
                 "{local:?}"
             );
         }
         assert!(matches!(
-            Value::typed_in(&with_default, "not a name", datatype.clone()),
+            Value::typed_in(Scope::of(&with_default), "not a name", datatype.clone()),
             Err(Error::InvalidQName(l)) if l == "not a name"
         ));
         // A prefix that is not a `PN_PREFIX` can never be declared.
         assert!(matches!(
-            Value::typed_in(&with_default, "1x:foo", datatype.clone()),
+            Value::typed_in(Scope::of(&with_default), "1x:foo", datatype.clone()),
             Err(Error::UndeclaredPrefix(p)) if p == "1x"
         ));
         // Without a default namespace, bare text fails on that first.
         assert!(matches!(
-            Value::typed_in(&example_names(), "not a name", datatype),
+            Value::typed_in(Scope::of(&example_names()), "not a name", datatype),
             Err(Error::NoDefaultNamespace(l)) if l == "not a name"
         ));
     }
@@ -453,11 +454,11 @@ fn a_qualified_name_value_must_resolve() {
     let ns = example_names();
     for datatype in [XSD_QNAME.clone(), PROV_QUALIFIED_NAME.clone()] {
         assert!(matches!(
-            Value::typed_in(&ns, "zz:foo", datatype.clone()),
+            Value::typed_in(Scope::of(&ns), "zz:foo", datatype.clone()),
             Err(Error::UndeclaredPrefix(p)) if p == "zz"
         ));
         assert!(matches!(
-            Value::typed_in(&ns, "foo", datatype),
+            Value::typed_in(Scope::of(&ns), "foo", datatype),
             Err(Error::NoDefaultNamespace(l)) if l == "foo"
         ));
     }
@@ -465,7 +466,7 @@ fn a_qualified_name_value_must_resolve() {
     let name = |local: &str| Value::QName(QName::new("http://example.org/", local).unwrap());
     for local in ["a=b", "a:b", "a.b.", "-a", "a(1)", "a%2Fb", "12", ""] {
         assert_eq!(
-            Value::typed_in(&ns, &format!("ex:{local}"), XSD_QNAME.clone()).unwrap(),
+            Value::typed_in(Scope::of(&ns), &format!("ex:{local}"), XSD_QNAME.clone()).unwrap(),
             name(local),
             "{local:?}"
         );
@@ -483,7 +484,7 @@ fn every_constructor_keeps_one_representation() {
         Value::typed("2011-11-16T16:05:33Z", XSD_DATETIME.clone()).unwrap(),
         Value::typed("nope", XSD_DATETIME.clone()).unwrap(),
         Value::typed("x", QName::new("http://example.org/", "dt").unwrap()).unwrap(),
-        Value::typed_in(&ns, "ex:foo", XSD_QNAME.clone()).unwrap(),
+        Value::typed_in(Scope::of(&ns), "ex:foo", XSD_QNAME.clone()).unwrap(),
     ];
     assert!(values.iter().all(has_one_representation));
 }

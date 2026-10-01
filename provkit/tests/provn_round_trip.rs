@@ -321,3 +321,33 @@ fn whatever_the_writer_accepts_reads_back_equal() {
         }
     }
 }
+
+#[test]
+fn many_bundles_under_many_prefixes_stay_linear() {
+    use std::fmt::Write as _;
+
+    const N: usize = 4_000;
+    let mut text = String::from("document\n");
+    for i in 0..N {
+        writeln!(text, "prefix p{i} <http://e.org/{i}/>").unwrap();
+    }
+    for i in 0..N {
+        writeln!(text, "bundle p0:b{i}\nendBundle").unwrap();
+    }
+    text.push_str("endDocument\n");
+
+    // Merging the document's table into every bundle made each of these
+    // steps quadratic: over a minute in a debug build. The bound is far
+    // above the linear cost and far below the quadratic one.
+    let start = std::time::Instant::now();
+    let read = provn::read(&text).unwrap();
+    let written = provn::to_string(&read).unwrap();
+    let json = json::to_string(&read).unwrap();
+    let back = json::read(&json).unwrap();
+    let elapsed = start.elapsed();
+
+    assert_eq!(read.bundles.len(), N);
+    assert_eq!(provn::read(&written).unwrap(), read);
+    assert_eq!(back, read);
+    assert!(elapsed.as_secs() < 10, "took {elapsed:?}");
+}

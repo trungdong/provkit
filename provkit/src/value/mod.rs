@@ -3,13 +3,14 @@
 use std::hash::{Hash, Hasher};
 use std::sync::LazyLock;
 
+use crate::namespaces::Scope;
 use crate::well_known::{
     PROV_QUALIFIED_NAME, XSD_BOOLEAN, XSD_BYTE, XSD_DATETIME, XSD_DECIMAL, XSD_DOUBLE, XSD_FLOAT,
     XSD_INT, XSD_INTEGER, XSD_LONG, XSD_NEGATIVE_INTEGER, XSD_NON_NEGATIVE_INTEGER,
     XSD_NON_POSITIVE_INTEGER, XSD_POSITIVE_INTEGER, XSD_QNAME, XSD_SHORT, XSD_STRING,
     XSD_UNSIGNED_BYTE, XSD_UNSIGNED_INT, XSD_UNSIGNED_LONG, XSD_UNSIGNED_SHORT,
 };
-use crate::{DateTime, Error, Namespaces, QName, Result};
+use crate::{DateTime, Error, QName, Result};
 
 /// A string with a language tag.
 ///
@@ -270,10 +271,11 @@ impl Value {
     ///
     /// # Errors
     ///
-    /// As [`Namespaces::resolve`] for a qualified-name datatype.
+    /// As [`Namespaces::resolve`](crate::Namespaces::resolve) for a
+    /// qualified-name datatype.
     // Only the readers call this, and both are feature-gated.
     #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
-    pub(crate) fn typed_in(names: &Namespaces, lexical: &str, datatype: QName) -> Result<Self> {
+    pub(crate) fn typed_in(names: Scope<'_>, lexical: &str, datatype: QName) -> Result<Self> {
         if is_qname_datatype(&datatype) {
             names.resolve(lexical).map(Value::QName)
         } else {

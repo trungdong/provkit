@@ -12,6 +12,7 @@
 
 use super::lexer::{Token, TokenKind};
 use super::{Ignored, Profile};
+use crate::namespaces::Scope;
 use crate::sink::DocumentBuilder;
 use crate::well_known::{PROV, XSD};
 use crate::{
@@ -64,8 +65,8 @@ pub(super) struct Parser<'t> {
     pos: usize,
     profile: Profile,
     document_ns: Namespaces,
-    /// Inside a bundle, its table with the document's behind it.
-    bundle_names: Option<Namespaces>,
+    /// Inside a bundle, the bundle's own table.
+    bundle_ns: Option<Namespaces>,
     /// The outermost extensibility expressions, in source order.
     pub(super) ignored: Vec<Ignored>,
 }
@@ -80,7 +81,7 @@ impl<'t> Parser<'t> {
             pos: 0,
             profile,
             document_ns: Namespaces::new(),
-            bundle_names: None,
+            bundle_ns: None,
             ignored: Vec::new(),
         }
     }
@@ -149,14 +150,18 @@ impl<'t> Parser<'t> {
         }
     }
 
-    /// The table names resolve against.
-    fn names(&self) -> &Namespaces {
-        self.bundle_names.as_ref().unwrap_or(&self.document_ns)
+    /// The scope names resolve in: the open bundle's table in front of the
+    /// document's, or the document's alone.
+    fn scope(&self) -> Scope<'_> {
+        match &self.bundle_ns {
+            Some(own) => Scope::within(own, &self.document_ns),
+            None => Scope::of(&self.document_ns),
+        }
     }
 
     /// The name in the current scope. An error is placed at the name token.
     fn resolve(&self, name: &NameParts) -> Result<QName> {
-        self.names()
+        self.scope()
             .resolve_parts(&name.prefix, &name.local)
             .map_err(|e| at(name.token, e))
     }
@@ -316,7 +321,7 @@ impl<'t> Parser<'t> {
         let id = self.identifier("a bundle identifier")?;
         let ns = self.namespace_declarations()?;
         // The bundle's own name resolves in the bundle scope (PROV-N 3.7.4).
-        self.bundle_names = Some(ns.with_fallback(&self.document_ns));
+        self.bundle_ns = Some(ns.clone());
         let name = self.resolve(&id)?;
         sink.start_bundle(name, ns).map_err(|e| at(id.token, e))?;
         while !self.is_keyword("endBundle") {
@@ -329,7 +334,7 @@ impl<'t> Parser<'t> {
             self.statement(sink)?;
         }
         self.bump();
-        self.bundle_names = None;
+        self.bundle_ns = None;
         sink.end_bundle();
         Ok(())
     }
@@ -625,7 +630,7 @@ impl<'t> Parser<'t> {
                         self.bump();
                         let datatype = self.identifier("a datatype")?;
                         let datatype = self.resolve(&datatype)?;
-                        Value::typed_in(self.names(), s, datatype)
+                        Value::typed_in(self.scope(), s, datatype)
                     }
                     _ => Ok(Value::Str(s.clone())),
                 }
@@ -636,7 +641,7 @@ impl<'t> Parser<'t> {
             }
             TokenKind::QNameLiteral { prefix, local } => {
                 self.bump();
-                self.names().resolve_parts(prefix, local).map(Value::QName)
+                self.scope().resolve_parts(prefix, local).map(Value::QName)
             }
             _ => return Err(self.expected("a literal")),
         };
