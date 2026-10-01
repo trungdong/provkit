@@ -718,6 +718,41 @@ fn only_grammar_whitespace_is_skipped_when_sniffing() {
 }
 
 #[test]
+fn compare_names_standard_input_as_errors_do() {
+    let s = std::fs::read_to_string(corpus("json/scruffy-generation1-S.json")).unwrap();
+    let m = std::fs::read_to_string(corpus("json/scruffy-generation1-M.json")).unwrap();
+    // The heading of a one-sided record.
+    provkit()
+        .args(["compare"])
+        .arg(corpus("json/scruffy-generation1-S.json"))
+        .arg("-")
+        .write_stdin(m)
+        .assert()
+        .code(1)
+        .stdout("only in <stdin>:\n  entity(ex:e1)\n  activity(ex:a1)\n")
+        .stderr("");
+    // The context of a `--unified` error, on either side.
+    for args in [["-", "json/activity1.json"], ["json/activity1.json", "-"]] {
+        let mut command = provkit();
+        command.args(["compare", "--unified"]);
+        for arg in args {
+            if arg == "-" {
+                command.arg(arg);
+            } else {
+                command.arg(corpus(arg));
+            }
+        }
+        command
+            .write_stdin(s.clone())
+            .assert()
+            .code(2)
+            .stderr(predicate::str::starts_with(
+                "provkit: <stdin>: cannot unify",
+            ));
+    }
+}
+
+#[test]
 fn compare_unified_reports_a_conflict_in_the_second_file() {
     provkit()
         .args(["compare", "--unified"])
@@ -906,7 +941,7 @@ fn ignored_extensibility_expressions_warn_once_on_standard_error() {
         .assert()
         .success()
         .stderr(predicate::str::starts_with(
-            "provkit: warning: standard input: ignored 2",
+            "provkit: warning: <stdin>: ignored 2",
         ));
     provkit()
         .args(["compare"])

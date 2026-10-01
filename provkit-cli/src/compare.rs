@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use clap::Args;
 use provkit::{Document, Error, FormalRef, Namespaces, QName, Record, provn};
 
-use crate::{Hint, read_document, write_stdout};
+use crate::{Hint, read_document, shown, write_stdout};
 
 /// Arguments of `provkit compare`.
 #[derive(Args)]
@@ -32,8 +32,8 @@ pub fn run(args: &CompareArgs) -> Result<ExitCode> {
     let mut a = read_document(&args.a, None, Hint::None)?;
     let mut b = read_document(&args.b, None, Hint::None)?;
     if args.unified {
-        a = a.unified().with_context(|| args.a.display().to_string())?;
-        b = b.unified().with_context(|| args.b.display().to_string())?;
+        a = a.unified().with_context(|| shown(&args.a))?;
+        b = b.unified().with_context(|| shown(&args.b))?;
     }
     if a == b {
         return Ok(ExitCode::SUCCESS);
@@ -86,7 +86,7 @@ fn report_side(out: &mut String, name: &Path, this: &Document, other: &Document)
         return Ok(());
     }
 
-    writeln!(out, "only in {}:", name.display())?;
+    writeln!(out, "only in {}:", shown(name))?;
     let mut table = this.namespaces.clone();
     let declared = table.iter().count();
     for record in top {

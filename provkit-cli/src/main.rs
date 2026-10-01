@@ -151,12 +151,7 @@ fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Docume
         Format::Provn => {
             let report = provn::read_report(&text, provn::Profile::Default)
                 .map_err(|e| located(&label, e))?;
-            let source = if is_stdin {
-                "standard input".to_owned()
-            } else {
-                path.display().to_string()
-            };
-            warn_ignored(&source, &report.ignored);
+            warn_ignored(&label, &report.ignored);
             report.document
         }
     };
