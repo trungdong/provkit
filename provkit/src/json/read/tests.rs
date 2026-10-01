@@ -733,27 +733,26 @@ fn an_ill_formed_language_tag_is_an_error() {
 #[test]
 fn json_errors_name_the_problem() {
     let message = |s: &str| json::read(s).unwrap_err().to_string();
-    let ent = |body: &str| format!(r#"{{{PFX}, "entity": {{"ex:e": {{{body}}}}}}}"#);
     let cases = [
         (
-            ent(r#""ex:a": {"$": 1}"#),
+            entity(r#""ex:a": {"$": 1}"#),
             "invalid type: integer `1`, expected a string as the `$` of a value object",
         ),
         (
-            ent(r#""ex:a": {"$": "1", "type": 2}"#),
+            entity(r#""ex:a": {"$": "1", "type": 2}"#),
             "expected a string as the `type` of a value object",
         ),
         (
-            ent(r#""ex:a": {"$": "1", "datatype": "xsd:int"}"#),
+            entity(r#""ex:a": {"$": "1", "datatype": "xsd:int"}"#),
             "unknown key `datatype` in a value object, expected `$`, `type` or `lang`",
         ),
         (
-            ent(r#""ex:a": {"type": "xsd:int"}"#),
+            entity(r#""ex:a": {"type": "xsd:int"}"#),
             "a value object needs a `$` key",
         ),
-        (ent(r#""ex:a": null"#), "null is not an attribute value"),
+        (entity(r#""ex:a": null"#), "null is not an attribute value"),
         (
-            ent(r#""ex:a": ["x", null]"#),
+            entity(r#""ex:a": ["x", null]"#),
             "null is not an attribute value",
         ),
         (
@@ -833,14 +832,18 @@ fn bundles_scope_their_prefixes() {
 #[test]
 fn strict_rules_and_shapes() {
     let read = |s: &str| json::read(s);
-    let ent = |body: &str| format!(r#"{{{PFX}, "entity": {{"ex:e": {{{body}}}}}}}"#);
-    let (_, _, error) = in_record(read(&ent(r#""ex:a": {"$": "1", "type": "zz:t"}"#)).unwrap_err());
-    assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
     let (_, _, error) =
-        in_record(read(&ent(r#""ex:a": {"$": "1", "type": "zz:t", "lang": "en"}"#)).unwrap_err());
+        in_record(read(&entity(r#""ex:a": {"$": "1", "type": "zz:t"}"#)).unwrap_err());
+    assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
+    let (_, _, error) = in_record(
+        read(&entity(
+            r#""ex:a": {"$": "1", "type": "zz:t", "lang": "en"}"#,
+        ))
+        .unwrap_err(),
+    );
     assert!(matches!(error, Error::UndeclaredPrefix(p) if p == "zz"));
     assert!(matches!(
-        read(&ent(r#""ex:a": [["x"]]"#)),
+        read(&entity(r#""ex:a": [["x"]]"#)),
         Err(Error::JsonStructure { .. })
     ));
     let (_, _, error) = in_record(

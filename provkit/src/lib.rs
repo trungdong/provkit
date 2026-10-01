@@ -46,13 +46,20 @@
 //! - `json` (default): the [`json`] module, with `serde` and `serde_json`.
 //! - `provn` (default): the [`provn`] module.
 
+// Several crate-private helpers serve one format only. With either format
+// switched off they have no caller, which is not dead code in the default
+// build, where the lint stays on.
+#![cfg_attr(
+    not(all(feature = "json", feature = "provn")),
+    allow(dead_code, unused_imports)
+)]
+
 /// Compiles the examples in `README.md` as doc tests.
 #[cfg(all(doctest, feature = "json", feature = "provn"))]
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
 mod attributes;
-#[cfg(any(feature = "json", feature = "provn"))]
 mod builder;
 mod datetime;
 mod document;
@@ -85,7 +92,6 @@ pub use record::{
 pub use value::{LangStr, TypedLiteral, Value};
 
 /// `text` without one leading byte-order mark.
-#[cfg(any(feature = "json", feature = "provn"))]
 pub(crate) fn strip_bom(text: &str) -> &str {
     text.strip_prefix('\u{FEFF}').unwrap_or(text)
 }

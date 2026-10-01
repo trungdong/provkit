@@ -251,8 +251,6 @@ impl Value {
     /// `xsd:long` or `xsd:integer` by range, keeping the text. The range
     /// follows the digits alone, so leading zeros do not change the type and
     /// a number beyond `i64` is an `xsd:integer`.
-    // The readers and the PROV-N writer call this, all feature-gated.
-    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
     pub(crate) fn integer(lexical: &str) -> Value {
         let datatype = match lexical.parse::<i64>() {
             Ok(n) if i32::try_from(n).is_ok() => XSD_INT.clone(),
@@ -271,8 +269,6 @@ impl Value {
     ///
     /// As [`Namespaces::resolve`](crate::Namespaces::resolve) for a
     /// qualified-name datatype.
-    // Only the readers call this, and both are feature-gated.
-    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
     pub(crate) fn typed_in(names: Scope<'_>, lexical: &str, datatype: QName) -> Result<Self> {
         if is_qname_datatype(&datatype) {
             names.resolve(lexical).map(Value::QName)

@@ -8,6 +8,10 @@ use indexmap::IndexMap;
 use crate::well_known::{PROV, XSD};
 use crate::{Error, QName, Result, pn};
 
+/// The reserved `prov` prefix.
+pub(crate) const PROV_PREFIX: &str = "prov";
+const XSD_PREFIX: &str = "xsd";
+
 static PROV_IRI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from(PROV));
 static XSD_IRI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from(XSD));
 
@@ -120,6 +124,11 @@ impl Namespaces {
         self.prefixes.iter().map(|(p, iri)| (&**p, &**iri))
     }
 
+    /// Whether `prefix` at `iri` restates a predeclared binding.
+    pub(crate) fn is_predeclared(prefix: &str, iri: &str) -> bool {
+        reserved(prefix) == Some(iri)
+    }
+
     /// The IRI bound to `prefix`, including the reserved `prov` and `xsd`.
     pub fn lookup(&self, prefix: &str) -> Option<&str> {
         match reserved(prefix) {
@@ -150,17 +159,6 @@ impl Namespaces {
         Scope::of(self).resolve(text)
     }
 
-    /// Resolve a name already split into `prefix` and `local`; an empty
-    /// prefix means a bare name. A colon in `local` stays in the local part.
-    ///
-    /// # Errors
-    ///
-    /// As [`resolve`](Self::resolve).
-    #[cfg(test)]
-    pub(crate) fn resolve_parts(&self, prefix: &str, local: &str) -> Result<QName> {
-        Scope::of(self).resolve_parts(prefix, local)
-    }
-
     /// The prefix bound to `namespace`, if any (`prov` and `xsd` included).
     /// When several prefixes share the IRI, the first declared answers. The
     /// default namespace has no prefix and never answers.
@@ -171,20 +169,13 @@ impl Namespaces {
     /// Every prefix bound to `namespace`, in declaration order (`prov` and
     /// `xsd` included).
     fn prefixes_for<'a>(&'a self, namespace: &str) -> impl Iterator<Item = &'a str> {
-        let reserved = if namespace == PROV {
-            Some("prov")
-        } else if namespace == XSD {
-            Some("xsd")
-        } else {
-            None
-        };
         let bound = self
             .by_iri
             .get(namespace)
             .into_iter()
             .flatten()
             .map(|p| &**p);
-        reserved.into_iter().chain(bound)
+        reserved_prefix_for(namespace).into_iter().chain(bound)
     }
 
     /// The prefix for `namespace`, minting `ns1`, `ns2`, ... when none exists.
@@ -233,12 +224,6 @@ impl Namespaces {
         table.absorb(parent);
         table
     }
-
-    /// As [`WriteScope::render_parts`], with nothing behind this table.
-    #[cfg(test)]
-    pub(crate) fn render_parts(&mut self, name: &QName) -> Option<String> {
-        WriteScope::of(self).render_parts(name)
-    }
 }
 
 /// A table read through to a parent table, without merging the two. A
@@ -258,8 +243,6 @@ impl<'a> Scope<'a> {
     }
 
     /// `own` in front of `parent`.
-    // Only the readers call this, and both are feature-gated.
-    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
     pub(crate) fn within(own: &'a Namespaces, parent: &'a Namespaces) -> Self {
         Scope {
             own,
@@ -328,8 +311,6 @@ impl<'a> WriteScope<'a> {
     }
 
     /// `own` in front of `parent`.
-    // Only the writers call this, and both are feature-gated.
-    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
     pub(crate) fn within(own: &'a mut Namespaces, parent: &'a Namespaces) -> Self {
         WriteScope {
             own,
@@ -359,8 +340,6 @@ impl<'a> WriteScope<'a> {
     /// A declared prefix wins, then the default namespace for a bare name,
     /// then a freshly minted `nsN` prefix, which is added to `own`. The local
     /// part is always `name.local()`, so a writer can escape it on its own.
-    // Only the writers call this, and both are feature-gated.
-    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
     pub(crate) fn render_parts(&mut self, name: &QName) -> Option<String> {
         if let Some(prefix) = self.prefix_for(name.namespace()) {
             return Some(prefix.to_owned());
@@ -402,17 +381,27 @@ fn with_text(error: Error, text: &str) -> Error {
     }
 }
 
+/// The prefixes PROV-N predeclares (section 3.7.4), with their IRIs.
+fn reserved_table() -> [(&'static str, &'static Arc<str>); 2] {
+    [(PROV_PREFIX, &PROV_IRI), (XSD_PREFIX, &XSD_IRI)]
+}
+
 /// The shared IRI of a reserved prefix.
 fn reserved_shared(prefix: &str) -> Option<&'static Arc<str>> {
-    match prefix {
-        "prov" => Some(&PROV_IRI),
-        "xsd" => Some(&XSD_IRI),
-        _ => None,
-    }
+    reserved_table()
+        .into_iter()
+        .find_map(|(p, iri)| (p == prefix).then_some(iri))
 }
 
 fn reserved(prefix: &str) -> Option<&'static str> {
     reserved_shared(prefix).map(|iri| &**iri)
+}
+
+/// The reserved prefix bound to `namespace`, if it is one of the two.
+fn reserved_prefix_for(namespace: &str) -> Option<&'static str> {
+    reserved_table()
+        .into_iter()
+        .find_map(|(p, iri)| (&**iri == namespace).then_some(p))
 }
 
 #[cfg(test)]

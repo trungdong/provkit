@@ -228,8 +228,9 @@ impl JsonValue {
 /// `f64` (or, when a dependant enables the `arbitrary_precision` feature of
 /// `serde_json`, as a private map), each of which loses the spelling.
 ///
-/// The raw-value capture runs under `serde_json`'s recursion limit, so deeply
-/// nested input is refused before [`from_raw`] sees it.
+/// The capture copies the value's text without recursing into it. [`from_raw`]
+/// refuses an array inside an array before parsing it, so the depth of the
+/// input never becomes depth of recursion.
 impl<'de> Deserialize<'de> for JsonValue {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         from_raw(<&RawValue>::deserialize(d)?.get(), Nesting::Allowed)

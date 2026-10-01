@@ -120,14 +120,10 @@ fn formal_tables_match_the_spec() {
     for (kind, names, arities) in table {
         let got: Vec<_> = kind.formals().iter().map(|f| f.local_name()).collect();
         assert_eq!(got, names, "{kind:?}");
-        #[cfg(feature = "provn")]
         assert_eq!(kind.arities(), arities, "{kind:?}");
-        #[cfg(not(feature = "provn"))]
-        let _ = arities;
     }
 }
 
-#[cfg(feature = "provn")]
 #[test]
 fn the_largest_arity_is_the_number_of_formals() {
     for &kind in Kind::ALL {

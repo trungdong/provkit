@@ -62,11 +62,11 @@ fn a_local_part_provn_cannot_write_does_not_resolve() {
         );
     }
     assert!(matches!(
-        ns.resolve_parts("ex", "a\tb"),
+        Scope::of(&ns).resolve_parts("ex", "a\tb"),
         Err(Error::InvalidQName(t)) if t == "ex:a\tb"
     ));
     assert!(matches!(
-        ns.resolve_parts("", "a\tb"),
+        Scope::of(&ns).resolve_parts("", "a\tb"),
         Err(Error::InvalidQName(t)) if t == "a\tb"
     ));
     assert_eq!(
@@ -146,28 +146,37 @@ fn render_parts_split_the_prefix_from_the_local_part() {
     let q = |iri: &str, local: &str| QName::new(iri, local).unwrap();
     // The prefix alone comes back; `None` means bare.
     assert_eq!(
-        ns.render_parts(&q("http://example.org/", "a")),
+        WriteScope::of(&mut ns).render_parts(&q("http://example.org/", "a")),
         Some("ex".to_owned())
     );
-    assert_eq!(ns.render_parts(&q("http://default.org/", "b")), None);
-    assert_eq!(ns.render_parts(&q(PROV, "type")), Some("prov".to_owned()));
     assert_eq!(
-        ns.render_parts(&q("http://new/", "c")),
+        WriteScope::of(&mut ns).render_parts(&q("http://default.org/", "b")),
+        None
+    );
+    assert_eq!(
+        WriteScope::of(&mut ns).render_parts(&q(PROV, "type")),
+        Some("prov".to_owned())
+    );
+    assert_eq!(
+        WriteScope::of(&mut ns).render_parts(&q("http://new/", "c")),
         Some("ns1".to_owned())
     );
     assert_eq!(ns.iter().count(), 2);
     // A name in the default namespace never mints a prefix.
     let mut plain = Namespaces::new();
     plain.set_default("http://default.org/");
-    assert_eq!(plain.render_parts(&q("http://default.org/", "b")), None);
+    assert_eq!(
+        WriteScope::of(&mut plain).render_parts(&q("http://default.org/", "b")),
+        None
+    );
     assert_eq!(plain.iter().count(), 0);
     // A colon in the local part cannot be written bare.
     assert_eq!(
-        plain.render_parts(&q("http://default.org/", "x:y")),
+        WriteScope::of(&mut plain).render_parts(&q("http://default.org/", "x:y")),
         Some("ns1".to_owned())
     );
     assert_eq!(
-        plain.render_parts(&q("http://default.org/", "")),
+        WriteScope::of(&mut plain).render_parts(&q("http://default.org/", "")),
         Some("ns1".to_owned())
     );
 }
@@ -198,23 +207,23 @@ fn resolve_parts_keeps_a_colon_in_the_local_part() {
     bundle.declare("a", "http://bundle.org/").unwrap();
     let merged = bundle.with_fallback(&doc);
     assert_eq!(
-        merged.resolve_parts("", "a:b").unwrap(),
+        Scope::of(&merged).resolve_parts("", "a:b").unwrap(),
         QName::new("http://default.org/", "a:b").unwrap()
     );
     assert_eq!(
-        merged.resolve_parts("a", "b").unwrap(),
+        Scope::of(&merged).resolve_parts("a", "b").unwrap(),
         QName::new("http://bundle.org/", "b").unwrap()
     );
     assert!(
-        matches!(merged.resolve_parts("zz", "b"), Err(Error::UndeclaredPrefix(p)) if p == "zz")
+        matches!(Scope::of(&merged).resolve_parts("zz", "b"), Err(Error::UndeclaredPrefix(p)) if p == "zz")
     );
     assert!(matches!(
-        merged.resolve_parts("_", "b"),
+        Scope::of(&merged).resolve_parts("_", "b"),
         Err(Error::InvalidQName(_))
     ));
     let bare = Namespaces::new();
     assert!(matches!(
-        bare.resolve_parts("", "b"),
+        Scope::of(&bare).resolve_parts("", "b"),
         Err(Error::NoDefaultNamespace(l)) if l == "b"
     ));
 }
@@ -438,7 +447,7 @@ fn a_write_scope_renders_as_the_merged_table_does() {
         let name = QName::new(namespace, local).unwrap();
         assert_eq!(
             scope.render_parts(&name),
-            merged.render_parts(&name),
+            WriteScope::of(&mut merged).render_parts(&name),
             "{namespace}{local}"
         );
     }
@@ -474,7 +483,7 @@ fn a_write_scope_with_its_own_default_renders_as_the_merged_table_does() {
         let name = QName::new(namespace, local).unwrap();
         assert_eq!(
             scope.render_parts(&name),
-            merged.render_parts(&name),
+            WriteScope::of(&mut merged).render_parts(&name),
             "{namespace}{local}"
         );
     }

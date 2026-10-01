@@ -10,15 +10,13 @@
 //! `extension` module and recorded in [`Parser::ignored`] instead of the
 //! document.
 
-use std::collections::HashSet;
+mod declarations;
 
 use super::lexer::{Token, TokenKind};
 use super::{Ignored, Profile, Relaxation};
 use crate::builder::DocumentBuilder;
 use crate::error::clip;
-use crate::namespaces::Scope;
-use crate::pn;
-use crate::well_known::{PROV, XSD};
+use crate::namespaces::{PROV_PREFIX, Scope};
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
     Result, Value,
@@ -30,7 +28,7 @@ use crate::{
 fn classify(prefix: &str, local: &str, profile: Profile) -> Option<Kind> {
     let kind = Kind::from_name(local)?;
     let accepted = if kind == Kind::Mention {
-        prefix == "prov" || (prefix.is_empty() && profile.allows(Relaxation::BareMentionOf))
+        prefix == PROV_PREFIX || (prefix.is_empty() && profile.allows(Relaxation::BareMentionOf))
     } else {
         prefix.is_empty()
     };
@@ -248,87 +246,6 @@ impl<'t> Parser<'t> {
         Ok(())
     }
 
-    // namespaceDeclarations ::= (defaultNamespaceDeclaration | namespaceDeclaration)*
-
-    fn namespace_declarations(&mut self) -> Result<Namespaces> {
-        let mut ns = Namespaces::new();
-        let mut seen: HashSet<String> = HashSet::new();
-        let mut has_default = false;
-        loop {
-            if self.is_keyword("default") {
-                if has_default {
-                    return Err(Self::error_at(
-                        self.peek(),
-                        "expected a namespace declaration or a statement, found a second \
-                         'default' in one scope"
-                            .to_owned(),
-                    ));
-                }
-                // `default` comes before every `prefix`: production [45].
-                if !seen.is_empty() && !self.profile.allows(Relaxation::DefaultAfterPrefix) {
-                    return Err(Self::error_at(
-                        self.peek(),
-                        "expected 'default' before every 'prefix' under the strict profile, \
-                         found 'default' after a prefix"
-                            .to_owned(),
-                    ));
-                }
-                has_default = true;
-                self.bump();
-                let iri = self.iri()?;
-                ns.set_default(&iri);
-            } else if self.is_keyword("prefix") {
-                self.bump();
-                let name = self.prefix_name()?;
-                if seen.contains(&name.local) {
-                    return Err(Self::error_at(
-                        name.token,
-                        format!(
-                            "expected a new prefix, found '{}' declared twice in one scope",
-                            clip(&name.local)
-                        ),
-                    ));
-                }
-                let iri = self.iri()?;
-                // `prov` and `xsd` are predeclared: section 3.7.4.
-                let predeclared =
-                    (name.local == "prov" && iri == PROV) || (name.local == "xsd" && iri == XSD);
-                if predeclared && !self.profile.allows(Relaxation::PredeclaredPrefix) {
-                    return Err(Self::error_at(
-                        name.token,
-                        format!(
-                            "expected a prefix other than the predeclared '{}' under the \
-                             strict profile, found 'prefix {} <{iri}>'",
-                            clip(&name.local),
-                            clip(&name.local)
-                        ),
-                    ));
-                }
-                ns.declare(&name.local, &iri)
-                    .map_err(|e| at(name.token, e))?;
-                seen.insert(name.local);
-            } else {
-                return Ok(ns);
-            }
-        }
-    }
-
-    /// The prefix in a `prefix` declaration. Production [46] takes a
-    /// `PN_PREFIX`, which has no escapes, so the text as written is tested,
-    /// not the unescaped name.
-    fn prefix_name(&mut self) -> Result<NameParts<'t>> {
-        let name = self.name("a prefix")?;
-        let written = self.text_of(name.token);
-        if pn::is_pn_prefix(written) {
-            Ok(name)
-        } else {
-            Err(Self::error_at(
-                name.token,
-                format!("expected a prefix, found '{}'", clip(written)),
-            ))
-        }
-    }
-
     // bundle ::= "bundle" identifier namespaceDeclarations? expression* "endBundle"
 
     fn bundle(&mut self, builder: &mut DocumentBuilder) -> Result<()> {
@@ -365,7 +282,9 @@ impl<'t> Parser<'t> {
         let is_extension = match &self.peek().kind {
             TokenKind::Name { prefix, .. } if prefix.is_empty() => false,
             TokenKind::Name { prefix, local } => {
-                !(prefix == "prov" && local == "mentionOf" && self.mention_shape_follows())
+                !(prefix == PROV_PREFIX
+                    && local == Kind::Mention.name()
+                    && self.mention_shape_follows())
             }
             _ => false,
         };
@@ -443,7 +362,7 @@ impl<'t> Parser<'t> {
             return Err(self.expected("a statement"));
         };
         let kind = classify(prefix, local, self.profile).ok_or_else(|| {
-            let message = if prefix.is_empty() && local == "mentionOf" {
+            let message = if prefix.is_empty() && local == Kind::Mention.name() {
                 "expected 'prov:mentionOf' under the strict profile, found 'mentionOf'".to_owned()
             } else {
                 format!(
