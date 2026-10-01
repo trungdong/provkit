@@ -942,3 +942,112 @@ fn a_formal_spelled_with_another_split_is_the_formal() {
     assert_eq!(g.entity, Some(ex("e")));
     assert!(g.attributes.is_empty());
 }
+
+#[test]
+fn a_formal_given_under_two_spellings_is_an_invalid_record() {
+    // A key that spells an own formal is the formal, never an attribute, so
+    // the only way to meet the check is to give one formal twice.
+    let text = r#"{"prefix": {"ex": "http://example.org/", "w3": "http://www.w3.org/ns/"},
+        "wasGeneratedBy": {"_:g": {"prov:activity": "ex:a", "w3:prov#activity": "ex:b"}}}"#;
+    let (section, _, error) = in_record(json::read(text).unwrap_err());
+    assert_eq!(section, "wasGeneratedBy");
+    assert!(
+        matches!(
+            error,
+            Error::InvalidRecord {
+                kind: Kind::Generation,
+                ..
+            }
+        ),
+        "{error:?}"
+    );
+}
+
+#[test]
+fn a_prefix_that_is_not_a_pn_prefix_is_invalid() {
+    let table = |prefix: &str| format!(r#"{{"prefix": {{"{prefix}": "http://example.org/"}}}}"#);
+    for bad in ["_", "a/b", "1a", "a.", "a b", "-a"] {
+        assert!(
+            matches!(json::read(&table(bad)), Err(Error::InvalidPrefix(p)) if p == bad),
+            "{bad}"
+        );
+    }
+    let in_bundle = r#"{"bundle": {"ex:b": {"prefix": {"1a": "http://example.org/"}}}}"#;
+    assert!(matches!(
+        json::read(in_bundle),
+        Err(Error::InvalidPrefix(p)) if p == "1a"
+    ));
+    assert!(json::read(&table("a-b")).is_ok());
+}
+
+#[test]
+fn an_empty_array_reads_as_nothing() {
+    // No value under an attribute key.
+    let d = doc(&entity(r#""ex:a": [], "ex:b": "kept""#));
+    assert!(values(&d, "a").is_empty());
+    assert_eq!(values(&d, "b"), [Value::Str("kept".into())]);
+    assert_eq!(d.records[0].attributes().len(), 1);
+    // No record under an identifier.
+    let d = doc(&format!(r#"{{{PFX}, "entity": {{"ex:e": []}}}}"#));
+    assert!(d.records.is_empty());
+}
+
+#[test]
+fn a_formal_written_as_a_one_element_array_is_an_error() {
+    for body in [
+        r#""prov:activity": ["ex:a"]"#,
+        r#""prov:time": ["2011-11-16T16:05:33Z"]"#,
+    ] {
+        let text = format!(
+            r#"{{{PFX}, "wasGeneratedBy": {{"ex:g": {{"prov:entity": "ex:e", {body}}}}}}}"#
+        );
+        let (_, _, error) = in_record(json::read(&text).unwrap_err());
+        assert!(matches!(error, Error::JsonStructure { .. }), "{body}");
+    }
+}
+
+#[test]
+fn a_null_attribute_value_is_an_error() {
+    for body in [r#""ex:a": null"#, r#""ex:a": ["x", null]"#] {
+        match json::read(&entity(body)) {
+            Err(Error::JsonStructure { message }) => {
+                assert!(message.contains("null"), "{body}\n{message}");
+            }
+            other => panic!("{body}: expected JsonStructure, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_value_object_with_an_unknown_key_or_a_non_string_dollar_is_an_error() {
+    for body in [
+        r#""ex:a": {"$": "1", "datatype": "xsd:int"}"#,
+        r#""ex:a": {"$": "1", "type": "xsd:int", "extra": 1}"#,
+        r#""ex:a": {"$": 1}"#,
+        r#""ex:a": {"$": true, "type": "xsd:boolean"}"#,
+        r#""ex:a": {"$": null}"#,
+    ] {
+        assert!(
+            matches!(json::read(&entity(body)), Err(Error::JsonStructure { .. })),
+            "{body}"
+        );
+    }
+}
+
+#[test]
+fn a_member_fan_out_gives_every_record_the_identifier_and_the_attributes() {
+    let d = doc(&format!(
+        r#"{{{PFX}, "hadMember": {{"ex:m": {{"prov:collection": "ex:c",
+            "prov:entity": ["ex:a", "ex:b", "ex:c2"], "ex:tag": "t"}}}}}}"#
+    ));
+    assert_eq!(d.records.len(), 3);
+    for record in &d.records {
+        assert_eq!(record.id(), Some(&ex("m")));
+        assert_eq!(values_of(record, "tag"), [Value::Str("t".into())]);
+    }
+}
+
+/// The values under `ex:<local>` of `record`.
+fn values_of(record: &Record, local: &str) -> Vec<Value> {
+    record.attributes().get(&ex(local)).cloned().collect()
+}

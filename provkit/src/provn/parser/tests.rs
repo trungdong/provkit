@@ -725,6 +725,34 @@ fn an_ill_formed_time_argument_is_an_error() {
 }
 
 #[test]
+fn a_year_beyond_i64_is_an_error() {
+    // A time argument must parse as a `dateTime`, and `DateTime` holds the
+    // year as an `i64`.
+    let beyond = "9223372036854775808-01-01T00:00:00";
+    let body = format!("wasGeneratedBy(ex:e, ex:a, {beyond})");
+    let (_, inner) = located(err(&body, Profile::Default));
+    assert!(
+        matches!(&inner, Error::InvalidLiteral { datatype, .. } if datatype == "xsd:dateTime"),
+        "{inner:?}"
+    );
+    // The largest year reads.
+    doc(
+        "wasGeneratedBy(ex:e, ex:a, 9223372036854775807-01-01T00:00:00)",
+        Profile::Default,
+    );
+    // A typed literal keeps the text as written.
+    let d = doc(
+        &format!(r#"entity(ex:e, [ex:t="{beyond}" %% xsd:dateTime])"#),
+        Profile::Default,
+    );
+    assert!(
+        matches!(values(&d)[0], Value::Typed(t) if t.lexical() == beyond),
+        "{:?}",
+        values(&d)
+    );
+}
+
+#[test]
 fn literals_compare_by_value_and_keep_their_text() {
     let body = r#"entity(ex:e, [ex:i=005, ex:j="+5" %% xsd:int, ex:d="1.0E0" %% xsd:double, ex:b="1" %% xsd:boolean, ex:c="1.50" %% xsd:decimal])"#;
     let other = r#"entity(ex:e, [ex:i=5, ex:j=" 5 " %% xsd:int, ex:d="1" %% xsd:double, ex:b="true" %% xsd:boolean, ex:c="1.5" %% xsd:decimal])"#;

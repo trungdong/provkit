@@ -114,3 +114,18 @@ fn unification_over_the_corpus() {
     }
     report.finish(JSON_CORPUS_SIZE);
 }
+
+/// The text of the first Rust code block in `markdown`.
+fn first_rust_block(markdown: &str) -> &str {
+    let (_, after) = markdown.split_once("```rust\n").expect("a Rust code block");
+    after.split_once("```").expect("a closing fence").0
+}
+
+#[test]
+fn both_readmes_carry_the_same_example() {
+    // The root README is not in the packaged crate, so this test lives in a
+    // file the package leaves out.
+    let root = include_str!("../../README.md");
+    let crate_readme = include_str!("../README.md");
+    assert_eq!(first_rust_block(root), first_rust_block(crate_readme));
+}
