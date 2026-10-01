@@ -14,12 +14,17 @@ use crate::{Document, Error, Result, strip_bom};
 ///
 /// # Errors
 ///
-/// - [`Error::Json`] for text that is not JSON, wherever it is.
+/// - [`Error::Json`] for text the JSON parser rejects.
 /// - [`Error::JsonStructure`] for JSON that is not a PROV document. The
-///   message ends with the line and column of the offending token where
-///   the reader knows them.
+///   message ends with the line and column of the offending token. For a
+///   key the reader refuses (an unknown section, a repeated `prefix` or
+///   `bundle`, a `bundle` inside a bundle) the position is the end of that
+///   key's value. An attribute value the reader cannot decode is a
+///   structure error, a string with a `\u` escape that names a lone
+///   surrogate included.
 /// - [`Error::InRecord`] wrapping the error for an attribute value, name,
-///   literal or record PROV does not allow, and naming the record.
+///   literal or record PROV does not allow, and naming the section and the
+///   record's key.
 /// - [`Error::InvalidPrefix`] and [`Error::ReservedPrefix`] for a `prefix`
 ///   entry that PROV-N could not write, returned as they are.
 pub fn read(text: &str) -> Result<Document> {
