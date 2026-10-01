@@ -18,16 +18,19 @@ use crate::{Document, Error, Result, strip_bom};
 /// - [`Error::JsonStructure`] for JSON that is not a PROV document. An
 ///   error found while reading the JSON ends with the line and column of
 ///   the offending token. For a key the reader refuses (an unknown section,
-///   a repeated `prefix` or `bundle`, a `bundle` inside a bundle) the
+///   a key given twice in one object, a `bundle` inside a bundle) the
 ///   position is just past that key's value. An attribute value the reader
 ///   cannot decode is such an error, a string with a `\u` escape that names
 ///   a lone surrogate included. An error found while building a record (a
 ///   formal of the wrong form, a blank identifier on an element or bundle)
 ///   carries no position.
 /// - [`Error::InRecord`] wrapping an error inside a record: a bad attribute
-///   value, a formal of the wrong form, a blank identifier, or a name or
-///   literal PROV does not allow. It names the section and the record's
-///   key, which locates an error that carries no position.
+///   value, a repeated attribute or value-object key, a formal of the wrong
+///   form, a blank identifier, or a name or literal PROV does not allow. It
+///   names the section and the record's key, which locates an error that
+///   carries no position.
+/// - [`Error::DuplicateBundle`], inside [`Error::InRecord`], for two bundles
+///   with one identifier, a bundle key given twice included.
 /// - [`Error::InvalidPrefix`] and [`Error::ReservedPrefix`] for a `prefix`
 ///   entry that PROV-N could not write, returned as they are.
 pub fn read(text: &str) -> Result<Document> {

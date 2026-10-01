@@ -128,11 +128,14 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
   - A PROV-JSON number is typed from its text and keeps it: an integer of
     any size by range, any other number as `xsd:double`. An attribute value
     reads the same whatever features of `serde_json` a dependant enables.
+  - A key given twice in one PROV-JSON object is an error, at every level
+    from the namespace table to the members of a value object. A bundle key
+    given twice is `Error::DuplicateBundle`.
   - `json::read` returns `Error::Json` for text the JSON parser rejects, and
     `Error::JsonStructure` for JSON that is not a PROV document. An error
     found while reading the JSON carries the line and column of the
     offending token. For a key the reader refuses (an unknown section, a
-    repeated `prefix` or `bundle`, a `bundle` inside a bundle) the position
+    key given twice in one object, a `bundle` inside a bundle) the position
     is just past that key's value. An attribute value the reader cannot
     decode is such an error, a string with a `\u` escape that names a lone
     surrogate included. An error found while building a record (a formal of

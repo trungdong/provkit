@@ -325,18 +325,6 @@ fn any_uri_stays_a_typed_literal() {
 }
 
 #[test]
-fn duplicated_keys_keep_the_last() {
-    let d = doc(&format!(
-        r#"{{{PFX}, "entity": {{"ex:e": {{}}, "ex:e": {{"ex:a": "second"}}}}}}"#
-    ));
-    assert_eq!(d.records.len(), 1);
-    let Record::Entity(e) = &d.records[0] else {
-        panic!()
-    };
-    assert_eq!(e.attributes.len(), 1);
-}
-
-#[test]
 fn formals_blank_ids_and_fan_out() {
     let d = doc(&format!(
         r#"{{{PFX},
@@ -911,12 +899,6 @@ fn strict_rules_and_shapes() {
 
 #[test]
 fn repeated_keys_in_a_document_or_bundle() {
-    // A repeated section keeps the last, as any repeated JSON key does.
-    let d = doc(&format!(
-        r#"{{{PFX}, "entity": {{"ex:a": {{}}}}, "entity": {{"ex:e": {{}}}}}}"#
-    ));
-    assert_eq!(d.records.len(), 1);
-    assert_eq!(d.records[0].id(), Some(&ex("e")));
     // A repeated `prefix` or `bundle` is an error.
     for text in [
         format!(r#"{{{PFX}, "prefix": {{}}}}"#),
@@ -1258,65 +1240,132 @@ fn a_value_object_member_that_is_not_a_string_names_the_member() {
     );
 }
 
-#[test]
-fn an_error_under_a_duplicated_key_is_dropped_with_the_earlier_value() {
-    // An attribute given twice.
-    let d = doc(&one_record("entity", "ex:e", r#""ex:a": null, "ex:a": 1"#));
-    assert_eq!(values(&d, "a"), [Value::integer("1")]);
-    // A record given twice.
-    let d = doc(
-        r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e": {"ex:a": "\ud800"}, "ex:e": {}}}"#,
-    );
-    assert_eq!(d.records.len(), 1);
-    assert!(d.records[0].attributes().is_empty());
-    // A section given twice.
-    let d = doc(
-        r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e": {"ex:a": null}}, "entity": {"ex:f": {}}}"#,
-    );
-    assert_eq!(d.records.len(), 1);
-    assert_eq!(d.records[0].id(), Some(&ex("f")));
-    // A bundle given twice.
-    let d = doc(
-        r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"ex:b": {"entity": {"ex:e": {"ex:a": [[1]]}}}, "ex:b": {"entity": {"ex:f": {}}}}}"#,
-    );
-    assert_eq!(d.bundles.len(), 1);
-    assert_eq!(d.bundles[0].records.len(), 1);
-    assert_eq!(d.bundles[0].records[0].id(), Some(&ex("f")));
+/// The 1-based column of the byte after the last `fragment` in the
+/// one-line `text`, where `serde_json` puts an error raised once a value
+/// has been read.
+fn column_after(text: &str, fragment: &str) -> usize {
+    text.rfind(fragment).unwrap() + fragment.len() + 1
 }
 
 #[test]
-fn a_later_member_of_a_value_object_replaces_an_earlier_one() {
-    let text = |value: &str| one_record("entity", "ex:e", &format!(r#""ex:a": {value}"#));
-    let cases = [
-        (r#"{"$": 1, "$": "x"}"#, Value::Str("x".into())),
+fn a_repeated_key_is_an_error_after_its_second_value() {
+    // Outside a record: a prefix, a section, a record key, and a record key
+    // inside a bundle.
+    for (text, repeated, value) in [
         (
-            r#"{"$": "1", "type": 5, "type": "xsd:int"}"#,
-            Value::typed("1", XSD_INT.clone()).unwrap(),
+            r#"{"prefix": {"ex": "http://example.org/", "ex": "http://b.org/"}}"#,
+            "ex",
+            r#""http://b.org/""#,
         ),
-        (r#"{"$": "\ud800", "$": "x"}"#, Value::Str("x".into())),
         (
-            r#"{"$": "x", "lang": null, "lang": "en"}"#,
-            Value::LangStr(LangStr::new("x", "en").unwrap()),
+            r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e": {}}, "entity": {"ex:f": {}}}"#,
+            "entity",
+            r#"{"ex:f": {}}"#,
         ),
-    ];
-    for (value, expected) in cases {
-        assert_eq!(values(&doc(&text(value)), "a"), [expected], "{value}");
-    }
-    // The last value given is the member, so a bad one after a good one is
-    // an error. With several bad members, `$` is reported before `type`.
-    for (value, member, column) in [
-        (r#"{"$": "x", "$": 1}"#, "$", 87),
-        (r#"{"type": 5, "$": "x", "$": 1}"#, "$", 98),
         (
-            r#"{"$": "x", "type": "xsd:string", "type": 5}"#,
-            "type",
-            112,
+            r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e": {"ex:a": "1"}, "ex:e": {"ex:b": "2"}}}"#,
+            "ex:e",
+            r#"{"ex:b": "2"}"#,
+        ),
+        (
+            r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"ex:b": {"entity": {"ex:e": {}, "ex:e": [{}]}}}}"#,
+            "ex:e",
+            "[{}]",
         ),
     ] {
-        let (_, _, message) = record_structure(&text(value));
-        let expected = format!(
-            "expected a string as the `{member}` of a value object at line 1 column {column}"
+        let message = match json::read(text) {
+            Err(Error::JsonStructure { message }) => message,
+            other => panic!("{text}: expected JsonStructure, got {other:?}"),
+        };
+        let column = column_after(text, value);
+        let expected = format!("duplicate field `{repeated}` at line 1 column {column}");
+        assert_eq!(message, expected, "{text}");
+    }
+    // Inside a record: an attribute, an attribute in one of several records
+    // under one key, and a member of a value object.
+    for (body, repeated, value) in [
+        (
+            r#""ex:a": "1", "ex:a": {"$": "2"}"#,
+            "ex:a",
+            r#"{"$": "2"}"#,
+        ),
+        (r#""ex:a": "1", "ex:b": "2", "ex:a": 3"#, "ex:a", "3"),
+        (r#""ex:a": {"$": "1", "$": "2"}"#, "$", r#""2""#),
+        (
+            r#""ex:a": ["x", {"$": "1", "type": "xsd:int", "type": "xsd:long"}]"#,
+            "type",
+            r#""xsd:long""#,
+        ),
+        (
+            r#""ex:a": {"$": "x", "lang": "en", "lang": "fr"}"#,
+            "lang",
+            r#""fr""#,
+        ),
+    ] {
+        let text = one_record("entity", "ex:e", body);
+        let (section, key, message) = record_structure(&text);
+        assert_eq!((section.as_str(), key.as_str()), ("entity", "ex:e"));
+        let column = column_after(&text, value);
+        let expected = format!("duplicate field `{repeated}` at line 1 column {column}");
+        assert_eq!(message, expected, "{body}");
+    }
+    let text = r#"{"prefix": {"ex": "http://example.org/"}, "used": {"_:u": [{}, {"ex:a": 1, "ex:a": 2}]}}"#;
+    let (section, key, message) = record_structure(text);
+    assert_eq!((section.as_str(), key.as_str()), ("used", "_:u"));
+    let column = column_after(text, "2");
+    assert_eq!(
+        message,
+        format!("duplicate field `ex:a` at line 1 column {column}")
+    );
+    // What follows the value places the error, in a record as outside one:
+    // a closing brace is taken, a comma is not.
+    for (tail, line, attribute_column, section_column) in [
+        ("\n}", 4, 1, 1),
+        ("\n, \"ex:z\": {}}", 4, 0, 0),
+        ("  }", 3, 12, 15),
+    ] {
+        let text = format!(
+            "{{\"prefix\": {{\"ex\": \"http://example.org/\"}},\n\"entity\": {{\"ex:e\": {{\"ex:a\": 1,\n\"ex:a\": 2{tail}}}}}"
         );
-        assert_eq!(message, expected, "{value}");
+        let (_, _, message) = record_structure(&text);
+        let expected = format!("duplicate field `ex:a` at line {line} column {attribute_column}");
+        assert_eq!(message, expected, "{text}");
+        let text = format!(
+            "{{\"prefix\": {{\"ex\": \"http://example.org/\"}},\n\"entity\": {{}},\n\"entity\": {{}}{tail}"
+        );
+        let Err(Error::JsonStructure { message }) = json::read(&text) else {
+            panic!("{text}")
+        };
+        let expected = format!("duplicate field `entity` at line {line} column {section_column}");
+        assert_eq!(message, expected, "{text}");
+    }
+}
+
+#[test]
+fn a_repeated_bundle_key_is_a_duplicate_bundle() {
+    let text = r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"ex:b": {}, "ex:b": {}}}"#;
+    let (section, key, error) = record_error(text);
+    assert_eq!((section.as_str(), key.as_str()), ("bundle", "ex:b"));
+    assert!(matches!(error, Error::DuplicateBundle(id) if id == ex("b")));
+}
+
+#[test]
+fn errors_in_a_record_are_reported_in_the_order_of_the_text() {
+    for (body, first) in [
+        (
+            r#""ex:a": null, "ex:a": 1"#,
+            "null is not an attribute value",
+        ),
+        (
+            r#""ex:a": 1, "ex:b": null, "ex:a": 2"#,
+            "null is not an attribute value",
+        ),
+        (
+            r#""ex:a": 1, "ex:a": 2, "ex:b": null"#,
+            "duplicate field `ex:a`",
+        ),
+    ] {
+        let (_, _, message) = record_structure(&one_record("entity", "ex:e", body));
+        assert!(message.starts_with(first), "{body}\n{message}");
     }
 }

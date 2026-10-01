@@ -1,8 +1,7 @@
 //! The PROV-JSON shape, as serde sees it. Private; the model never sees these types.
 
 use indexmap::IndexMap;
-use serde::de::value::{MapAccessDeserializer, SeqAccessDeserializer};
-use serde::de::{self, IgnoredAny, MapAccess, SeqAccess, Visitor};
+use serde::de::{self, DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::value::RawValue;
@@ -13,7 +12,7 @@ use crate::Kind;
 use crate::error::clip;
 
 /// The white space JSON allows before a value.
-const JSON_SPACE: [char; 4] = [' ', '\t', '\r', '\n'];
+pub(super) const JSON_SPACE: [char; 4] = [' ', '\t', '\r', '\n'];
 
 /// The `prefix` key that holds the default namespace.
 pub(super) const DEFAULT: &str = "default";
@@ -26,7 +25,9 @@ pub(super) type JsonSection = IndexMap<String, OneOrMany<JsonRecord>>;
 pub(super) struct JsonDocument {
     pub prefix: IndexMap<String, String>,
     pub sections: IndexMap<Kind, JsonSection>,
-    pub bundle: IndexMap<String, JsonBundle>,
+    /// Every bundle under its key. A key given twice is kept twice, so the
+    /// builder refuses it as it refuses two spellings of one identifier.
+    pub bundle: Vec<(String, JsonBundle)>,
 }
 
 pub(super) struct JsonBundle {
@@ -34,10 +35,14 @@ pub(super) struct JsonBundle {
     pub sections: IndexMap<Kind, JsonSection>,
 }
 
+/// The message for a key given twice in one object.
+fn duplicate(key: &str) -> String {
+    format!("duplicate field `{}`", clip(key))
+}
+
 /// Reads the keys of a document or bundle object. `prefix` is the
 /// namespace table, `bundle` (documents only) the bundles, and every other
-/// key a section. A repeated `prefix` or `bundle` is an error; a repeated
-/// section keeps its last value.
+/// key a section. A repeated key is an error.
 ///
 /// A key that is refused has its value skipped first, so text that is not
 /// JSON is reported as that. The refusal then sits at the end of the value.
@@ -50,7 +55,7 @@ struct ContainerVisitor {
 type Container = (
     IndexMap<String, String>,
     IndexMap<Kind, JsonSection>,
-    IndexMap<String, JsonBundle>,
+    Vec<(String, JsonBundle)>,
 );
 
 impl<'de> Visitor<'de> for ContainerVisitor {
@@ -67,20 +72,21 @@ impl<'de> Visitor<'de> for ContainerVisitor {
         while let Some(key) = map.next_key::<String>()? {
             let refused = match (key.as_str(), Kind::from_name(&key)) {
                 ("prefix", _) if prefix.is_none() => {
-                    prefix = Some(map.next_value()?);
+                    prefix = Some(map.next_value::<Unique<String>>()?.0);
                     continue;
                 }
                 ("bundle", _) if self.bundles && bundle.is_none() => {
-                    bundle = Some(map.next_value()?);
+                    bundle = Some(map.next_value::<Bundles>()?.0);
                     continue;
                 }
                 ("prefix", _) => de::Error::duplicate_field("prefix"),
                 ("bundle", _) if self.bundles => de::Error::duplicate_field("bundle"),
                 ("bundle", _) => de::Error::custom("a bundle cannot hold a bundle"),
-                (_, Some(kind)) => {
-                    sections.insert(kind, map.next_value()?);
+                (_, Some(kind)) if !sections.contains_key(&kind) => {
+                    sections.insert(kind, map.next_value::<Unique<_>>()?.0);
                     continue;
                 }
+                (_, Some(kind)) => de::Error::duplicate_field(kind.name()),
                 (name, None) => de::Error::custom(format!("unknown record kind `{}`", clip(name))),
             };
             map.next_value::<IgnoredAny>()?;
@@ -124,7 +130,7 @@ fn serialize_container<S: Serializer>(
     s: S,
     prefix: &IndexMap<String, String>,
     sections: &IndexMap<Kind, JsonSection>,
-    bundle: Option<&IndexMap<String, JsonBundle>>,
+    bundle: Option<&[(String, JsonBundle)]>,
 ) -> Result<S::Ok, S::Error> {
     let mut m = s.serialize_map(None)?;
     if !prefix.is_empty() {
@@ -134,14 +140,75 @@ fn serialize_container<S: Serializer>(
         m.serialize_entry(kind.name(), section)?;
     }
     if let Some(bundle) = bundle.filter(|b| !b.is_empty()) {
-        m.serialize_entry("bundle", bundle)?;
+        m.serialize_entry("bundle", &BundlesOut(bundle))?;
     }
     m.end()
 }
 
+/// The bundles, written as one JSON object.
+struct BundlesOut<'a>(&'a [(String, JsonBundle)]);
+
+impl Serialize for BundlesOut<'_> {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_map(self.0.iter().map(|(key, bundle)| (key, bundle)))
+    }
+}
+
+/// An object read into a map that keeps key order and refuses a key given
+/// twice.
+struct Unique<V>(IndexMap<String, V>);
+
+impl<'de, V: Deserialize<'de>> Deserialize<'de> for Unique<V> {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct Visit<V>(PhantomData<V>);
+        impl<'de, V: Deserialize<'de>> Visitor<'de> for Visit<V> {
+            type Value = Unique<V>;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a map")
+            }
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Unique<V>, A::Error> {
+                let mut out = IndexMap::new();
+                while let Some(key) = map.next_key::<String>()? {
+                    if out.contains_key(&key) {
+                        map.next_value::<IgnoredAny>()?;
+                        return Err(de::Error::custom(duplicate(&key)));
+                    }
+                    let value = map.next_value()?;
+                    out.insert(key, value);
+                }
+                Ok(Unique(out))
+            }
+        }
+        d.deserialize_map(Visit(PhantomData))
+    }
+}
+
+/// The `bundle` object of a document, every entry kept in order.
+struct Bundles(Vec<(String, JsonBundle)>);
+
+impl<'de> Deserialize<'de> for Bundles {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = Bundles;
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a map")
+            }
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Bundles, A::Error> {
+                let mut out = Vec::new();
+                while let Some(entry) = map.next_entry()? {
+                    out.push(entry);
+                }
+                Ok(Bundles(out))
+            }
+        }
+        d.deserialize_map(V)
+    }
+}
+
 impl Serialize for JsonDocument {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        serialize_container(s, &self.prefix, &self.sections, Some(&self.bundle))
+        serialize_container(s, &self.prefix, &self.sections, Some(&self.bundle[..]))
     }
 }
 
@@ -161,22 +228,79 @@ pub(super) enum OneOrMany<T> {
 
 /// An object is one record and an array is many. Dispatching on the JSON
 /// shape, rather than trying each variant, keeps the inner error.
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for OneOrMany<T> {
+impl<'de> Deserialize<'de> for OneOrMany<JsonRecord> {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        struct V<T>(PhantomData<T>);
-        impl<'de, T: Deserialize<'de>> Visitor<'de> for V<T> {
-            type Value = OneOrMany<T>;
+        struct V;
+        impl<'de> Visitor<'de> for V {
+            type Value = OneOrMany<JsonRecord>;
             fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 f.write_str("a record object or an array of record objects")
             }
             fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Self::Value, A::Error> {
-                T::deserialize(MapAccessDeserializer::new(map)).map(OneOrMany::One)
+                Body.visit_map(map).map(OneOrMany::One)
             }
-            fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Self::Value, A::Error> {
-                Vec::deserialize(SeqAccessDeserializer::new(seq)).map(OneOrMany::Many)
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut records = Vec::new();
+                while let Some(record) = seq.next_element_seed(Body)? {
+                    records.push(record);
+                }
+                Ok(OneOrMany::Many(records))
             }
         }
-        d.deserialize_any(V(PhantomData))
+        d.deserialize_any(V)
+    }
+}
+
+/// Reads a record object into its attributes.
+///
+/// Each value is captured as raw JSON text first. A number is kept as that
+/// text, because the visitor interface hands it over as `i64`, `u64` or
+/// `f64` (or, when a dependant enables the `arbitrary_precision` feature of
+/// `serde_json`, as a private map), each of which loses the spelling.
+///
+/// The capture borrows the value's text from the input without recursing
+/// into it. An array's elements are captured the same way, and one that is
+/// itself an array is refused before it is parsed, so the depth of the input
+/// never becomes depth of recursion.
+///
+/// A value that cannot be read is [`JsonValue::Invalid`], not an error: an
+/// error raised here would be placed where the outer parser stands, past
+/// the whole value, and would not name its record. A key given twice is an
+/// invalid value placed just past its second value and moved to the end of
+/// the record, so the record's invalid values stay in the order of the
+/// text. An invalid value under the key's first use stays where it is, as
+/// it comes first.
+struct Body;
+
+impl<'de> DeserializeSeed<'de> for Body {
+    type Value = JsonRecord;
+    fn deserialize<D: Deserializer<'de>>(self, d: D) -> Result<JsonRecord, D::Error> {
+        d.deserialize_map(self)
+    }
+}
+
+impl<'de> Visitor<'de> for Body {
+    type Value = JsonRecord;
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("a map")
+    }
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<JsonRecord, A::Error> {
+        let mut body = JsonRecord::new();
+        while let Some(key) = map.next_key::<String>()? {
+            let text = map.next_value::<&RawValue>()?.get();
+            match body.get_index_of(&key) {
+                None => {
+                    body.insert(key, from_raw(text));
+                }
+                Some(i) if matches!(body[i], JsonValue::Invalid(_)) => {}
+                Some(i) => {
+                    body.shift_remove_index(i);
+                    let invalid = InvalidValue::after(text, duplicate(&key));
+                    body.insert(key, JsonValue::Invalid(invalid));
+                }
+            }
+        }
+        Ok(body)
     }
 }
 
@@ -212,12 +336,23 @@ pub(super) enum JsonValue {
 pub(super) struct InvalidValue {
     /// What was wrong, without a position.
     pub message: String,
-    /// The address of the fragment's first byte, to find it in the input.
-    pub start: usize,
-    /// 1-based line of the error inside the fragment.
-    pub line: usize,
-    /// 1-based column of the error on that line, in bytes.
-    pub column: usize,
+    /// Where it was found.
+    pub at: Place,
+}
+
+/// Where in the input an invalid value was found.
+pub(super) enum Place {
+    /// An error raised while parsing a fragment of the input: the address
+    /// of the fragment's first byte, to find it in the input, and the line
+    /// and column of the error inside the fragment.
+    Inside {
+        start: usize,
+        line: usize,
+        column: usize,
+    },
+    /// An error raised once a value has been read: the address of the byte
+    /// after the value.
+    After(usize),
 }
 
 impl InvalidValue {
@@ -225,9 +360,11 @@ impl InvalidValue {
     fn from_error(fragment: &str, e: &serde_json::Error) -> Self {
         InvalidValue {
             message: without_position(e),
-            start: fragment.as_ptr().addr(),
-            line: e.line(),
-            column: e.column(),
+            at: Place::Inside {
+                start: fragment.as_ptr().addr(),
+                line: e.line(),
+                column: e.column(),
+            },
         }
     }
 
@@ -235,9 +372,19 @@ impl InvalidValue {
     fn at_start(fragment: &str, message: impl Into<String>) -> Self {
         InvalidValue {
             message: message.into(),
-            start: fragment.as_ptr().addr(),
-            line: 1,
-            column: 1,
+            at: Place::Inside {
+                start: fragment.as_ptr().addr(),
+                line: 1,
+                column: 1,
+            },
+        }
+    }
+
+    /// An error raised once `fragment` has been read.
+    fn after(fragment: &str, message: impl Into<String>) -> Self {
+        InvalidValue {
+            message: message.into(),
+            at: Place::After(fragment.as_ptr().addr() + fragment.len()),
         }
     }
 }
@@ -249,25 +396,6 @@ impl JsonValue {
             JsonValue::Many(items) => items,
             other => std::slice::from_ref(other),
         }
-    }
-}
-
-/// The value is captured as raw JSON text first. A number is kept as that
-/// text, because the visitor interface hands it over as `i64`, `u64` or
-/// `f64` (or, when a dependant enables the `arbitrary_precision` feature of
-/// `serde_json`, as a private map), each of which loses the spelling.
-///
-/// The capture borrows the value's text from the input without recursing
-/// into it. An array's elements are captured the same way, and one that is
-/// itself an array is refused before it is parsed, so the depth of the input
-/// never becomes depth of recursion.
-///
-/// A value that cannot be read is [`JsonValue::Invalid`], not an error: an
-/// error raised here would be placed where the outer parser stands, past
-/// the whole value, and would not name its record.
-impl<'de> Deserialize<'de> for JsonValue {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        Ok(from_raw(<&RawValue>::deserialize(d)?.get()))
     }
 }
 
@@ -340,11 +468,9 @@ impl<'de> Visitor<'de> for ValueVisitor {
         Ok(invalid.map_or(JsonValue::Many(items), JsonValue::Invalid))
     }
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<JsonValue, A::Error> {
-        // A member given twice keeps its last value, as any repeated key
-        // does, so an earlier value that is invalid is dropped unreported.
         let (mut value, mut datatype, mut lang) = (None, None, None);
         while let Some(key) = map.next_key::<String>()? {
-            let member = match key.as_str() {
+            let member: &mut Option<_> = match key.as_str() {
                 "$" => &mut value,
                 "type" => &mut datatype,
                 "lang" => &mut lang,
@@ -356,7 +482,11 @@ impl<'de> Visitor<'de> for ValueVisitor {
                     )));
                 }
             };
-            *member = Some(member_string(&key, map.next_value::<&RawValue>()?.get()));
+            let text = map.next_value::<&RawValue>()?.get();
+            if member.is_some() {
+                return Err(de::Error::custom(duplicate(&key)));
+            }
+            *member = Some(member_string(&key, text));
         }
         // Of several invalid members, `$` is reported before `type`, and
         // `type` before `lang`.

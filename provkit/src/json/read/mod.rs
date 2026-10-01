@@ -3,7 +3,9 @@
 use indexmap::IndexMap;
 
 use super::structure;
-use super::wire::{DEFAULT, InvalidValue, JsonDocument, JsonRecord, JsonSection, JsonValue};
+use super::wire::{
+    DEFAULT, InvalidValue, JSON_SPACE, JsonDocument, JsonRecord, JsonSection, JsonValue, Place,
+};
 use crate::builder::DocumentBuilder;
 use crate::error::clip;
 use crate::namespaces::Scope;
@@ -49,19 +51,41 @@ fn position_of(input: &str, start: usize) -> Option<(usize, usize)> {
     Some((line, offset - line_start + 1))
 }
 
+/// Where `serde_json` places an error that a map's visitor raises once a
+/// value has been read, given the address of the byte after that value. It
+/// skips the white space after the value and reads a closing brace that
+/// follows, but not a comma. The column is the number of bytes on the line
+/// before the next byte to read.
+fn after_value(input: &str, end: usize) -> Option<(usize, usize)> {
+    let offset = end.checked_sub(input.as_ptr().addr())?;
+    let rest = input.get(offset..)?;
+    let after = rest.trim_start_matches(JSON_SPACE);
+    let next = input.len() - after.len() + usize::from(after.starts_with('}'));
+    let before = &input[..next];
+    let line_start = before.rfind('\n').map_or(0, |i| i + 1);
+    Some((1 + before.matches('\n').count(), next - line_start))
+}
+
 /// The error for a value the wire layer could not read. It holds the wire
 /// layer's message and the position of the error in `input`, the text the
-/// document was read from. The position is the fragment's, moved on by the
-/// error's position inside the fragment. It equals the position
-/// `serde_json` gives the same error when it reads the document in one
-/// pass.
+/// document was read from. The position of an error inside a fragment is
+/// the fragment's, moved on by the error's position inside the fragment.
+/// Each equals the position `serde_json` gives the same error when it reads
+/// the document in one pass.
 fn invalid_value(invalid: &InvalidValue, input: &str) -> Error {
-    let position = position_of(input, invalid.start)
-        .filter(|_| invalid.line > 0)
-        .map(|(line, column)| match invalid.line {
-            1 => (line, (column + invalid.column).saturating_sub(1)),
-            inner => (line + inner - 1, invalid.column),
-        });
+    let position = match invalid.at {
+        Place::Inside {
+            start,
+            line: inner_line,
+            column: inner_column,
+        } => position_of(input, start)
+            .filter(|_| inner_line > 0)
+            .map(|(line, column)| match inner_line {
+                1 => (line, (column + inner_column).saturating_sub(1)),
+                inner => (line + inner - 1, inner_column),
+            }),
+        Place::After(end) => after_value(input, end),
+    };
     structure(match position {
         Some((line, column)) => format!("{} at line {line} column {column}", invalid.message),
         None => invalid.message.clone(),
@@ -95,7 +119,7 @@ fn refuse_invalid(sections: &IndexMap<Kind, JsonSection>, input: &str) -> Result
 /// as an error of the JSON parser is.
 pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuilder) -> Result<()> {
     refuse_invalid(&wire.sections, input)?;
-    for bundle in wire.bundle.values() {
+    for (_, bundle) in &wire.bundle {
         refuse_invalid(&bundle.sections, input)?;
     }
     let doc_ns = namespaces(&wire.prefix)?;
