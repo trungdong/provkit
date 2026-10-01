@@ -10,6 +10,7 @@ use std::fmt;
 use std::marker::PhantomData;
 
 use crate::Kind;
+use crate::error::clip;
 
 /// A record's attributes, key order kept.
 pub(super) type JsonRecord = IndexMap<String, JsonValue>;
@@ -65,7 +66,7 @@ impl<'de> Visitor<'de> for ContainerVisitor {
                 "bundle" => return Err(de::Error::custom("a bundle cannot hold a bundle")),
                 name => {
                     let kind = Kind::from_name(name).ok_or_else(|| {
-                        de::Error::custom(format!("unknown record kind `{name}`"))
+                        de::Error::custom(format!("unknown record kind `{}`", clip(name)))
                     })?;
                     sections.insert(kind, map.next_value()?);
                 }
@@ -317,8 +318,9 @@ impl<'de> Visitor<'de> for ValueVisitor {
                 "lang" => lang = Some(map.next_value_seed(StrAt("lang"))?),
                 other => {
                     return Err(de::Error::custom(format!(
-                        "unknown key `{other}` in a value object, expected `$`, \
-                         `type` or `lang`"
+                        "unknown key `{}` in a value object, expected `$`, \
+                         `type` or `lang`",
+                        clip(other)
                     )));
                 }
             }

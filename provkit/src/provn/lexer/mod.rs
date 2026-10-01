@@ -6,6 +6,7 @@
 //! follows a string.
 
 use super::chars::is_iri_forbidden;
+use crate::error::clip;
 use crate::pn::{PN_CHARS_ESC, hex_pair_follows, is_bare_local_char, prefix_len};
 use crate::{Error, Result};
 
@@ -364,7 +365,12 @@ impl<'a> Lexer<'a> {
         let m = scan_name(content)
             .map_err(|e| self.error_at(self.pos + 1 + e.offset, e.message))?
             .filter(|m| m.len == content.len())
-            .ok_or_else(|| self.error(format!("invalid qualified-name literal '{content}'")))?;
+            .ok_or_else(|| {
+                self.error(format!(
+                    "invalid qualified-name literal '{}'",
+                    clip(content)
+                ))
+            })?;
         self.advance(close + 1);
         Ok(TokenKind::QNameLiteral {
             prefix: m.prefix,

@@ -3,6 +3,7 @@
 use indexmap::IndexMap;
 
 use super::wire::{JsonDocument, JsonRecord, JsonSection, JsonValue};
+use crate::error::clip;
 use crate::namespaces::Scope;
 use crate::sink::DocumentBuilder;
 use crate::value::trim_xsd_space;
@@ -49,7 +50,8 @@ pub(super) fn emit(wire: &JsonDocument, sink: &mut DocumentBuilder) -> Result<()
         let located = |e| in_record("bundle", key, e);
         if key.starts_with("_:") {
             return Err(located(structure(format!(
-                "bundle `{key}` needs a real identifier"
+                "bundle `{}` needs a real identifier",
+                clip(key)
             ))));
         }
         // The bundle's own name resolves in the bundle scope (PROV-N 3.7.4).
@@ -86,8 +88,9 @@ fn record_id(kind: Kind, key: &str, scope: Scope<'_>) -> Result<Option<QName>> {
     if key.starts_with("_:") {
         if kind.is_element() {
             return Err(structure(format!(
-                "{} `{key}` needs a real identifier",
-                kind.name()
+                "{} `{}` needs a real identifier",
+                kind.name(),
+                clip(key)
             )));
         }
         return Ok(None);
@@ -149,7 +152,7 @@ fn records_from(
 /// value.
 fn formal_value(value: &JsonValue, key: &str, time: bool, scope: Scope<'_>) -> Result<Formal> {
     let expected = if time { "a dateTime" } else { "a name" };
-    let wrong = |found: &str| structure(format!("`{key}` must be {expected}, not {found}"));
+    let wrong = |found: &str| structure(format!("`{}` must be {expected}, not {found}", clip(key)));
     let (text, datatype) = match value {
         JsonValue::Str(s) => (s, None),
         JsonValue::Typed { lang: Some(_), .. } => return Err(wrong("a language-tagged string")),
@@ -165,7 +168,10 @@ fn formal_value(value: &JsonValue, key: &str, time: bool, scope: Scope<'_>) -> R
         if let Some(datatype) = datatype
             && datatype != *XSD_DATETIME
         {
-            return Err(wrong(&format!("a value typed <{datatype}>")));
+            return Err(wrong(&format!(
+                "a value typed <{}>",
+                clip(&datatype.to_string())
+            )));
         }
         return DateTime::parse(trim_xsd_space(text)).map(Formal::Time);
     }
@@ -174,7 +180,10 @@ fn formal_value(value: &JsonValue, key: &str, time: bool, scope: Scope<'_>) -> R
         Some(datatype) => match Value::typed_in(scope, text, datatype)? {
             Value::QName(name) => Ok(Formal::Name(name)),
             other => match other.datatype() {
-                Some(datatype) => Err(wrong(&format!("a value typed <{datatype}>"))),
+                Some(datatype) => Err(wrong(&format!(
+                    "a value typed <{}>",
+                    clip(&datatype.to_string())
+                ))),
                 None => Err(wrong("a language-tagged string")),
             },
         },

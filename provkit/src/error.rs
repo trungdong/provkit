@@ -1,6 +1,24 @@
 //! The crate's error type.
 
+use std::borrow::Cow;
+
 use crate::{Kind, QName};
+
+/// The most characters of rejected input that a message quotes.
+const QUOTED: usize = 80;
+
+/// `text` as a message quotes it: whole when short, otherwise its first
+/// characters and its length. The error's payload keeps the whole text.
+pub(crate) fn clip(text: &str) -> Cow<'_, str> {
+    match text.char_indices().nth(QUOTED) {
+        None => Cow::Borrowed(text),
+        Some((end, _)) => Cow::Owned(format!(
+            "{}... ({} characters)",
+            &text[..end],
+            text.chars().count()
+        )),
+    }
+}
 
 /// Every failure the crate can report.
 ///
@@ -40,7 +58,7 @@ pub enum Error {
         message: String,
     },
     /// An error in one record of a PROV-JSON document, or in a bundle's key.
-    #[error("{section} `{key}`: {error}")]
+    #[error("{section} `{}`: {error}", clip(.key))]
     InRecord {
         /// The section the record is in: a kind's name, or `bundle`.
         section: String,
@@ -79,10 +97,10 @@ pub enum Error {
         reason: String,
     },
     /// A prefix was used without a declaration.
-    #[error("undeclared prefix `{0}`")]
+    #[error("undeclared prefix `{}`", clip(.0))]
     UndeclaredPrefix(String),
     /// A name without a prefix was used and no default namespace is declared.
-    #[error("`{0}` has no prefix and no default namespace is declared")]
+    #[error("`{}` has no prefix and no default namespace is declared", clip(.0))]
     NoDefaultNamespace(String),
     /// `prov` or `xsd` was declared to a different IRI.
     #[error("prefix `{prefix}` is reserved for <{expected}> and cannot be declared as <{found}>")]
@@ -95,17 +113,17 @@ pub enum Error {
         found: String,
     },
     /// The text is not a `PN_PREFIX`.
-    #[error("`{0}` is not a valid prefix")]
+    #[error("`{}` is not a valid prefix", clip(.0))]
     InvalidPrefix(String),
     /// The text is not a qualified name. The payload is the whole text as
     /// given, for example `ex:a b`, not the local part alone.
-    #[error("`{0}` is not a valid qualified name")]
+    #[error("`{}` is not a valid qualified name", clip(.0))]
     InvalidQName(String),
     /// The text is not a language tag.
-    #[error("`{0}` is not a language tag")]
+    #[error("`{}` is not a language tag", clip(.0))]
     InvalidLanguageTag(String),
     /// A literal's text is not valid for its datatype.
-    #[error("invalid {datatype} literal `{lexical}`: {reason}")]
+    #[error("invalid {datatype} literal `{}`: {reason}", clip(.lexical))]
     InvalidLiteral {
         /// The datatype, as written.
         datatype: String,
@@ -150,6 +168,47 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clip_keeps_short_text_and_cuts_long_text_on_a_character() {
+        assert_eq!(clip("short"), "short");
+        let eighty = "é".repeat(80);
+        assert_eq!(clip(&eighty), eighty);
+        let long = "é".repeat(81);
+        assert_eq!(clip(&long), format!("{eighty}... (81 characters)"));
+    }
+
+    #[test]
+    fn messages_quote_at_most_eighty_characters() {
+        let long = "x".repeat(1 << 20);
+        let errors = [
+            Error::InvalidQName(long.clone()),
+            Error::InvalidPrefix(long.clone()),
+            Error::InvalidLanguageTag(long.clone()),
+            Error::UndeclaredPrefix(long.clone()),
+            Error::NoDefaultNamespace(long.clone()),
+            Error::InvalidLiteral {
+                datatype: "xsd:dateTime".into(),
+                lexical: long.clone(),
+                reason: "missing 'T'".into(),
+            },
+            Error::InRecord {
+                section: "entity".into(),
+                key: long.clone(),
+                error: Box::new(Error::InvalidQName("a b".into())),
+            },
+        ];
+        for e in errors {
+            let text = e.to_string();
+            assert!(text.len() < 300, "{} bytes", text.len());
+            assert!(text.contains("(1048576 characters)"), "{text}");
+        }
+        // The payload is whole.
+        let Error::InvalidQName(payload) = Error::InvalidQName(long.clone()) else {
+            unreachable!()
+        };
+        assert_eq!(payload.len(), long.len());
+    }
 
     #[test]
     fn at_prints_its_error_and_has_no_source() {

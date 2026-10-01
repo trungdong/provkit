@@ -839,3 +839,18 @@ fn many_prefix_declarations_stay_linear() {
     provn::read(&text).unwrap();
     assert!(start.elapsed().as_secs() < 5, "took {:?}", start.elapsed());
 }
+
+#[test]
+fn long_tokens_are_cut_in_messages() {
+    let long = "x".repeat(1 << 20);
+    for body in [
+        format!("entity(ex:e, \"{long}\")"),
+        format!("{long}(ex:e)"),
+        format!("entity(ex:e <http://{long}/>)"),
+        format!("entity(ex:e, '{long} b')"),
+        format!("prefix {long}.-"),
+    ] {
+        let message = err(&body, Profile::Default).to_string();
+        assert!(message.len() < 300, "{} bytes", message.len());
+    }
+}

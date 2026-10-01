@@ -14,6 +14,7 @@ use std::collections::HashSet;
 
 use super::lexer::{Token, TokenKind};
 use super::{Ignored, Profile, Relaxation};
+use crate::error::clip;
 use crate::namespaces::Scope;
 use crate::pn;
 use crate::sink::DocumentBuilder;
@@ -284,7 +285,7 @@ impl<'t> Parser<'t> {
                         name.token,
                         format!(
                             "expected a new prefix, found '{}' declared twice in one scope",
-                            name.local
+                            clip(&name.local)
                         ),
                     ));
                 }
@@ -298,7 +299,8 @@ impl<'t> Parser<'t> {
                         format!(
                             "expected a prefix other than the predeclared '{}' under the \
                              strict profile, found 'prefix {} <{iri}>'",
-                            name.local, name.local
+                            clip(&name.local),
+                            clip(&name.local)
                         ),
                     ));
                 }
@@ -322,7 +324,7 @@ impl<'t> Parser<'t> {
         } else {
             Err(Self::error_at(
                 name.token,
-                format!("expected a prefix, found '{written}'"),
+                format!("expected a prefix, found '{}'", clip(written)),
             ))
         }
     }
@@ -690,15 +692,18 @@ pub(super) fn describe(kind: &TokenKind) -> String {
         }
     };
     match kind {
-        TokenKind::Name { prefix, local } => format!("'{}'", name(prefix, local)),
+        TokenKind::Name { prefix, local } => format!("'{}'", clip(&name(prefix, local))),
         TokenKind::QNameLiteral { prefix, local } => {
-            format!("the qualified-name literal '{}'", name(prefix, local))
+            format!(
+                "the qualified-name literal '{}'",
+                clip(&name(prefix, local))
+            )
         }
-        TokenKind::Iri(iri) => format!("the IRI <{iri}>"),
-        TokenKind::Str(s) => format!("the string {s:?}"),
-        TokenKind::Int(i) => format!("the integer {i}"),
-        TokenKind::DateTime(d) => format!("the dateTime {d}"),
-        TokenKind::LangTag(t) => format!("the language tag @{t}"),
+        TokenKind::Iri(iri) => format!("the IRI <{}>", clip(iri)),
+        TokenKind::Str(s) => format!("the string {:?}", clip(s)),
+        TokenKind::Int(i) => format!("the integer {}", clip(i)),
+        TokenKind::DateTime(d) => format!("the dateTime {}", clip(d)),
+        TokenKind::LangTag(t) => format!("the language tag @{}", clip(t)),
         TokenKind::Typed => "'%%'".to_owned(),
         TokenKind::Marker => "'-'".to_owned(),
         TokenKind::LParen => "'('".to_owned(),
