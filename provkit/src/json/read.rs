@@ -226,6 +226,20 @@ mod tests {
         r#""prefix": {"ex": "http://example.org/", "default": "http://default.org/"}"#;
 
     #[test]
+    fn a_language_string_reads_with_or_without_a_type() {
+        let d = doc(&format!(
+            r#"{{{PFX}, "entity": {{"ex:e": {{
+            "ex:a": {{"$": "bonjour", "lang": "fr"}},
+            "ex:a": {{"$": "bonjour", "type": "prov:InternationalizedString", "lang": "fr"}}
+        }}}}}}"#
+        ));
+        let plain = doc(&format!(
+            r#"{{{PFX}, "entity": {{"ex:e": {{"ex:a": {{"$": "bonjour", "lang": "fr"}}}}}}}}"#
+        ));
+        assert_eq!(d, plain);
+    }
+
+    #[test]
     fn values_decode_per_table() {
         let d = doc(&format!(
             r#"{{{PFX}, "entity": {{"ex:e": {{

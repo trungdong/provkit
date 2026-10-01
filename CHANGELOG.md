@@ -88,7 +88,9 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     of the rejected components. `DateTime` has the accessors `year`, `month`,
     `day`, `hour`, `minute`, `second`, `nanosecond` and `offset_minutes`, and
     implements `FromStr`.
-  - PROV-JSON read and write (`json` module).
+  - PROV-JSON read and write (`json` module). The writer writes a
+    language-tagged string as `{"$": ..., "lang": ...}`, with no `type`, as
+    the note requires. The reader accepts both forms.
   - PROV-N read and write (`provn` module), with the `Strict` and `Default`
     read profiles.
   - The PROV-N reader lexes the terminals of the Recommendation and SPARQL

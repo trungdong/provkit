@@ -5,7 +5,7 @@ use std::io::Write;
 use indexmap::IndexMap;
 
 use super::wire::{JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany};
-use crate::well_known::{PROV_INTERNATIONALIZED_STRING, XSD_DATETIME, XSD_QNAME};
+use crate::well_known::{XSD_DATETIME, XSD_QNAME};
 use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
 
 /// Write `document` as PROV-JSON, pretty-printed with two-space indentation.
@@ -223,9 +223,10 @@ fn value_wire(value: &Value, table: &mut Namespaces) -> JsonValue {
     };
     match value {
         Value::Str(s) => JsonValue::Str(s.clone()),
+        // The note requires `lang` alone: section 2.2.
         Value::LangStr(l) => JsonValue::Typed {
             value: l.value().to_owned(),
-            datatype: Some(table.render(&PROV_INTERNATIONALIZED_STRING)),
+            datatype: None,
             lang: Some(l.lang().to_owned()),
         },
         Value::QName(q) => {
@@ -254,6 +255,26 @@ mod tests {
             id,
             attributes: Attributes::new(),
         })
+    }
+
+    #[test]
+    fn a_bundle_writes_bare_names_against_its_own_default() {
+        let one = QName::new("http://one.org/", "a").unwrap();
+        let two = QName::new("http://two.org/", "b").unwrap();
+        let mut d = Document::new();
+        d.namespaces.set_default("http://one.org/");
+        let mut inner = bundle("b1", vec![entity_in(one.clone()), entity_in(two.clone())]);
+        inner.namespaces.set_default("http://two.org/");
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        d.bundles.push(inner);
+
+        let text = json::to_string(&d).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let entities = v["bundle"]["ex:b1"]["entity"].as_object().unwrap();
+        // The name in the bundle's default namespace is bare; the other is not.
+        assert!(entities.contains_key("b"), "{text}");
+        assert!(!entities.contains_key("a"), "{text}");
+        assert_eq!(json::read(&text).unwrap(), d);
     }
 
     #[test]
@@ -397,7 +418,7 @@ mod tests {
             assert!(body[key]["$"].is_string(), "{key} must be a `$` string");
         }
         assert_eq!(body["ex:l"]["lang"], "fr");
-        assert_eq!(body["ex:l"]["type"], "prov:InternationalizedString");
+        assert!(body["ex:l"].get("type").is_none(), "{text}");
         assert_eq!(body["ex:q"]["type"], "xsd:QName");
         assert_eq!(body["ex:s"].as_array().unwrap().len(), 2);
     }
