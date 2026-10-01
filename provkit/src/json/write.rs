@@ -215,7 +215,7 @@ fn record_wire(record: &Record, names: &mut WriteScope<'_>) -> Result<JsonRecord
             FormalRef::Name(q) => key(q, names),
             FormalRef::Time(t) => t.to_string(),
         };
-        body.insert(format!("prov:{}", attr.local_name()), JsonValue::Str(text));
+        body.insert(attr.to_string(), JsonValue::Str(text));
     }
     // Several values under one name become an array, in insertion order.
     let mut grouped: IndexMap<String, Vec<JsonValue>> = IndexMap::new();

@@ -66,6 +66,7 @@ pub(crate) enum Relaxation {
 impl Profile {
     /// Whether this profile reads `relaxation`.
     pub(crate) fn allows(self, _relaxation: Relaxation) -> bool {
+        // A profile that reads only some relaxations names them in this `match`.
         match self {
             Profile::Strict => false,
             Profile::Default => true,

@@ -107,6 +107,10 @@ fn new_rejects_a_fraction_at_hour_24() {
         DateTime::new(2011, 1, 1, 24, 0, 0, 1, None),
         Err(Error::InvalidLiteral { .. })
     ));
+    assert!(matches!(
+        DateTime::new(2011, 1, 1, 24, 0, 1, 0, None),
+        Err(Error::InvalidLiteral { .. })
+    ));
 }
 
 #[test]

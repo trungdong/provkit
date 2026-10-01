@@ -61,6 +61,29 @@ enum Arg {
     Marker,
 }
 
+/// A positional argument with the token it was read from.
+type Positional<'t> = (&'t Token, Arg);
+
+/// The tokens of a literal, before any name in it is resolved.
+pub(super) enum LiteralParts<'t> {
+    /// A string, with what follows it.
+    Str(&'t str, Suffix<'t>),
+    /// An `INT_LITERAL`.
+    Int(&'t str),
+    /// A `QUALIFIED_NAME_LITERAL`.
+    Name { prefix: &'t str, local: &'t str },
+}
+
+/// What follows a string literal.
+pub(super) enum Suffix<'t> {
+    /// Nothing.
+    None,
+    /// A language tag.
+    Lang(&'t str),
+    /// A datatype name.
+    Datatype(NameParts<'t>),
+}
+
 pub(super) struct Parser<'t> {
     source: &'t str,
     tokens: &'t [Token],
@@ -121,13 +144,17 @@ impl<'t> Parser<'t> {
         }
     }
 
-    /// "expected `what`, found ..." at the current token.
-    pub(super) fn expected(&self, what: &str) -> Error {
-        let token = self.peek();
+    /// "expected `what`, found ..." at `token`.
+    pub(super) fn expected_at(token: &Token, what: &str) -> Error {
         Self::error_at(
             token,
             format!("expected {what}, found {}", describe(&token.kind)),
         )
+    }
+
+    /// "expected `what`, found ..." at the current token.
+    pub(super) fn expected(&self, what: &str) -> Error {
+        Self::expected_at(self.peek(), what)
     }
 
     pub(super) fn expect(&mut self, kind: &TokenKind, what: &str) -> Result<()> {
@@ -226,13 +253,8 @@ impl<'t> Parser<'t> {
             } else {
                 // Expressions come before bundles: production [1].
                 if after_bundle && !self.profile.allows(Relaxation::StatementAfterBundle) {
-                    return Err(Self::error_at(
-                        self.peek(),
-                        format!(
-                            "expected 'bundle' or 'endDocument' after a bundle under the \
-                             strict profile, found {}",
-                            describe(&self.peek().kind)
-                        ),
+                    return Err(self.expected(
+                        "'bundle' or 'endDocument' after a bundle under the strict profile",
                     ));
                 }
                 self.statement(builder)?;
@@ -357,65 +379,84 @@ impl<'t> Parser<'t> {
     // expression ::= keyword "(" optionalIdentifier arguments optionalAttributeValuePairs ")"
 
     fn expression(&mut self) -> Result<Record> {
+        let (start, kind) = self.keyword_kind()?;
+        self.expect(&TokenKind::LParen, "'('")?;
+        let (id, mut args) = self.identifier_and_first_argument(kind)?;
+        let attributes = self.remaining_arguments(kind, &mut args)?;
+        Self::check_arity(start, kind, args.len())?;
+        let formals = self.formals(kind, kind.arities(), args)?;
+        Record::from_parts(kind, id, formals, attributes).map_err(|e| at(start, e))
+    }
+
+    // keyword ::= the name of a PROV statement
+
+    /// The keyword's token and kind, with the token consumed.
+    fn keyword_kind(&mut self) -> Result<(&'t Token, Kind)> {
         let start = self.peek();
         let TokenKind::Name { prefix, local } = &start.kind else {
             return Err(self.expected("a statement"));
         };
         let kind = classify(prefix, local, self.profile).ok_or_else(|| {
-            let message = if prefix.is_empty() && local == Kind::Mention.name() {
-                "expected 'prov:mentionOf' under the strict profile, found 'mentionOf'".to_owned()
+            if prefix.is_empty() && local == Kind::Mention.name() {
+                Self::expected_at(start, "'prov:mentionOf' under the strict profile")
             } else {
-                format!(
-                    "expected a PROV statement, found unknown keyword {}",
-                    describe(&start.kind)
+                Self::error_at(
+                    start,
+                    format!(
+                        "expected a PROV statement, found unknown keyword {}",
+                        describe(&start.kind)
+                    ),
                 )
-            };
-            Self::error_at(start, message)
+            }
         })?;
         self.bump();
-        self.expect(&TokenKind::LParen, "'('")?;
-        let closed = self.takes_no_extras(kind);
+        Ok((start, kind))
+    }
 
-        // Elements take a mandatory identifier; relations an optional `id;` or `-;`.
-        let mut id = None;
-        let mut args: Vec<(&Token, Arg)> = Vec::new();
+    // optionalIdentifier ::= (identifierOrMarker ";")?
+
+    /// An element's mandatory identifier, or a relation's `id;` or `-;`
+    /// before its first argument.
+    fn identifier_and_first_argument(
+        &mut self,
+        kind: Kind,
+    ) -> Result<(Option<QName>, Vec<Positional<'t>>)> {
         if kind.is_element() {
             let name = self.identifier("an identifier")?;
-            id = Some(self.resolve(&name)?);
-        } else {
-            let first = self.argument()?;
-            if self.peek().kind == TokenKind::Semicolon {
-                id = match first.1 {
-                    Arg::Name(q) => Some(q),
-                    Arg::Marker => None,
-                    Arg::Time(_) => {
-                        return Err(Self::error_at(
-                            first.0,
-                            format!(
-                                "expected an identifier or '-' before ';', found {}",
-                                describe(&first.0.kind)
-                            ),
-                        ));
-                    }
-                };
-                if closed {
-                    return Err(Self::error_at(
-                        first.0,
-                        format!(
-                            "expected no identifier in {} under the strict profile, found {}",
-                            kind.name(),
-                            describe(&first.0.kind)
-                        ),
-                    ));
-                }
-                self.bump();
-                args.push(self.argument()?);
-            } else {
-                args.push(first);
-            }
+            return Ok((Some(self.resolve(&name)?), Vec::new()));
         }
+        let first = self.argument()?;
+        if self.peek().kind != TokenKind::Semicolon {
+            return Ok((None, vec![first]));
+        }
+        let id = match first.1 {
+            Arg::Name(q) => Some(q),
+            Arg::Marker => None,
+            Arg::Time(_) => {
+                return Err(Self::expected_at(
+                    first.0,
+                    "an identifier or '-' before ';'",
+                ));
+            }
+        };
+        if self.takes_no_extras(kind) {
+            return Err(Self::expected_at(
+                first.0,
+                &format!("no identifier in {} under the strict profile", kind.name()),
+            ));
+        }
+        self.bump();
+        Ok((id, vec![self.argument()?]))
+    }
 
-        // The argument list ends at ')' or at the ',' before '['.
+    /// The remaining arguments, pushed onto `args`, and the attribute block,
+    /// up to the `)`. The argument list ends at `)` or at the `,` before `[`.
+    fn remaining_arguments(
+        &mut self,
+        kind: Kind,
+        args: &mut Vec<Positional<'t>>,
+    ) -> Result<Attributes> {
+        let closed = self.takes_no_extras(kind);
         let mut attributes = None;
         while self.peek().kind == TokenKind::Comma {
             self.bump();
@@ -424,13 +465,10 @@ impl<'t> Parser<'t> {
                 // block. `prov:mentionOf` with one reads as a mention under
                 // both profiles, a recorded departure.
                 if closed && kind != Kind::Mention {
-                    return Err(Self::error_at(
-                        self.peek(),
-                        format!(
-                            "expected no attributes in {} under the strict profile, found '['",
-                            kind.name()
-                        ),
-                    ));
+                    return Err(self.expected(&format!(
+                        "no attributes in {} under the strict profile",
+                        kind.name()
+                    )));
                 }
                 attributes = Some(self.attribute_value_pairs()?);
                 break;
@@ -444,26 +482,27 @@ impl<'t> Parser<'t> {
             "',' or ')'"
         };
         self.expect(&TokenKind::RParen, closing)?;
-        let attributes = attributes.unwrap_or_default();
+        Ok(attributes.unwrap_or_default())
+    }
 
+    /// An error at `start` unless `count` is one of the kind's arities.
+    fn check_arity(start: &Token, kind: Kind, count: usize) -> Result<()> {
         let arities = kind.arities();
-        if !arities.contains(&args.len()) {
-            let allowed = arities
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(" or ");
-            return Err(Self::error_at(
-                start,
-                format!(
-                    "expected {allowed} arguments to {}, found {}",
-                    kind.name(),
-                    args.len()
-                ),
-            ));
+        if arities.contains(&count) {
+            return Ok(());
         }
-        let formals = self.formals(kind, arities, args)?;
-        Record::from_parts(kind, id, formals, attributes).map_err(|e| at(start, e))
+        let allowed = arities
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(" or ");
+        Err(Self::error_at(
+            start,
+            format!(
+                "expected {allowed} arguments to {}, found {count}",
+                kind.name()
+            ),
+        ))
     }
 
     /// Match positional arguments to the kind's formals; `-` is absent.
@@ -473,7 +512,7 @@ impl<'t> Parser<'t> {
         &self,
         kind: Kind,
         arities: &[usize],
-        args: Vec<(&Token, Arg)>,
+        args: Vec<Positional<'_>>,
     ) -> Result<Vec<(FormalAttr, Formal)>> {
         let required = arities.iter().copied().min().unwrap_or(0);
         let mut out = Vec::new();
@@ -488,11 +527,10 @@ impl<'t> Parser<'t> {
                     if !self.profile.allows(Relaxation::MarkerInRequiredPosition)
                         && i < required =>
                 {
-                    return Err(Self::error_at(
+                    return Err(Self::expected_at(
                         token,
-                        format!(
-                            "expected an identifier for argument {} of {} under the strict \
-                             profile, found '-'",
+                        &format!(
+                            "an identifier for argument {} of {} under the strict profile",
                             i + 1,
                             kind.name()
                         ),
@@ -502,14 +540,7 @@ impl<'t> Parser<'t> {
                 Arg::Time(t) if attr.is_time() => out.push((*attr, Formal::Time(t))),
                 Arg::Name(q) if !attr.is_time() => out.push((*attr, Formal::Name(q))),
                 Arg::Time(_) | Arg::Name(_) => {
-                    return Err(Self::error_at(
-                        token,
-                        format!(
-                            "expected {wanted} for prov:{}, found {}",
-                            attr.local_name(),
-                            describe(&token.kind)
-                        ),
-                    ));
+                    return Err(Self::expected_at(token, &format!("{wanted} for {attr}")));
                 }
             }
         }
@@ -518,7 +549,7 @@ impl<'t> Parser<'t> {
 
     // argument ::= identifier | time | "-"
 
-    fn argument(&mut self) -> Result<(&'t Token, Arg)> {
+    fn argument(&mut self) -> Result<Positional<'t>> {
         let token = self.peek();
         let arg = match &token.kind {
             TokenKind::Marker => {
@@ -569,35 +600,50 @@ impl<'t> Parser<'t> {
 
     // literal ::= STRING_LITERAL ("@" LANGTAG | "%%" datatype)? | INT_LITERAL | QUALIFIED_NAME_LITERAL
 
-    /// A literal. A value error is placed at the literal's first token.
-    fn literal(&mut self) -> Result<Value> {
-        let start = self.peek();
-        let value = match &start.kind {
+    /// Consume a literal's tokens.
+    pub(super) fn literal_parts(&mut self) -> Result<LiteralParts<'t>> {
+        match &self.peek().kind {
             TokenKind::Str(s) => {
                 self.bump();
-                match &self.peek().kind {
+                let suffix = match &self.peek().kind {
                     TokenKind::LangTag(tag) => {
                         self.bump();
-                        LangStr::new(s.as_str(), tag.as_str()).map(Value::LangStr)
+                        Suffix::Lang(tag)
                     }
                     TokenKind::Typed => {
                         self.bump();
-                        let datatype = self.identifier("a datatype")?;
-                        let datatype = self.resolve(&datatype)?;
-                        Value::typed_in(self.scope(), s, datatype)
+                        Suffix::Datatype(self.identifier("a datatype")?)
                     }
-                    _ => Ok(Value::Str(s.clone())),
-                }
+                    _ => Suffix::None,
+                };
+                Ok(LiteralParts::Str(s, suffix))
             }
             TokenKind::Int(i) => {
                 self.bump();
-                Ok(Value::integer(i))
+                Ok(LiteralParts::Int(i))
             }
             TokenKind::QNameLiteral { prefix, local } => {
                 self.bump();
+                Ok(LiteralParts::Name { prefix, local })
+            }
+            _ => Err(self.expected("a literal")),
+        }
+    }
+
+    /// A literal. A value error is placed at the literal's first token.
+    fn literal(&mut self) -> Result<Value> {
+        let start = self.peek();
+        let value = match self.literal_parts()? {
+            LiteralParts::Str(s, Suffix::None) => Ok(Value::Str(s.to_owned())),
+            LiteralParts::Str(s, Suffix::Lang(tag)) => LangStr::new(s, tag).map(Value::LangStr),
+            LiteralParts::Str(s, Suffix::Datatype(datatype)) => {
+                let datatype = self.resolve(&datatype)?;
+                Value::typed_in(self.scope(), s, datatype)
+            }
+            LiteralParts::Int(i) => Ok(Value::integer(i)),
+            LiteralParts::Name { prefix, local } => {
                 self.scope().resolve_parts(prefix, local).map(Value::QName)
             }
-            _ => return Err(self.expected("a literal")),
         };
         value.map_err(|e| at(start, e))
     }

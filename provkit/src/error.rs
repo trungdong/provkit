@@ -78,7 +78,7 @@ pub enum Error {
     },
     /// A name PROV-N cannot write, because its namespace IRI holds a
     /// character `IRI_REF` forbids.
-    #[error("PROV-N cannot write the name {name}: {reason}")]
+    #[error("PROV-N cannot write the name {}: {reason}", clip(&.name.to_string()))]
     Unwritable {
         /// The name, which displays as its IRI.
         name: QName,
@@ -125,7 +125,7 @@ pub enum Error {
     /// A literal's text is not valid for its datatype.
     #[error("invalid {datatype} literal `{}`: {reason}", clip(.lexical))]
     InvalidLiteral {
-        /// The datatype, as written.
+        /// The datatype, as `prefix:local` under its usual prefix (`xsd:dateTime`).
         datatype: String,
         /// The text, as written.
         lexical: String,
@@ -133,7 +133,7 @@ pub enum Error {
         reason: String,
     },
     /// Records sharing an identifier cannot be merged.
-    #[error("cannot unify records `{id}`: {reason}")]
+    #[error("cannot unify records `{}`: {reason}", clip(&.id.to_string()))]
     Unification {
         /// The shared identifier.
         id: QName,
@@ -141,7 +141,7 @@ pub enum Error {
         reason: String,
     },
     /// Two bundles in one document carry the same identifier.
-    #[error("duplicate bundle `{0}`")]
+    #[error("duplicate bundle `{}`", clip(&.0.to_string()))]
     DuplicateBundle(QName),
     /// JSON could not be parsed or printed.
     #[cfg(feature = "json")]
@@ -181,6 +181,9 @@ mod tests {
     #[test]
     fn messages_quote_at_most_eighty_characters() {
         let long = "x".repeat(1 << 20);
+        let huge_name = QName::new("http://example.org/", &long).unwrap();
+        // A name displays as its whole IRI, which is longer than its local part.
+        let name_count = format!("({} characters)", huge_name.to_string().chars().count());
         let errors = [
             Error::InvalidQName(long.clone()),
             Error::InvalidPrefix(long.clone()),
@@ -192,6 +195,15 @@ mod tests {
                 lexical: long.clone(),
                 reason: "missing 'T'".into(),
             },
+            Error::Unification {
+                id: huge_name.clone(),
+                reason: "kinds differ".into(),
+            },
+            Error::DuplicateBundle(huge_name.clone()),
+            Error::Unwritable {
+                name: huge_name,
+                reason: "the namespace IRI contains '>' (U+003E)".into(),
+            },
             Error::InRecord {
                 section: "entity".into(),
                 key: long.clone(),
@@ -201,7 +213,10 @@ mod tests {
         for e in errors {
             let text = e.to_string();
             assert!(text.len() < 300, "{} bytes", text.len());
-            assert!(text.contains("(1048576 characters)"), "{text}");
+            assert!(
+                text.contains("(1048576 characters)") || text.contains(&name_count),
+                "{text}"
+            );
         }
         // The payload is whole.
         let Error::InvalidQName(payload) = Error::InvalidQName(long.clone()) else {

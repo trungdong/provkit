@@ -10,7 +10,6 @@ use crate::{Namespaces, Result};
 
 impl<'t> Parser<'t> {
     // namespaceDeclarations ::= (defaultNamespaceDeclaration | namespaceDeclaration)*
-
     pub(super) fn namespace_declarations(&mut self) -> Result<Namespaces> {
         let mut ns = Namespaces::new();
         let mut seen: HashSet<String> = HashSet::new();

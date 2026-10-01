@@ -337,8 +337,7 @@ impl Kind {
             Some(attr) => Err(invalid(
                 self,
                 format!(
-                    "prov:{} is given as an attribute; its value belongs in the positional argument",
-                    attr.local_name()
+                    "{attr} is given as an attribute; its value belongs in the positional argument"
                 ),
             )),
             None => Ok(()),

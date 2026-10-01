@@ -10,6 +10,7 @@ use crate::{Error, QName, Result, pn};
 
 /// The reserved `prov` prefix.
 pub(crate) const PROV_PREFIX: &str = "prov";
+/// The reserved `xsd` prefix.
 const XSD_PREFIX: &str = "xsd";
 
 static PROV_IRI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from(PROV));
@@ -393,6 +394,7 @@ fn reserved_shared(prefix: &str) -> Option<&'static Arc<str>> {
         .find_map(|(p, iri)| (p == prefix).then_some(iri))
 }
 
+/// The IRI of a reserved prefix, if `prefix` is one of the two.
 fn reserved(prefix: &str) -> Option<&'static str> {
     reserved_shared(prefix).map(|iri| &**iri)
 }

@@ -93,78 +93,15 @@ impl DateTime {
         let (date, rest) = text
             .split_once('T')
             .ok_or_else(|| invalid(text, "missing 'T'"))?;
-        let (negative, date) = match date.strip_prefix('-') {
-            Some(d) => (true, d),
-            None => (false, date),
-        };
-        let mut parts = date.splitn(3, '-');
-        let year_text = parts.next().unwrap_or("");
-        let month_text = parts.next().ok_or_else(|| invalid(text, "missing month"))?;
-        let day_text = parts.next().ok_or_else(|| invalid(text, "missing day"))?;
-        if year_text.len() < 4 || !year_text.bytes().all(|b| b.is_ascii_digit()) {
-            return Err(invalid(text, "year needs at least four digits"));
-        }
-        if year_text.len() > 4 && year_text.starts_with('0') {
-            return Err(invalid(text, "year has a leading zero"));
-        }
-        let year: i64 = year_text
-            .parse()
-            .map_err(|_| invalid(text, "year out of range"))?;
-        let year = if negative { -year } else { year };
-        let month =
-            two_digits(month_text).ok_or_else(|| invalid(text, "month is not two digits"))?;
-        let day = two_digits(day_text).ok_or_else(|| invalid(text, "day is not two digits"))?;
-
-        // Time: hh:mm:ss, optional fraction, optional zone.
+        let (year, month, day) = parse_date(text, date)?;
         let (time, zone) = split_zone(rest);
-        let (hms, fraction) = match time.split_once('.') {
-            Some((h, f)) => (h, Some(f)),
-            None => (time, None),
-        };
-        let mut t = hms.splitn(3, ':');
-        let hour = two_digits(t.next().unwrap_or(""))
-            .ok_or_else(|| invalid(text, "hour is not two digits"))?;
-        let minute = two_digits(t.next().unwrap_or(""))
-            .ok_or_else(|| invalid(text, "minute is not two digits"))?;
-        let second = two_digits(t.next().unwrap_or(""))
-            .ok_or_else(|| invalid(text, "second is not two digits"))?;
-        let nanos = match fraction {
-            Some(f) if !f.is_empty() && f.bytes().all(|b| b.is_ascii_digit()) => {
-                // Keep nine digits; further digits are preserved in the source text only.
-                let digits: String = f.chars().take(9).collect();
-                let padded = format!("{digits:0<9}");
-                padded
-                    .parse::<u32>()
-                    .map_err(|_| invalid(text, "bad fraction"))?
-            }
-            Some(_) => return Err(invalid(text, "fraction is not digits")),
-            None => 0,
-        };
+        let (hour, minute, second, nanos, fraction) = parse_time(text, time)?;
         // XSD's `endOfDayFrag` admits zeros only, and `nanos` holds nine
         // digits, so the fraction is checked as written.
         if hour == 24 && fraction.is_some_and(|f| f.bytes().any(|b| b != b'0')) {
             return Err(invalid(text, "hour 24 needs 00:00:00"));
         }
-        let offset = match zone {
-            "" => None,
-            "Z" => Some(0),
-            z => {
-                let sign = match z.as_bytes()[0] {
-                    b'+' => 1,
-                    b'-' => -1,
-                    _ => return Err(invalid(text, "bad timezone")),
-                };
-                let (oh, om) = z[1..]
-                    .split_once(':')
-                    .ok_or_else(|| invalid(text, "bad timezone"))?;
-                let oh = two_digits(oh).ok_or_else(|| invalid(text, "bad timezone hour"))?;
-                let om = two_digits(om).ok_or_else(|| invalid(text, "bad timezone minute"))?;
-                if oh > 14 || om > 59 || (oh == 14 && om != 0) {
-                    return Err(invalid(text, "timezone outside -14:00..+14:00"));
-                }
-                Some(sign * (i32::from(oh) * 60 + i32::from(om)))
-            }
-        };
+        let offset = parse_zone(text, zone)?;
         let dt = DateTime {
             year,
             month,
@@ -255,7 +192,7 @@ impl DateTime {
             self.minute, self.second
         );
         if self.nanos >= 1_000_000_000 {
-            // Only `new` can hold this, for the text of its error.
+            // Reached only from `new`, which renders the rejected value into its error.
             let _ = write!(out, " plus {} nanoseconds", self.nanos);
         } else if self.nanos != 0 {
             let digits = format!("{:09}", self.nanos);
@@ -383,6 +320,84 @@ fn invalid(text: &str, reason: &str) -> Error {
         datatype: "xsd:dateTime".into(),
         lexical: text.into(),
         reason: reason.into(),
+    }
+}
+
+/// The year, month and day of `date`, the part of `text` before the `T`.
+fn parse_date(text: &str, date: &str) -> Result<(i64, u8, u8)> {
+    let (negative, date) = match date.strip_prefix('-') {
+        Some(d) => (true, d),
+        None => (false, date),
+    };
+    let mut parts = date.splitn(3, '-');
+    let year_text = parts.next().unwrap_or("");
+    let month_text = parts.next().ok_or_else(|| invalid(text, "missing month"))?;
+    let day_text = parts.next().ok_or_else(|| invalid(text, "missing day"))?;
+    if year_text.len() < 4 || !year_text.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(invalid(text, "year needs at least four digits"));
+    }
+    if year_text.len() > 4 && year_text.starts_with('0') {
+        return Err(invalid(text, "year has a leading zero"));
+    }
+    let year: i64 = year_text
+        .parse()
+        .map_err(|_| invalid(text, "year out of range"))?;
+    let year = if negative { -year } else { year };
+    let month = two_digits(month_text).ok_or_else(|| invalid(text, "month is not two digits"))?;
+    let day = two_digits(day_text).ok_or_else(|| invalid(text, "day is not two digits"))?;
+    Ok((year, month, day))
+}
+
+/// The hour, minute, second and nanoseconds of `time` (`hh:mm:ss` and an
+/// optional fraction), with the fraction as written.
+fn parse_time<'a>(text: &str, time: &'a str) -> Result<(u8, u8, u8, u32, Option<&'a str>)> {
+    let (hms, fraction) = match time.split_once('.') {
+        Some((h, f)) => (h, Some(f)),
+        None => (time, None),
+    };
+    let mut t = hms.splitn(3, ':');
+    let hour = two_digits(t.next().unwrap_or(""))
+        .ok_or_else(|| invalid(text, "hour is not two digits"))?;
+    let minute = two_digits(t.next().unwrap_or(""))
+        .ok_or_else(|| invalid(text, "minute is not two digits"))?;
+    let second = two_digits(t.next().unwrap_or(""))
+        .ok_or_else(|| invalid(text, "second is not two digits"))?;
+    let nanos = match fraction {
+        Some(f) if !f.is_empty() && f.bytes().all(|b| b.is_ascii_digit()) => {
+            // Keep nine digits; further digits are preserved in the source text only.
+            let digits: String = f.chars().take(9).collect();
+            let padded = format!("{digits:0<9}");
+            padded
+                .parse::<u32>()
+                .map_err(|_| invalid(text, "bad fraction"))?
+        }
+        Some(_) => return Err(invalid(text, "fraction is not digits")),
+        None => 0,
+    };
+    Ok((hour, minute, second, nanos, fraction))
+}
+
+/// The offset in minutes that `zone` names, or `None` when there is no zone.
+fn parse_zone(text: &str, zone: &str) -> Result<Option<i32>> {
+    match zone {
+        "" => Ok(None),
+        "Z" => Ok(Some(0)),
+        z => {
+            let sign = match z.as_bytes()[0] {
+                b'+' => 1,
+                b'-' => -1,
+                _ => return Err(invalid(text, "bad timezone")),
+            };
+            let (oh, om) = z[1..]
+                .split_once(':')
+                .ok_or_else(|| invalid(text, "bad timezone"))?;
+            let oh = two_digits(oh).ok_or_else(|| invalid(text, "bad timezone hour"))?;
+            let om = two_digits(om).ok_or_else(|| invalid(text, "bad timezone minute"))?;
+            if oh > 14 || om > 59 || (oh == 14 && om != 0) {
+                return Err(invalid(text, "timezone outside -14:00..+14:00"));
+            }
+            Ok(Some(sign * (i32::from(oh) * 60 + i32::from(om))))
+        }
     }
 }
 

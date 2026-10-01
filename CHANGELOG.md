@@ -22,6 +22,8 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     those present. `FormalRef::to_formal`, and `From<FormalRef>` for
     `Formal`, give an owned `Formal`, and `FormalAttr::ALL` lists every
     formal attribute.
+  - `FormalAttr` implements `Display` as the attribute name, `prov:` plus the
+    local name.
   - `Kind`, `Record`, `FormalAttr`, `Formal`, `FormalRef`, `Error`,
     `provn::Profile`, `provn::Ignored` and `provn::ReadReport` are
     `#[non_exhaustive]`, so a `match` on any of them in another crate needs

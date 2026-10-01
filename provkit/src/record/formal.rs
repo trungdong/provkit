@@ -91,6 +91,13 @@ impl FormalAttr {
     }
 }
 
+/// Writes the formal as its attribute name, `prov:` and the local name.
+impl std::fmt::Display for FormalAttr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "prov:{}", self.local_name())
+    }
+}
+
 /// An owned formal attribute value, for [`Record::from_parts`](super::Record::from_parts).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -173,27 +180,20 @@ impl Formals {
         let allowed = kind.formals();
         for (i, (attr, value)) in items.iter().enumerate() {
             if !allowed.contains(attr) {
-                return Err(invalid(
-                    kind,
-                    format!("no formal attribute prov:{}", attr.local_name()),
-                ));
+                return Err(invalid(kind, format!("no formal attribute {attr}")));
             }
             let time_expected = attr.is_time();
             if time_expected != matches!(value, Formal::Time(_)) {
                 return Err(invalid(
                     kind,
                     format!(
-                        "prov:{} needs a {}",
-                        attr.local_name(),
+                        "{attr} needs a {}",
                         if time_expected { "dateTime" } else { "name" }
                     ),
                 ));
             }
             if items[..i].iter().any(|(a, _)| a == attr) {
-                return Err(invalid(
-                    kind,
-                    format!("prov:{} given twice", attr.local_name()),
-                ));
+                return Err(invalid(kind, format!("{attr} given twice")));
             }
         }
         Ok(Formals { items })

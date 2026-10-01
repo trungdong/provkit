@@ -209,8 +209,7 @@ fn merge(kind: Kind, id: &QName, members: &[&Record]) -> Result<Record> {
                     return Err(Error::Unification {
                         id: id.clone(),
                         reason: format!(
-                            "prov:{} is {} in one record and {} in another",
-                            attr.local_name(),
+                            "{attr} is {} in one record and {} in another",
                             show(existing),
                             show(&value)
                         ),

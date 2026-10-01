@@ -1,7 +1,7 @@
 //! Extensibility expressions (Recommendation section 5, productions [49] to
 //! [51]). Each is parsed in full and left out of the document: names are not
-//! resolved, literals are not built, a time is checked, and the outermost expression is
-//! recorded as an [`Ignored`].
+//! resolved, literals are not built, a time is checked, and the outermost
+//! expression is recorded as an [`Ignored`].
 
 use super::Ignored;
 use super::lexer::{Token, TokenKind};
@@ -80,7 +80,7 @@ impl Parser<'_> {
                 Ok(())
             }
             TokenKind::Str(_) | TokenKind::Int(_) | TokenKind::QNameLiteral { .. } => {
-                self.skip_literal()
+                self.literal_parts().map(drop)
             }
             _ => Err(self.expected("an identifier, '-', a literal, a dateTime, '(' or '{'")),
         }
@@ -117,7 +117,7 @@ impl Parser<'_> {
         loop {
             self.identifier("an attribute name")?;
             self.expect(&TokenKind::Equals, "'='")?;
-            self.skip_literal()?;
+            self.literal_parts()?;
             match self.peek().kind {
                 TokenKind::Comma => {
                     self.bump();
@@ -128,33 +128,6 @@ impl Parser<'_> {
                 }
                 _ => return Err(self.expected("',' or ']'")),
             }
-        }
-    }
-
-    // literal ::= STRING_LITERAL ("@" LANGTAG | "%%" datatype)? | INT_LITERAL | QUALIFIED_NAME_LITERAL
-
-    /// A literal's tokens, without building a value.
-    fn skip_literal(&mut self) -> Result<()> {
-        match self.peek().kind {
-            TokenKind::Str(_) => {
-                self.bump();
-                match self.peek().kind {
-                    TokenKind::LangTag(_) => {
-                        self.bump();
-                    }
-                    TokenKind::Typed => {
-                        self.bump();
-                        self.identifier("a datatype")?;
-                    }
-                    _ => {}
-                }
-                Ok(())
-            }
-            TokenKind::Int(_) | TokenKind::QNameLiteral { .. } => {
-                self.bump();
-                Ok(())
-            }
-            _ => Err(self.expected("a literal")),
         }
     }
 }

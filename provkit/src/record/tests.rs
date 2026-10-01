@@ -17,6 +17,14 @@ fn formal_for(attr: FormalAttr) -> Formal {
 }
 
 #[test]
+fn a_formal_displays_as_its_prefixed_name() {
+    assert_eq!(F::StartTime.to_string(), "prov:startTime");
+    for attr in FormalAttr::ALL {
+        assert_eq!(attr.to_string(), format!("prov:{}", attr.local_name()));
+    }
+}
+
+#[test]
 fn tables() {
     assert_eq!(Kind::ALL.len(), 18);
     assert_eq!(Kind::from_name("wasGeneratedBy"), Some(Kind::Generation));
