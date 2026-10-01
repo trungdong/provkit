@@ -12,6 +12,12 @@ use std::marker::PhantomData;
 use crate::Kind;
 use crate::error::clip;
 
+/// The white space JSON allows before a value.
+const JSON_SPACE: [char; 4] = [' ', '\t', '\r', '\n'];
+
+/// The `prefix` key that holds the default namespace.
+pub(super) const DEFAULT: &str = "default";
+
 /// A record's attributes, key order kept.
 pub(super) type JsonRecord = IndexMap<String, JsonValue>;
 /// Records of one kind, keyed by identifier.
@@ -185,7 +191,6 @@ impl<T> OneOrMany<T> {
 }
 
 /// A JSON attribute value, one of the schema's `attributeValues` forms.
-#[derive(Debug, Clone, PartialEq)]
 pub(super) enum JsonValue {
     Str(String),
     /// A JSON number, as its token text.
@@ -204,7 +209,6 @@ pub(super) enum JsonValue {
 }
 
 /// Why a value could not be read, and where.
-#[derive(Debug, Clone, PartialEq)]
 pub(super) struct InvalidValue {
     /// What was wrong, without a position.
     pub message: String,
@@ -254,37 +258,16 @@ impl JsonValue {
 /// `serde_json`, as a private map), each of which loses the spelling.
 ///
 /// The capture borrows the value's text from the input without recursing
-/// into it. [`from_raw`] refuses an array inside an array before parsing it,
-/// so the depth of the input never becomes depth of recursion.
+/// into it. An array's elements are captured the same way, and one that is
+/// itself an array is refused before it is parsed, so the depth of the input
+/// never becomes depth of recursion.
 ///
 /// A value that cannot be read is [`JsonValue::Invalid`], not an error: an
 /// error raised here would be placed where the outer parser stands, past
 /// the whole value, and would not name its record.
 impl<'de> Deserialize<'de> for JsonValue {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        Ok(from_raw(
-            <&RawValue>::deserialize(d)?.get(),
-            Nesting::Allowed,
-        ))
-    }
-}
-
-/// Whether the value being read may be an array.
-#[derive(Clone, Copy, PartialEq)]
-enum Nesting {
-    Allowed,
-    Inside,
-}
-
-/// An element of an array of values, which cannot be an array itself.
-struct Element(JsonValue);
-
-impl<'de> Deserialize<'de> for Element {
-    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        Ok(Element(from_raw(
-            <&RawValue>::deserialize(d)?.get(),
-            Nesting::Inside,
-        )))
+        Ok(from_raw(<&RawValue>::deserialize(d)?.get()))
     }
 }
 
@@ -292,21 +275,14 @@ impl<'de> Deserialize<'de> for Element {
 /// the outer parser has skipped over. That checks everything but the
 /// surrogates of a string's `\u` escapes, so a string can still fail to
 /// decode here. It is an invalid value like any other.
-fn from_raw(text: &str, nesting: Nesting) -> JsonValue {
-    let text = text.trim_start_matches([' ', '\t', '\r', '\n']);
-    match text.as_bytes().first() {
-        Some(b'-' | b'0'..=b'9') => JsonValue::Number(text.to_owned()),
-        Some(b'[') if nesting == Nesting::Inside => JsonValue::Invalid(InvalidValue::at_start(
-            text,
-            "nested arrays are not allowed in an attribute value",
-        )),
-        _ => {
-            let mut fragment = serde_json::Deserializer::from_str(text);
-            fragment
-                .deserialize_any(ValueVisitor)
-                .unwrap_or_else(|e| JsonValue::Invalid(InvalidValue::from_error(text, &e)))
-        }
+fn from_raw(text: &str) -> JsonValue {
+    let text = text.trim_start_matches(JSON_SPACE);
+    if text.starts_with(['-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9']) {
+        return JsonValue::Number(text.to_owned());
     }
+    serde_json::Deserializer::from_str(text)
+        .deserialize_any(ValueVisitor)
+        .unwrap_or_else(|e| JsonValue::Invalid(InvalidValue::from_error(text, &e)))
 }
 
 /// The message of an error raised while parsing a fragment. Its line and
@@ -331,9 +307,6 @@ impl<'de> Visitor<'de> for ValueVisitor {
     fn visit_str<E: de::Error>(self, v: &str) -> Result<JsonValue, E> {
         Ok(JsonValue::Str(v.to_owned()))
     }
-    fn visit_string<E: de::Error>(self, v: String) -> Result<JsonValue, E> {
-        Ok(JsonValue::Str(v))
-    }
     fn visit_bool<E: de::Error>(self, v: bool) -> Result<JsonValue, E> {
         Ok(JsonValue::Bool(v))
     }
@@ -346,7 +319,16 @@ impl<'de> Visitor<'de> for ValueVisitor {
         // invalid element then stands for the whole array.
         let mut items = Vec::new();
         let mut invalid = None;
-        while let Some(Element(item)) = seq.next_element()? {
+        while let Some(raw) = seq.next_element::<&RawValue>()? {
+            let text = raw.get().trim_start_matches(JSON_SPACE);
+            let item = if text.starts_with('[') {
+                JsonValue::Invalid(InvalidValue::at_start(
+                    text,
+                    "nested arrays are not allowed in an attribute value",
+                ))
+            } else {
+                from_raw(text)
+            };
             match item {
                 JsonValue::Invalid(found) if invalid.is_none() => invalid = Some(found),
                 item => items.push(item),
@@ -393,7 +375,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
 /// is not a string is refused by its first byte, without being parsed: how
 /// a number is parsed depends on the features of `serde_json`.
 fn member_string(key: &str, text: &str) -> Result<String, InvalidValue> {
-    let text = text.trim_start_matches([' ', '\t', '\r', '\n']);
+    let text = text.trim_start_matches(JSON_SPACE);
     if !text.starts_with('"') {
         return Err(InvalidValue::at_start(
             text,

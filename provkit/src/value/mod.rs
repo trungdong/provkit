@@ -308,7 +308,7 @@ pub(crate) fn trim_xsd_space(lexical: &str) -> &str {
     lexical.trim_matches([' ', '\t', '\r', '\n'])
 }
 
-fn is_qname_datatype(datatype: &QName) -> bool {
+pub(crate) fn is_qname_datatype(datatype: &QName) -> bool {
     *datatype == *XSD_QNAME || *datatype == *PROV_QUALIFIED_NAME
 }
 

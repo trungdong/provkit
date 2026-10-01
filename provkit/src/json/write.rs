@@ -4,7 +4,9 @@ use std::io::Write;
 
 use indexmap::IndexMap;
 
-use super::wire::{JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany};
+use super::wire::{
+    DEFAULT, JsonBundle, JsonDocument, JsonRecord, JsonSection, JsonValue, OneOrMany,
+};
 use crate::namespaces::WriteScope;
 use crate::well_known::{XSD_DATETIME, XSD_QNAME};
 use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
@@ -49,9 +51,6 @@ pub fn to_string(document: &Document) -> Result<String> {
     Ok(String::from_utf8(buf).expect("serde_json writes UTF-8"))
 }
 
-/// The `prefix` key that holds the default namespace.
-const DEFAULT: &str = "default";
-
 fn to_wire(document: &Document) -> Result<JsonDocument> {
     // A copy of the document's table, so minting a prefix never touches the
     // caller's document. It is written last, after every name has been seen.
@@ -68,7 +67,7 @@ fn to_wire(document: &Document) -> Result<JsonDocument> {
         bundles.insert(bundle_key, wire);
     }
     Ok(JsonDocument {
-        prefix: prefix_table(&table, |_| true, document.namespaces.default_namespace()),
+        prefix: prefix_table(&table, |_| true),
         sections,
         bundle: bundles,
     })
@@ -126,11 +125,7 @@ fn bundle_wire(
     };
     // Entries the document already declares are inherited, not repeated.
     let inherited = |prefix: &str, iri: &str| outer.lookup(prefix) == Some(iri);
-    let prefix = prefix_table(
-        &own,
-        |(p, iri)| !inherited(p, iri),
-        bundle.namespaces.default_namespace(),
-    );
+    let prefix = prefix_table(&own, |(p, iri)| !inherited(p, iri));
     Ok((bundle_key, JsonBundle { prefix, sections }))
 }
 
@@ -138,7 +133,6 @@ fn bundle_wire(
 fn prefix_table(
     table: &Namespaces,
     keep: impl Fn((&str, &str)) -> bool,
-    default: Option<&str>,
 ) -> IndexMap<String, String> {
     let mut out = IndexMap::new();
     for (prefix, iri) in table.iter() {
@@ -146,7 +140,7 @@ fn prefix_table(
             out.insert(prefix.to_owned(), iri.to_string());
         }
     }
-    if let Some(default) = default {
+    if let Some(default) = table.default_namespace() {
         out.insert(DEFAULT.to_owned(), default.to_string());
     }
     out
@@ -159,10 +153,11 @@ fn sections(
     names: &mut WriteScope<'_>,
     next_blank: &mut usize,
 ) -> Result<IndexMap<Kind, JsonSection>> {
-    let blanks: Vec<Option<String>> = records
+    // Each record's identifier, or the blank label it is written under.
+    let ids: Vec<std::result::Result<&QName, String>> = records
         .iter()
         .map(|r| {
-            r.id().is_none().then(|| {
+            r.id().ok_or_else(|| {
                 *next_blank += 1;
                 format!("_:id{next_blank}")
             })
@@ -171,15 +166,10 @@ fn sections(
     let mut out = IndexMap::new();
     for &kind in Kind::ALL {
         let mut section: IndexMap<String, Vec<JsonRecord>> = IndexMap::new();
-        for (record, blank) in records
-            .iter()
-            .zip(&blanks)
-            .filter(|(r, _)| r.kind() == kind)
-        {
-            let id = match (record.id(), blank) {
-                (Some(id), _) => key(id, names),
-                (None, Some(label)) => label.clone(),
-                (None, None) => unreachable!("a record without an id has a label"),
+        for (record, id) in records.iter().zip(&ids).filter(|(r, _)| r.kind() == kind) {
+            let id = match id {
+                Ok(id) => key(id, names),
+                Err(label) => label.clone(),
             };
             section
                 .entry(id)
@@ -239,11 +229,6 @@ fn record_wire(record: &Record, names: &mut WriteScope<'_>) -> Result<JsonRecord
 /// Only plain strings are written bare. Everything else is a `$` object, so
 /// the reader never sees a raw JSON number or boolean.
 fn value_wire(value: &Value, names: &mut WriteScope<'_>) -> JsonValue {
-    let mut typed = |value: String, datatype: &QName| JsonValue::Typed {
-        value,
-        datatype: Some(key(datatype, names)),
-        lang: None,
-    };
     match value {
         Value::Str(s) => JsonValue::Str(s.clone()),
         // The PROV-JSON note, section 2.2, gives a language-tagged string
@@ -255,14 +240,19 @@ fn value_wire(value: &Value, names: &mut WriteScope<'_>) -> JsonValue {
         },
         Value::QName(q) => {
             let text = key(q, names);
-            JsonValue::Typed {
-                value: text,
-                datatype: Some(key(&XSD_QNAME, names)),
-                lang: None,
-            }
+            typed(text, &XSD_QNAME, names)
         }
-        Value::DateTime(d) => typed(d.to_string(), &XSD_DATETIME),
-        Value::Typed(t) => typed(t.lexical().to_owned(), t.datatype()),
+        Value::DateTime(d) => typed(d.to_string(), &XSD_DATETIME, names),
+        Value::Typed(t) => typed(t.lexical().to_owned(), t.datatype(), names),
+    }
+}
+
+/// A `$` object with `type`.
+fn typed(value: String, datatype: &QName, names: &mut WriteScope<'_>) -> JsonValue {
+    JsonValue::Typed {
+        value,
+        datatype: Some(key(datatype, names)),
+        lang: None,
     }
 }
 

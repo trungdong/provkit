@@ -42,11 +42,15 @@ pub fn read(text: &str) -> Result<Document> {
 /// valid JSON which is not PROV-JSON, so it is a structure error here.
 fn shape_error(e: serde_json::Error) -> Error {
     if e.classify() == serde_json::error::Category::Data {
-        Error::JsonStructure {
-            message: clip_quoted(&e.to_string()),
-        }
+        structure(clip_quoted(&e.to_string()))
     } else {
         Error::Json(e)
+    }
+}
+
+fn structure(message: impl Into<String>) -> Error {
+    Error::JsonStructure {
+        message: message.into(),
     }
 }
 

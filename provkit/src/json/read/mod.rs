@@ -2,22 +2,17 @@
 
 use indexmap::IndexMap;
 
-use super::wire::{InvalidValue, JsonDocument, JsonRecord, JsonSection, JsonValue};
+use super::structure;
+use super::wire::{DEFAULT, InvalidValue, JsonDocument, JsonRecord, JsonSection, JsonValue};
 use crate::builder::DocumentBuilder;
 use crate::error::clip;
 use crate::namespaces::Scope;
-use crate::value::{is_int_literal, trim_xsd_space};
+use crate::value::{is_int_literal, is_qname_datatype, trim_xsd_space};
 use crate::well_known::{XSD_DATETIME, XSD_DOUBLE};
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
     Result, Value,
 };
-
-fn structure(message: impl Into<String>) -> Error {
-    Error::JsonStructure {
-        message: message.into(),
-    }
-}
 
 /// `error` as an error in the record or bundle under `key` of `section`.
 fn in_record(section: &str, key: &str, error: Error) -> Error {
@@ -31,7 +26,7 @@ fn in_record(section: &str, key: &str, error: Error) -> Error {
 fn namespaces(prefix: &IndexMap<String, String>) -> Result<Namespaces> {
     let mut ns = Namespaces::new();
     for (p, iri) in prefix {
-        if p == "default" {
+        if p == DEFAULT {
             ns.set_default(iri.as_str());
         } else {
             ns.declare(p, iri)?;
@@ -111,10 +106,7 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
         let scope = Scope::within(&bundle_ns, &doc_ns);
         let located = |e| in_record("bundle", key, e);
         if key.starts_with("_:") {
-            return Err(located(structure(format!(
-                "bundle `{}` needs a real identifier",
-                clip(key)
-            ))));
+            return Err(located(needs_identifier("bundle", key)));
         }
         // The bundle's own name resolves in the bundle scope (PROV-N 3.7.4).
         let id = scope.resolve(key).map_err(located)?;
@@ -151,15 +143,16 @@ fn emit_sections(
 fn record_id(kind: Kind, key: &str, scope: Scope<'_>) -> Result<Option<QName>> {
     if key.starts_with("_:") {
         if kind.is_element() {
-            return Err(structure(format!(
-                "{} `{}` needs a real identifier",
-                kind.name(),
-                clip(key)
-            )));
+            return Err(needs_identifier(kind.name(), key));
         }
         return Ok(None);
     }
     scope.resolve(key).map(Some)
+}
+
+/// The error for a blank key in `section`, an element kind or `bundle`.
+fn needs_identifier(section: &str, key: &str) -> Error {
+    structure(format!("{section} `{}` needs a real identifier", clip(key)))
 }
 
 /// One record, or several for `hadMember` with an array of members.
@@ -210,10 +203,9 @@ fn records_from(
 /// The value of the formal under `key`, a time when `time` and a name
 /// otherwise. A plain string is the text: a time parses after the space,
 /// tab, CR and LF around it are trimmed, and a name resolves in `scope`. A
-/// value object with no `lang` goes through the rule both readers use for
-/// typed literals and must give a `Value::QName` for a name; for a time its
-/// `type` must resolve to `xsd:dateTime`. Anything else is not a formal
-/// value.
+/// value object with no `lang` is read the same way when its `type`
+/// resolves to `xsd:dateTime` for a time, or to `xsd:QName` or
+/// `prov:QUALIFIED_NAME` for a name. Anything else is not a formal value.
 fn formal_value(value: &JsonValue, key: &str, time: bool, scope: Scope<'_>) -> Result<Formal> {
     let expected = if time { "a dateTime" } else { "a name" };
     let wrong = |found: &str| structure(format!("`{}` must be {expected}, not {found}", clip(key)));
@@ -232,29 +224,23 @@ fn formal_value(value: &JsonValue, key: &str, time: bool, scope: Scope<'_>) -> R
             return Err(wrong("a number, boolean or array"));
         }
     };
-    if time {
-        if let Some(datatype) = datatype
-            && datatype != *XSD_DATETIME
-        {
+    if let Some(datatype) = datatype {
+        let fits = if time {
+            datatype == *XSD_DATETIME
+        } else {
+            is_qname_datatype(&datatype)
+        };
+        if !fits {
             return Err(wrong(&format!(
                 "a value typed <{}>",
                 clip(&datatype.to_string())
             )));
         }
-        return DateTime::parse(trim_xsd_space(text)).map(Formal::Time);
     }
-    match datatype {
-        None => scope.resolve(text).map(Formal::Name),
-        Some(datatype) => match Value::typed_in(scope, text, datatype)? {
-            Value::QName(name) => Ok(Formal::Name(name)),
-            other => match other.datatype() {
-                Some(datatype) => Err(wrong(&format!(
-                    "a value typed <{}>",
-                    clip(&datatype.to_string())
-                ))),
-                None => Err(wrong("a language-tagged string")),
-            },
-        },
+    if time {
+        DateTime::parse(trim_xsd_space(text)).map(Formal::Time)
+    } else {
+        scope.resolve(text).map(Formal::Name)
     }
 }
 
