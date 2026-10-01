@@ -221,6 +221,13 @@ fn a_megabyte_of_input_text_stays_out_of_every_message() {
             json!({"prefix": prefix, "entity": {format!("{big}y:e"): {}}}),
             "undeclared prefix",
         ),
+        // A string where a record belongs, which serde quotes.
+        (
+            json!({"entity": {"ex:e": big.as_str()}}),
+            "expected a record object or an array of record objects",
+        ),
+        // A string where the namespace table belongs.
+        (json!({"prefix": big.as_str()}), "expected a map"),
     ];
     for (document, fragment) in cases {
         let text = document.to_string();

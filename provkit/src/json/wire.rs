@@ -337,13 +337,12 @@ fn from_raw(text: &str, nesting: Nesting) -> JsonValue {
 
 /// The message of an error raised while parsing a fragment. Its line and
 /// column count from the fragment's start, so they are dropped; the reader
-/// adds the position in the document.
+/// adds the position in the document. A string the message quotes is cut
+/// to the length every message keeps to.
 fn without_position(e: &serde_json::Error) -> String {
     let message = e.to_string();
-    match message.rfind(" at line ") {
-        Some(end) => message[..end].to_owned(),
-        None => message,
-    }
+    let end = message.rfind(" at line ").unwrap_or(message.len());
+    super::clip_quoted(&message[..end])
 }
 
 /// Builds a [`JsonValue`] from any JSON value but a number, which

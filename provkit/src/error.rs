@@ -103,7 +103,10 @@ pub enum Error {
     #[error("`{}` has no prefix and no default namespace is declared", clip(.0))]
     NoDefaultNamespace(String),
     /// `prov` or `xsd` was declared to a different IRI.
-    #[error("prefix `{prefix}` is reserved for <{expected}> and cannot be declared as <{found}>")]
+    #[error(
+        "prefix `{prefix}` is reserved for <{expected}> and cannot be declared as <{}>",
+        clip(.found)
+    )]
     ReservedPrefix {
         /// The reserved prefix.
         prefix: String,
@@ -155,6 +158,7 @@ pub enum Error {
 /// A namespace declaration as [`Error::UnwritableNamespace`] names it. An
 /// empty `prefix` is the default namespace.
 fn declaration(prefix: &str, iri: &str) -> String {
+    let iri = clip(iri);
     if prefix.is_empty() {
         format!("the default namespace <{iri}>")
     } else {
@@ -220,6 +224,30 @@ mod tests {
                     section: "entity".into(),
                     key: long.clone(),
                     error: Box::new(Error::InvalidQName("a b".into())),
+                },
+                &text_count,
+            ),
+            (
+                Error::ReservedPrefix {
+                    prefix: "prov".into(),
+                    expected: "http://www.w3.org/ns/prov#".into(),
+                    found: long.clone(),
+                },
+                &text_count,
+            ),
+            (
+                Error::UnwritableNamespace {
+                    prefix: "p".into(),
+                    iri: long.clone(),
+                    reason: "the namespace IRI contains '>' (U+003E)".into(),
+                },
+                &text_count,
+            ),
+            (
+                Error::UnwritableNamespace {
+                    prefix: String::new(),
+                    iri: long.clone(),
+                    reason: "the namespace IRI contains '>' (U+003E)".into(),
                 },
                 &text_count,
             ),
