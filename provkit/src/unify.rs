@@ -1,6 +1,12 @@
-//! Merging records that share an identifier (PROV-CONSTRAINTS key
-//! constraints 22 and 23) and rejecting the sharing that PROV-CONSTRAINTS
-//! forbids.
+//! Merging records that share an identifier, and rejecting the sharing
+//! that PROV-CONSTRAINTS forbids.
+//!
+//! The merge follows the key constraints (22 and 23) with one difference:
+//! an absent formal unifies with any value, in every position. In four
+//! positions (`plan` of an association; `activity`, `generation` and
+//! `usage` of a derivation) PROV-CONSTRAINTS reads `-` as "none", which
+//! unifies only with another "none". Every formal here is an `Option`, so
+//! "none" and "unknown" are one state.
 //!
 //! - Constraint 53: `used`, `wasGeneratedBy`, `wasInvalidatedBy`,
 //!   `wasStartedBy`, `wasEndedBy`, `wasInformedBy`, `wasAttributedTo`,
@@ -19,6 +25,7 @@ use std::collections::HashMap;
 
 use indexmap::IndexMap;
 
+use crate::error::clip;
 use crate::{Attributes, Bundle, Document, Error, Formal, FormalAttr, Kind, QName, Record, Result};
 
 impl Document {
@@ -54,10 +61,9 @@ impl Document {
     /// # Errors
     ///
     /// - [`Error::Unification`] when two records conflict.
-    /// - [`Error::InvalidRecord`] from [`Record::from_parts`] when a merged
-    ///   record carries an attribute that spells one of its own formals
-    ///   (`prov:activity` on a generation). Readers never produce such a
-    ///   record, but a hand-built one can.
+    /// - [`Error::InvalidRecord`] when a record carries an attribute that
+    ///   spells one of its own formals (`prov:activity` on a generation).
+    ///   Readers never produce such a record, but a hand-built one can.
     pub fn unified(&self) -> Result<Document> {
         let mut bundles = Vec::new();
         for bundle in self.merged_bundles().iter() {
@@ -76,6 +82,12 @@ impl Document {
 }
 
 fn unify_records(records: &[Record]) -> Result<Vec<Record>> {
+    // A hand-built record can carry an attribute named after one of its own
+    // formals. The readers and the writers refuse it, and so does this.
+    for record in records {
+        record.check_attributes()?;
+    }
+
     // Positions per identifier, groups in first-seen order. PROV-DM gives
     // these four kinds no identifier, so one carried by PROV-JSON is only a
     // grouping key and never merges.
@@ -219,19 +231,20 @@ fn merge(kind: Kind, id: &QName, members: &[&Record]) -> Result<Record> {
 }
 
 fn show(formal: &Formal) -> String {
-    match formal {
+    let text = match formal {
         Formal::Name(q) => q.to_string(),
         Formal::Time(t) => t.to_string(),
-    }
+    };
+    clip(&text).into_owned()
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::test_util::{bundle, ex};
-    use crate::well_known::PROV_LABEL;
+    use crate::test_util::{bundle, entity, ex};
+    use crate::well_known::{PROV, PROV_LABEL};
     use crate::{
-        Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Kind, Namespaces,
-        Record,
+        Association, Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F,
+        Generation, Kind, Namespaces, QName, Record, Value,
     };
 
     fn rec(kind: Kind, id: &str, formals: Vec<(F, Formal)>, label: Option<&str>) -> Record {
@@ -364,6 +377,78 @@ mod tests {
             reason.contains("prov:activity") && reason.contains("a1") && reason.contains("a2"),
             "{reason}"
         );
+    }
+
+    #[test]
+    fn a_conflict_between_long_names_gives_a_short_message() {
+        let long =
+            |c: char| QName::new("http://example.org/", &c.to_string().repeat(1 << 20)).unwrap();
+        let mut d = Document::new();
+        for c in ['a', 'b'] {
+            d.records.push(rec(
+                Kind::Usage,
+                "u",
+                vec![(F::Activity, Formal::Name(long(c)))],
+                None,
+            ));
+        }
+        let Err(Error::Unification { reason, .. }) = d.unified() else {
+            panic!("expected a unification error")
+        };
+        assert!(reason.len() < 600, "{} bytes", reason.len());
+    }
+
+    #[test]
+    fn a_lone_record_with_an_own_formal_attribute_is_invalid() {
+        let mut attributes = Attributes::new();
+        attributes.insert(QName::new(PROV, "activity").unwrap(), Value::QName(ex("a")));
+        let mut d = Document::new();
+        d.records.push(Record::Generation(Generation {
+            id: Some(ex("g")),
+            entity: Some(ex("e")),
+            activity: None,
+            time: None,
+            attributes,
+        }));
+        assert!(matches!(
+            d.unified(),
+            Err(Error::InvalidRecord {
+                kind: Kind::Generation,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn unified_keeps_the_namespace_tables() {
+        let mut d = Document::new();
+        d.namespaces.declare("ex", "http://example.org/").unwrap();
+        let mut inner = bundle("b", vec![entity("e")]);
+        inner.namespaces.declare("in", "http://inner.org/").unwrap();
+        d.bundles.push(inner);
+        let u = d.unified().unwrap();
+        assert_eq!(u.namespaces, d.namespaces);
+        assert_eq!(u.bundles[0].namespaces, d.bundles[0].namespaces);
+    }
+
+    #[test]
+    fn an_absent_formal_unifies_with_a_present_one_in_every_position() {
+        // PROV-CONSTRAINTS makes `plan` non-expandable, so `-` there means
+        // "no plan" and would not unify with a plan. The model holds every
+        // formal as an `Option`, so it cannot tell the two apart, and merges.
+        let association = |plan: Option<QName>| {
+            Record::Association(Association {
+                id: Some(ex("assoc")),
+                activity: Some(ex("a")),
+                agent: Some(ex("ag")),
+                plan,
+                attributes: Attributes::new(),
+            })
+        };
+        let mut d = Document::new();
+        d.records = vec![association(None), association(Some(ex("pl")))];
+        let u = d.unified().unwrap();
+        assert_eq!(u.records, vec![association(Some(ex("pl")))]);
     }
 
     fn pair(a: Kind, b: Kind) -> crate::Result<Document> {
@@ -618,7 +703,7 @@ mod tests {
 
     #[test]
     fn two_spellings_of_one_iri_merge() {
-        let split = |ns: &str, local: &str| crate::QName::new(ns, local).unwrap();
+        let split = |ns: &str, local: &str| QName::new(ns, local).unwrap();
         let mut d = Document::new();
         for (ns, local, label) in [
             ("http://example.org/", "foo/bar", "one"),
@@ -651,12 +736,9 @@ mod tests {
     #[test]
     fn merging_a_hand_built_formal_named_attribute_is_an_invalid_record() {
         let mut a = Attributes::new();
-        a.insert(
-            crate::QName::new(crate::well_known::PROV, "activity").unwrap(),
-            ex("x").into(),
-        );
+        a.insert(QName::new(PROV, "activity").unwrap(), ex("x").into());
         let generation = |attributes: Attributes| {
-            Record::Generation(crate::Generation {
+            Record::Generation(Generation {
                 id: Some(ex("g")),
                 entity: Some(ex("e")),
                 activity: None,

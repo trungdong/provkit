@@ -37,8 +37,6 @@ impl Record {
     }
 
     /// An error if an attribute is named after one of this record's own formals.
-    // Only the writers call this, and both are feature-gated.
-    #[cfg_attr(not(any(feature = "json", feature = "provn")), allow(dead_code))]
     pub(crate) fn check_attributes(&self) -> Result<()> {
         self.kind().check_attributes(self.attributes())
     }

@@ -420,6 +420,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn tables_that_differ_only_in_the_default_are_unequal() {
+        let mut a = Namespaces::new();
+        a.declare("ex", "http://example.org/").unwrap();
+        let mut b = a.clone();
+        assert_eq!(a, b);
+        b.set_default("http://default.org/");
+        assert_ne!(a, b);
+        a.set_default("http://other.org/");
+        assert_ne!(a, b);
+    }
+
+    #[test]
     fn resolves_prefixed_bare_and_predeclared() {
         let mut ns = Namespaces::new();
         ns.declare("ex", "http://example.org/").unwrap();

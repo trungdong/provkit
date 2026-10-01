@@ -273,6 +273,20 @@ mod tests {
     }
 
     #[test]
+    fn merged_bundles_keep_a_later_copy_s_new_prefix() {
+        let mut first = bundle("b", vec![entity("e1")]);
+        first.namespaces.declare("a", "http://a.org/").unwrap();
+        let mut second = bundle("b", vec![entity("e2")]);
+        second.namespaces.declare("z", "http://z.org/").unwrap();
+        let mut d = Document::new();
+        d.bundles = vec![first, second];
+        let merged = d.merged_bundles();
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].namespaces.lookup("a"), Some("http://a.org/"));
+        assert_eq!(merged[0].namespaces.lookup("z"), Some("http://z.org/"));
+    }
+
+    #[test]
     fn merged_bundles_borrow_when_identifiers_are_unique() {
         let doc = Document {
             bundles: vec![
