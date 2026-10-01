@@ -16,8 +16,9 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
   - Every relation formal attribute is optional.
   - `Kind`, the type of a record. `Kind::name` is both the PROV-N keyword and
     the PROV-JSON key, `Kind::from_name` is its inverse, and `Kind::ALL` lists
-    the eighteen kinds, elements first, then relations in PROV-DM order. `Kind::is_element` tells an element
-    (`entity`, `activity`, `agent`) from a relation.
+    the eighteen kinds, elements first, then relations in PROV-DM order.
+    `Kind::is_element` tells an element (`entity`, `activity`, `agent`) from a
+    relation.
   - `Record::formal` reads one formal attribute and `Record::formals` lists
     those present. `FormalRef::to_formal`, and `From<FormalRef>` for
     `Formal`, give an owned `Formal`, and `FormalAttr::ALL` lists every

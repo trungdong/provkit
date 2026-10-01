@@ -359,6 +359,16 @@ fn a_section_is_checked_by_name_before_its_body() {
             "unknown record kind `derivedByInsertionFrom`",
         ),
         (
+            r#"{"hadDictionaryMember": {"_:d": {"prov:dictionary": "ex:d", "prov:key": "k"}}}"#
+                .to_owned(),
+            "unknown record kind `hadDictionaryMember`",
+        ),
+        (
+            r#"{"derivedByRemovalFrom": {"_:d": {"prov:after": "ex:d2", "prov:before": "ex:d1"}}}"#
+                .to_owned(),
+            "unknown record kind `derivedByRemovalFrom`",
+        ),
+        (
             format!(
                 r#"{{{PFX}, "bundle": {{"ex:b": {{"bundle": {{"ex:c": {{"entity": {{"ex:e": {{}}}}}}}}}}}}}}"#
             ),
@@ -961,6 +971,20 @@ fn a_formal_given_under_two_spellings_is_an_invalid_record() {
         ),
         "{error:?}"
     );
+    // On a `hadMember`, `prov:entity` is a member list, so two spellings
+    // give the members of both.
+    let text = r#"{"prefix": {"ex": "http://example.org/", "w3": "http://www.w3.org/ns/"},
+        "hadMember": {"ex:m": {"prov:collection": "ex:c", "prov:entity": "ex:a", "w3:prov#entity": "ex:b"}}}"#;
+    let d = doc(text);
+    let members: Vec<_> = d
+        .records
+        .iter()
+        .map(|r| match r {
+            Record::Membership(m) => m.entity.clone(),
+            other => panic!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(members, [Some(ex("a")), Some(ex("b"))]);
 }
 
 #[test]

@@ -150,18 +150,18 @@ fn profiles() {
 
 #[test]
 fn mention_takes_attributes() {
-    let d = doc(
-        "prov:mentionOf(ex:a, ex:b, ex:c, [ex:k=\"v\"])",
-        Profile::Strict,
-    );
-    let Record::Mention(m) = &d.records[0] else {
-        panic!("expected a mention, got {:?}", d.records[0]);
-    };
-    assert_eq!(m.bundle, Some(ex("c")));
-    assert_eq!(
-        m.attributes.get(&ex("k")).collect::<Vec<_>>(),
-        [&Value::from("v")]
-    );
+    for profile in [Profile::Strict, Profile::Default] {
+        let d = doc("prov:mentionOf(ex:a, ex:b, ex:c, [ex:k=\"v\"])", profile);
+        let Record::Mention(m) = &d.records[0] else {
+            panic!("expected a mention, got {:?}", d.records[0]);
+        };
+        assert_eq!(m.bundle, Some(ex("c")), "{profile:?}");
+        assert_eq!(
+            m.attributes.get(&ex("k")).collect::<Vec<_>>(),
+            [&Value::from("v")],
+            "{profile:?}"
+        );
+    }
 }
 
 #[test]

@@ -12,7 +12,8 @@ cargo install --locked provkit-cli
 cargo binstall provkit-cli
 ```
 
-The second command fetches a release binary. The binary is `provkit`. Prebuilt binaries are on the
+The second command fetches a release binary. The binary is `provkit`.
+Prebuilt binaries are on the
 [Releases](https://github.com/trungdong/provkit/releases) page.
 
 ## Command line
