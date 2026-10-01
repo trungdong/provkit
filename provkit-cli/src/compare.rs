@@ -1,13 +1,14 @@
 //! `provkit compare`: the records found on one side only, printed as
 //! PROV-N.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use clap::Args;
-use provkit::{Document, Error, FormalRef, Namespaces, QName, Record, provn};
+use provkit::{Bundle, Document, Error, FormalRef, Namespaces, QName, Record, provn};
 
 use crate::{Hint, read_document, shown, write_stdout};
 
@@ -48,11 +49,10 @@ pub fn run(args: &CompareArgs) -> Result<ExitCode> {
 }
 
 /// The records of `mine` that are not in `theirs`, in order, each once.
-fn only_in<'a>(mine: &[&'a Record], theirs: &[&Record]) -> Vec<&'a Record> {
-    let theirs: HashSet<&Record> = theirs.iter().copied().collect();
+fn only_in<'a>(mine: &'a [Record], theirs: &[Record]) -> Vec<&'a Record> {
+    let theirs: HashSet<&Record> = theirs.iter().collect();
     let mut seen = HashSet::new();
     mine.iter()
-        .copied()
         .filter(|r| !theirs.contains(r) && seen.insert(*r))
         .collect()
 }
@@ -61,23 +61,16 @@ fn only_in<'a>(mine: &[&'a Record], theirs: &[&Record]) -> Vec<&'a Record> {
 /// then each bundle under its heading. Each scope renders against one table
 /// and declares the prefixes it minted after its records.
 fn report_side(out: &mut String, name: &Path, this: &Document, other: &Document) -> Result<()> {
-    use std::fmt::Write as _;
-
-    let top = only_in(
-        &this.records.iter().collect::<Vec<_>>(),
-        &other.records.iter().collect::<Vec<_>>(),
-    );
+    let top = only_in(&this.records, &other.records);
 
     // Bundles sharing an identifier are one bundle, as in `Document` equality.
     let this_bundles = this.merged_bundles();
     let other_bundles = other.merged_bundles();
+    let other_by_id: HashMap<&QName, &Bundle> = other_bundles.iter().map(|b| (&b.id, b)).collect();
     let mut bundles = Vec::new();
     for bundle in this_bundles.iter() {
-        let theirs = other_bundles.iter().find(|b| b.id == bundle.id);
-        let records = only_in(
-            &bundle.records.iter().collect::<Vec<_>>(),
-            &theirs.map_or_else(Vec::new, |b| b.records.iter().collect()),
-        );
+        let theirs = other_by_id.get(&bundle.id).copied();
+        let records = only_in(&bundle.records, theirs.map_or(&[], |b| &b.records));
         if !records.is_empty() || theirs.is_none() {
             bundles.push((bundle, records));
         }
@@ -94,7 +87,6 @@ fn report_side(out: &mut String, name: &Path, this: &Document, other: &Document)
     }
     declare_minted(out, "  ", &table, declared)?;
     for (bundle, records) in bundles {
-        // A bundle sees its own prefixes first, then the document's.
         let mut scope = bundle.namespaces.with_fallback(&this.namespaces);
         let declared = scope.iter().count();
         match written_name(&bundle.id, &mut scope) {
@@ -117,8 +109,6 @@ fn declare_minted(
     table: &Namespaces,
     declared: usize,
 ) -> std::fmt::Result {
-    use std::fmt::Write as _;
-
     for (prefix, iri) in table.iter().skip(declared) {
         writeln!(out, "{indent}prefix {prefix} <{iri}>")?;
     }
@@ -181,8 +171,6 @@ fn statement_line(record: &Record, namespaces: &mut Namespaces) -> Result<String
 
 #[cfg(test)]
 mod tests {
-    use provkit::Bundle;
-
     use super::*;
 
     fn read(text: &str) -> Document {

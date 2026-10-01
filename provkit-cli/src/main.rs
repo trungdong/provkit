@@ -120,18 +120,14 @@ fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Docume
     let is_stdin = path == Path::new("-");
     let label = shown(path);
     let text = if is_stdin {
-        io::read_to_string(io::stdin()).with_context(|| label.clone())?
+        io::read_to_string(io::stdin())
     } else {
-        fs::read_to_string(path).with_context(|| label.clone())?
-    };
+        fs::read_to_string(path)
+    }
+    .with_context(|| label.clone())?;
+    // `-` has no extension, so standard input goes straight to sniffing.
     let format = from
-        .or_else(|| {
-            if is_stdin {
-                None
-            } else {
-                Format::from_path(path)
-            }
-        })
+        .or_else(|| Format::from_path(path))
         .or_else(|| Format::sniff(&text))
         .ok_or_else(|| match (is_stdin, hint) {
             (true, Hint::None) => anyhow!(
@@ -140,11 +136,10 @@ fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Docume
             (true, Hint::FromFlag) => {
                 anyhow!("cannot tell the format of standard input; use -f json or -f provn")
             }
-            (false, Hint::None) => anyhow!("{}: cannot tell the format", path.display()),
-            (false, Hint::FromFlag) => anyhow!(
-                "{}: cannot tell the format; use -f json or -f provn",
-                path.display()
-            ),
+            (false, Hint::None) => anyhow!("{label}: cannot tell the format"),
+            (false, Hint::FromFlag) => {
+                anyhow!("{label}: cannot tell the format; use -f json or -f provn")
+            }
         })?;
     let document = match format {
         Format::Json => json::read(&text).map_err(|e| located(&label, e))?,
@@ -194,7 +189,6 @@ fn convert(args: &ConvertArgs) -> Result<()> {
         })?,
     };
     let doc = read_document(&args.input, args.from, Hint::FromFlag)?;
-    let name = file.map_or_else(|| "<stdout>".to_owned(), |p| p.display().to_string());
 
     // Serialise first, so a library error never leaves a partial file.
     let mut buf = Vec::new();
@@ -204,8 +198,8 @@ fn convert(args: &ConvertArgs) -> Result<()> {
     }
     .with_context(|| shown(&args.input))?;
     match file {
-        None => write_stdout(&buf).with_context(|| name)?,
-        Some(path) => fs::write(path, &buf).with_context(|| name)?,
+        None => write_stdout(&buf).context("<stdout>")?,
+        Some(path) => fs::write(path, &buf).with_context(|| path.display().to_string())?,
     }
     Ok(())
 }
