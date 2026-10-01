@@ -10,11 +10,10 @@ use crate::{Error, QName, Result, pn};
 
 /// The reserved `prov` prefix.
 pub(crate) const PROV_PREFIX: &str = "prov";
-/// The reserved `xsd` prefix.
-const XSD_PREFIX: &str = "xsd";
 
-static PROV_IRI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from(PROV));
-static XSD_IRI: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from(XSD));
+/// The prefixes PROV-N predeclares (section 3.7.4), with their IRIs.
+static RESERVED: LazyLock<[(&str, Arc<str>); 2]> =
+    LazyLock::new(|| [(PROV_PREFIX, Arc::from(PROV)), ("xsd", Arc::from(XSD))]);
 
 /// A default namespace plus an ordered prefix-to-IRI table.
 ///
@@ -133,18 +132,12 @@ impl Namespaces {
 
     /// The IRI bound to `prefix`, including the reserved `prov` and `xsd`.
     pub fn lookup(&self, prefix: &str) -> Option<&str> {
-        match reserved(prefix) {
-            Some(iri) => Some(iri),
-            None => self.prefixes.get(prefix).map(|iri| &**iri),
-        }
+        self.binding(prefix).map(|iri| &**iri)
     }
 
-    /// As [`lookup`](Self::lookup), sharing the stored allocation.
-    fn lookup_shared(&self, prefix: &str) -> Option<Arc<str>> {
-        match reserved_shared(prefix) {
-            Some(iri) => Some(iri.clone()),
-            None => self.prefixes.get(prefix).cloned(),
-        }
+    /// As [`lookup`](Self::lookup), with the stored allocation.
+    fn binding(&self, prefix: &str) -> Option<&Arc<str>> {
+        reserved_shared(prefix).or_else(|| self.prefixes.get(prefix))
     }
 
     /// Resolve `prefix:local` or a bare `local` to a name.
@@ -185,22 +178,6 @@ impl Namespaces {
         WriteScope::of(self).ensure_prefix(namespace)
     }
 
-    /// Bind the first `nsN` that this table does not use and that `accept`
-    /// takes to `namespace`, even when `namespace` already has a prefix.
-    fn mint_prefix(&mut self, namespace: &str, accept: impl Fn(&str) -> bool) -> String {
-        let mut n = 1;
-        loop {
-            let candidate = format!("ns{n}");
-            if !self.prefixes.contains_key(candidate.as_str()) && accept(&candidate) {
-                self.bind(&candidate, Arc::from(namespace));
-                return candidate;
-            }
-            n += 1;
-        }
-    }
-}
-
-impl Namespaces {
     /// This table with `parent`'s bindings behind it.
     ///
     /// The result holds this table's prefixes and default namespace, then
@@ -263,8 +240,7 @@ impl<'a> Scope<'a> {
     /// As [`Namespaces::resolve`].
     pub(crate) fn resolve(self, text: &str) -> Result<QName> {
         match text.split_once(':') {
-            // `_:` marks a blank node; readers handle it before resolving.
-            Some(("" | "_", _)) => Err(Error::InvalidQName(text.into())),
+            Some(("", _)) => Err(Error::InvalidQName(text.into())),
             Some((prefix, local)) => self.resolve_parts(prefix, local),
             None => self.resolve_parts("", text),
         }
@@ -285,16 +261,19 @@ impl<'a> Scope<'a> {
                 .tables()
                 .find_map(|table| table.default.clone())
                 .ok_or_else(|| Error::NoDefaultNamespace(local.into()))?;
-            return QName::in_namespace(ns, local).map_err(|e| with_text(e, local));
+            return QName::in_namespace(ns, local);
         }
+        // `_:` marks a blank node; readers handle it before resolving.
         if prefix == "_" {
             return Err(Error::InvalidQName(format!("{prefix}:{local}")));
         }
         let ns = self
             .tables()
-            .find_map(|table| table.lookup_shared(prefix))
+            .find_map(|table| table.binding(prefix).cloned())
             .ok_or_else(|| Error::UndeclaredPrefix(prefix.into()))?;
-        QName::in_namespace(ns, local).map_err(|e| with_text(e, &format!("{prefix}:{local}")))
+        // `in_namespace` fails only on the local part. The error names the
+        // whole text.
+        QName::in_namespace(ns, local).map_err(|_| Error::InvalidQName(format!("{prefix}:{local}")))
     }
 }
 
@@ -354,7 +333,7 @@ impl<'a> WriteScope<'a> {
         if bare {
             return None;
         }
-        Some(self.ensure_prefix(name.namespace()))
+        Some(self.mint_prefix(name.namespace(), |_| true))
     }
 
     /// The prefix for `namespace`, minting `ns1`, `ns2`, ... when none exists.
@@ -366,33 +345,28 @@ impl<'a> WriteScope<'a> {
     }
 
     /// Bind the first `nsN` that neither table uses and that `accept` takes
-    /// to `namespace`, in `own`.
+    /// to `namespace`, in `own`, even when `namespace` already has a prefix.
     pub(crate) fn mint_prefix(&mut self, namespace: &str, accept: impl Fn(&str) -> bool) -> String {
-        let parent = self.parent;
-        self.own.mint_prefix(namespace, |candidate| {
-            parent.is_none_or(|p| p.lookup(candidate).is_none()) && accept(candidate)
-        })
+        let mut n = 1;
+        loop {
+            let candidate = format!("ns{n}");
+            if !self.own.prefixes.contains_key(candidate.as_str())
+                && self.parent.is_none_or(|p| p.lookup(&candidate).is_none())
+                && accept(&candidate)
+            {
+                self.own.bind(&candidate, Arc::from(namespace));
+                return candidate;
+            }
+            n += 1;
+        }
     }
-}
-
-/// Replace the payload of an [`Error::InvalidQName`] with the text as given.
-fn with_text(error: Error, text: &str) -> Error {
-    match error {
-        Error::InvalidQName(_) => Error::InvalidQName(text.into()),
-        other => other,
-    }
-}
-
-/// The prefixes PROV-N predeclares (section 3.7.4), with their IRIs.
-fn reserved_table() -> [(&'static str, &'static Arc<str>); 2] {
-    [(PROV_PREFIX, &PROV_IRI), (XSD_PREFIX, &XSD_IRI)]
 }
 
 /// The shared IRI of a reserved prefix.
 fn reserved_shared(prefix: &str) -> Option<&'static Arc<str>> {
-    reserved_table()
-        .into_iter()
-        .find_map(|(p, iri)| (p == prefix).then_some(iri))
+    RESERVED
+        .iter()
+        .find_map(|(p, iri)| (*p == prefix).then_some(iri))
 }
 
 /// The IRI of a reserved prefix, if `prefix` is one of the two.
@@ -402,9 +376,9 @@ fn reserved(prefix: &str) -> Option<&'static str> {
 
 /// The reserved prefix bound to `namespace`, if it is one of the two.
 fn reserved_prefix_for(namespace: &str) -> Option<&'static str> {
-    reserved_table()
-        .into_iter()
-        .find_map(|(p, iri)| (&**iri == namespace).then_some(p))
+    RESERVED
+        .iter()
+        .find_map(|(p, iri)| (**iri == *namespace).then_some(*p))
 }
 
 #[cfg(test)]

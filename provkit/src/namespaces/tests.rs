@@ -421,6 +421,28 @@ fn a_scope_resolves_as_the_merged_table_does() {
     );
 }
 
+/// Render each name through `bundle` in front of `document` and through the
+/// two tables merged, assert the two agree, and return the bundle's table
+/// with the prefixes minted on the way.
+fn render_as_merged(
+    document: &Namespaces,
+    bundle: &Namespaces,
+    names: &[(&str, &str)],
+) -> Namespaces {
+    let mut merged = bundle.with_fallback(document);
+    let mut own = bundle.clone();
+    let mut scope = WriteScope::within(&mut own, document);
+    for &(namespace, local) in names {
+        let name = QName::new(namespace, local).unwrap();
+        assert_eq!(
+            scope.render_parts(&name),
+            WriteScope::of(&mut merged).render_parts(&name),
+            "{namespace}{local}"
+        );
+    }
+    own
+}
+
 #[test]
 fn a_write_scope_renders_as_the_merged_table_does() {
     let (document, bundle) = layered();
@@ -438,19 +460,9 @@ fn a_write_scope_renders_as_the_merged_table_does() {
         ("http://new.org/", "a"),
         ("http://newer.org/", "a"),
         ("http://new.org/", "b"),
-        ("http://www.w3.org/ns/prov#", "type"),
+        (PROV, "type"),
     ];
-    let mut merged = bundle.with_fallback(&document);
-    let mut own = bundle.clone();
-    let mut scope = WriteScope::within(&mut own, &document);
-    for (namespace, local) in names {
-        let name = QName::new(namespace, local).unwrap();
-        assert_eq!(
-            scope.render_parts(&name),
-            WriteScope::of(&mut merged).render_parts(&name),
-            "{namespace}{local}"
-        );
-    }
+    let own = render_as_merged(&document, &bundle, &names);
     // The minted prefixes went to the bundle's table and skipped `ns1`,
     // which the document binds. The bundle shadows the document's `ex`,
     // and a default namespace cannot write a colon or an empty local
@@ -476,17 +488,7 @@ fn a_write_scope_with_its_own_default_renders_as_the_merged_table_does() {
         ("http://bundle.org/", "a"),
         ("http://new.org/", "a"),
     ];
-    let mut merged = bundle.with_fallback(&document);
-    let mut own = bundle.clone();
-    let mut scope = WriteScope::within(&mut own, &document);
-    for (namespace, local) in names {
-        let name = QName::new(namespace, local).unwrap();
-        assert_eq!(
-            scope.render_parts(&name),
-            WriteScope::of(&mut merged).render_parts(&name),
-            "{namespace}{local}"
-        );
-    }
+    render_as_merged(&document, &bundle, &names);
 }
 
 #[test]

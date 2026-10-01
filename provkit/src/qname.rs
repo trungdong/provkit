@@ -83,7 +83,7 @@ impl QName {
 
     /// The full IRI.
     pub fn iri(&self) -> String {
-        format!("{}{}", self.namespace, self.local)
+        self.to_string()
     }
 
     /// The bytes of the full IRI, without allocating.

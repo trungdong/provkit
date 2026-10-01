@@ -7,7 +7,7 @@
 pub(crate) const PN_CHARS_ESC: &str = "='(),-:;[].";
 
 /// `PN_CHARS_BASE`.
-pub(crate) fn is_pn_chars_base(c: char) -> bool {
+fn is_pn_chars_base(c: char) -> bool {
     matches!(c,
         'A'..='Z' | 'a'..='z' | '\u{C0}'..='\u{D6}' | '\u{D8}'..='\u{F6}' | '\u{F8}'..='\u{2FF}'
         | '\u{370}'..='\u{37D}' | '\u{37F}'..='\u{1FFF}' | '\u{200C}'..='\u{200D}'
@@ -16,12 +16,12 @@ pub(crate) fn is_pn_chars_base(c: char) -> bool {
 }
 
 /// `PN_CHARS_U`.
-pub(crate) fn is_pn_chars_u(c: char) -> bool {
+fn is_pn_chars_u(c: char) -> bool {
     is_pn_chars_base(c) || c == '_'
 }
 
 /// `PN_CHARS`.
-pub(crate) fn is_pn_chars(c: char) -> bool {
+fn is_pn_chars(c: char) -> bool {
     is_pn_chars_u(c)
         || c == '-'
         || c.is_ascii_digit()
@@ -31,7 +31,7 @@ pub(crate) fn is_pn_chars(c: char) -> bool {
 
 /// The plain characters of `PN_CHARS_OTHERS` [54]; `%` and `\` escapes are
 /// handled separately.
-pub(crate) fn is_pn_local_other(c: char) -> bool {
+fn is_pn_local_other(c: char) -> bool {
     matches!(c, '/' | '@' | '~' | '&' | '+' | '*' | '?' | '#' | '$' | '!')
 }
 
