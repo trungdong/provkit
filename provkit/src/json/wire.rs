@@ -2,9 +2,10 @@
 
 use indexmap::IndexMap;
 use serde::de::value::{MapAccessDeserializer, SeqAccessDeserializer};
-use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
+use serde::de::{self, DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::error::Category;
 use serde_json::value::RawValue;
 use std::fmt;
 use std::marker::PhantomData;
@@ -32,6 +33,9 @@ pub(super) struct JsonBundle {
 /// namespace table, `bundle` (documents only) the bundles, and every other
 /// key a section. A repeated `prefix` or `bundle` is an error; a repeated
 /// section keeps its last value.
+///
+/// A key that is refused has its value skipped first, so text that is not
+/// JSON is reported as that. The refusal then sits at the end of the value.
 struct ContainerVisitor {
     expecting: &'static str,
     bundles: bool,
@@ -56,21 +60,26 @@ impl<'de> Visitor<'de> for ContainerVisitor {
         let mut sections = IndexMap::new();
         let mut bundle = None;
         while let Some(key) = map.next_key::<String>()? {
-            match key.as_str() {
-                "prefix" if prefix.is_some() => return Err(de::Error::duplicate_field("prefix")),
-                "prefix" => prefix = Some(map.next_value()?),
-                "bundle" if self.bundles && bundle.is_some() => {
-                    return Err(de::Error::duplicate_field("bundle"));
+            let refused = match (key.as_str(), Kind::from_name(&key)) {
+                ("prefix", _) if prefix.is_none() => {
+                    prefix = Some(map.next_value()?);
+                    continue;
                 }
-                "bundle" if self.bundles => bundle = Some(map.next_value()?),
-                "bundle" => return Err(de::Error::custom("a bundle cannot hold a bundle")),
-                name => {
-                    let kind = Kind::from_name(name).ok_or_else(|| {
-                        de::Error::custom(format!("unknown record kind `{}`", clip(name)))
-                    })?;
+                ("bundle", _) if self.bundles && bundle.is_none() => {
+                    bundle = Some(map.next_value()?);
+                    continue;
+                }
+                ("prefix", _) => de::Error::duplicate_field("prefix"),
+                ("bundle", _) if self.bundles => de::Error::duplicate_field("bundle"),
+                ("bundle", _) => de::Error::custom("a bundle cannot hold a bundle"),
+                (_, Some(kind)) => {
                     sections.insert(kind, map.next_value()?);
+                    continue;
                 }
-            }
+                (name, None) => de::Error::custom(format!("unknown record kind `{}`", clip(name))),
+            };
+            map.next_value::<IgnoredAny>()?;
+            return Err(refused);
         }
         Ok((
             prefix.unwrap_or_default(),
@@ -211,6 +220,49 @@ pub(super) enum JsonValue {
     },
     /// An array of values. An element is never itself an array.
     Many(Vec<JsonValue>),
+    /// A value the wire layer could not read. The reader reports it, with
+    /// its position in the document and the record it belongs to.
+    Invalid(InvalidValue),
+}
+
+/// Why a value could not be read, and where.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct InvalidValue {
+    /// What was wrong, without a position.
+    pub message: String,
+    /// Whether the fragment is not JSON at all (a syntax error), as
+    /// opposed to JSON of the wrong shape.
+    pub syntax: bool,
+    /// The address of the fragment's first byte, to find it in the input.
+    pub start: usize,
+    /// 1-based line of the error inside the fragment.
+    pub line: usize,
+    /// 1-based column of the error on that line, in bytes.
+    pub column: usize,
+}
+
+impl InvalidValue {
+    /// The error `e` raised while parsing `fragment`.
+    fn from_error(fragment: &str, e: &serde_json::Error) -> Self {
+        InvalidValue {
+            message: without_position(e),
+            syntax: e.classify() != Category::Data,
+            start: fragment.as_ptr().addr(),
+            line: e.line(),
+            column: e.column(),
+        }
+    }
+
+    /// An array that begins `fragment`, where an array cannot be.
+    fn nested_array(fragment: &str) -> Self {
+        InvalidValue {
+            message: "nested arrays are not allowed in an attribute value".to_owned(),
+            syntax: false,
+            start: fragment.as_ptr().addr(),
+            line: 1,
+            column: 1,
+        }
+    }
 }
 
 impl JsonValue {
@@ -228,12 +280,19 @@ impl JsonValue {
 /// `f64` (or, when a dependant enables the `arbitrary_precision` feature of
 /// `serde_json`, as a private map), each of which loses the spelling.
 ///
-/// The capture copies the value's text without recursing into it. [`from_raw`]
-/// refuses an array inside an array before parsing it, so the depth of the
-/// input never becomes depth of recursion.
+/// The capture borrows the value's text from the input without recursing
+/// into it. [`from_raw`] refuses an array inside an array before parsing it,
+/// so the depth of the input never becomes depth of recursion.
+///
+/// A value that cannot be read is [`JsonValue::Invalid`], not an error: an
+/// error raised here would be placed where the outer parser stands, past
+/// the whole value, and would not name its record.
 impl<'de> Deserialize<'de> for JsonValue {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        from_raw(<&RawValue>::deserialize(d)?.get(), Nesting::Allowed)
+        Ok(from_raw(
+            <&RawValue>::deserialize(d)?.get(),
+            Nesting::Allowed,
+        ))
     }
 }
 
@@ -249,31 +308,36 @@ struct Element(JsonValue);
 
 impl<'de> Deserialize<'de> for Element {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        from_raw(<&RawValue>::deserialize(d)?.get(), Nesting::Inside).map(Element)
+        Ok(Element(from_raw(
+            <&RawValue>::deserialize(d)?.get(),
+            Nesting::Inside,
+        )))
     }
 }
 
-/// A value from its JSON text. The text is one complete JSON value: the
-/// outer parser has already checked its syntax.
-fn from_raw<E: de::Error>(text: &str, nesting: Nesting) -> Result<JsonValue, E> {
+/// A value from its JSON text. The text is one complete JSON value, which
+/// the outer parser has skipped over. That checks everything but the
+/// surrogates of a string's `\u` escapes, so parsing the text here can still
+/// find a syntax error.
+fn from_raw(text: &str, nesting: Nesting) -> JsonValue {
     let text = text.trim_start_matches([' ', '\t', '\r', '\n']);
     match text.as_bytes().first() {
-        Some(b'-' | b'0'..=b'9') => Ok(JsonValue::Number(text.to_owned())),
-        Some(b'[') if nesting == Nesting::Inside => Err(E::custom(
-            "nested arrays are not allowed in an attribute value",
-        )),
+        Some(b'-' | b'0'..=b'9') => JsonValue::Number(text.to_owned()),
+        Some(b'[') if nesting == Nesting::Inside => {
+            JsonValue::Invalid(InvalidValue::nested_array(text))
+        }
         _ => {
             let mut fragment = serde_json::Deserializer::from_str(text);
             fragment
                 .deserialize_any(ValueVisitor)
-                .map_err(|e| E::custom(without_position(&e)))
+                .unwrap_or_else(|e| JsonValue::Invalid(InvalidValue::from_error(text, &e)))
         }
     }
 }
 
 /// The message of an error raised while parsing a fragment. Its line and
-/// column count from the fragment's start, so they are dropped; the outer
-/// parser adds the position in the document.
+/// column count from the fragment's start, so they are dropped; the reader
+/// adds the position in the document.
 fn without_position(e: &serde_json::Error) -> String {
     let message = e.to_string();
     match message.rfind(" at line ") {
@@ -304,11 +368,18 @@ impl<'de> Visitor<'de> for ValueVisitor {
         Err(E::custom("null is not an attribute value"))
     }
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<JsonValue, A::Error> {
+        // The array is read to its end even after an invalid element,
+        // because the parser refuses an array left half read. The first
+        // invalid element then stands for the whole array.
         let mut items = Vec::new();
+        let mut invalid = None;
         while let Some(Element(item)) = seq.next_element()? {
-            items.push(item);
+            match item {
+                JsonValue::Invalid(found) if invalid.is_none() => invalid = Some(found),
+                item => items.push(item),
+            }
         }
-        Ok(JsonValue::Many(items))
+        Ok(invalid.map_or(JsonValue::Many(items), JsonValue::Invalid))
     }
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<JsonValue, A::Error> {
         let (mut value, mut datatype, mut lang) = (None, None, None);
@@ -358,6 +429,7 @@ impl Serialize for JsonValue {
                 }
                 m.end()
             }
+            JsonValue::Invalid(invalid) => Err(serde::ser::Error::custom(&invalid.message)),
             JsonValue::Many(items) => {
                 let mut q = s.serialize_seq(Some(items.len()))?;
                 for item in items {

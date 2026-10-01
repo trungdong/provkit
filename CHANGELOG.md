@@ -130,8 +130,9 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     depend on how serde_json represents numbers, so a dependant may enable
     `arbitrary_precision`.
   - `json::read` reports JSON of the wrong shape as `Error::JsonStructure`,
-    with the line and column, and keeps `Error::Json` for text that is not
-    JSON. An error inside a record is wrapped in `Error::InRecord`, which
+    with the line and column of the offending token, and keeps `Error::Json`
+    for text that is not JSON, wherever it is. An error inside a record, a
+    bad attribute value included, is wrapped in `Error::InRecord`, which
     names the section and the record's key.
   - The PROV-N reader parses every extensibility expression (section 5,
     productions [49] to [51]) under both profiles and leaves it out of the

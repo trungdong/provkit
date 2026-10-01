@@ -2,7 +2,7 @@
 
 use indexmap::IndexMap;
 
-use super::wire::{JsonDocument, JsonRecord, JsonSection, JsonValue};
+use super::wire::{InvalidValue, JsonDocument, JsonRecord, JsonSection, JsonValue};
 use crate::builder::DocumentBuilder;
 use crate::error::clip;
 use crate::namespaces::Scope;
@@ -40,7 +40,82 @@ fn namespaces(prefix: &IndexMap<String, String>) -> Result<Namespaces> {
     Ok(ns)
 }
 
-pub(super) fn emit(wire: &JsonDocument, builder: &mut DocumentBuilder) -> Result<()> {
+/// Where a fragment of `input` starts, as a 1-based line and column, when
+/// the fragment lies inside `input`. The column counts bytes, as
+/// `serde_json` counts them.
+fn position_of(input: &str, start: usize) -> Option<(usize, usize)> {
+    let offset = start.checked_sub(input.as_ptr().addr())?;
+    if offset >= input.len() {
+        return None;
+    }
+    let before = input.get(..offset)?;
+    let line = 1 + before.matches('\n').count();
+    let line_start = before.rfind('\n').map_or(0, |i| i + 1);
+    Some((line, offset - line_start + 1))
+}
+
+/// The error for a value the wire layer could not read. `input` is the
+/// text the document was read from.
+///
+/// Text that is not JSON gives the error `serde_json` raises for the whole
+/// input, which is the one a reader of plain JSON would see. The second
+/// parse runs only for such an error.
+///
+/// JSON of the wrong shape gives the wire layer's message and the position
+/// of the error in `input`. That is the fragment's position, moved on by
+/// the error's position inside the fragment, and it equals the position
+/// `serde_json` gives the same error when it reads the document in one pass.
+fn invalid_value(invalid: &InvalidValue, input: &str) -> Error {
+    if invalid.syntax
+        && let Err(e) = serde_json::from_str::<serde_json::Value>(input)
+    {
+        return Error::Json(e);
+    }
+    let position = position_of(input, invalid.start)
+        .filter(|_| invalid.line > 0)
+        .map(|(line, column)| match invalid.line {
+            1 => (line, (column + invalid.column).saturating_sub(1)),
+            inner => (line + inner - 1, invalid.column),
+        });
+    structure(match position {
+        Some((line, column)) => format!("{} at line {line} column {column}", invalid.message),
+        None => invalid.message.clone(),
+    })
+}
+
+/// Refuses the first value in `sections` that the wire layer could not
+/// read, naming its record.
+fn refuse_invalid(sections: &IndexMap<Kind, JsonSection>, input: &str) -> Result<()> {
+    for (kind, records) in sections {
+        for (key, group) in records {
+            let invalid = group
+                .as_slice()
+                .iter()
+                .flat_map(IndexMap::values)
+                .find_map(|value| match value {
+                    JsonValue::Invalid(invalid) => Some(invalid),
+                    _ => None,
+                });
+            if let Some(invalid) = invalid {
+                return Err(match invalid_value(invalid, input) {
+                    e @ Error::Json(_) => e,
+                    e => in_record(kind.name(), key, e),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Builds the document `wire` holds. `input` is the text `wire` was read
+/// from. A value the wire layer could not read is refused before anything
+/// is built, so it is reported ahead of an error in a name or a literal,
+/// as an error of the JSON parser is.
+pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuilder) -> Result<()> {
+    refuse_invalid(&wire.sections, input)?;
+    for bundle in wire.bundle.values() {
+        refuse_invalid(&bundle.sections, input)?;
+    }
     let doc_ns = namespaces(&wire.prefix)?;
     builder.start_document(doc_ns.clone());
     emit_sections(&wire.sections, Scope::of(&doc_ns), builder)?;
@@ -201,8 +276,11 @@ fn decode_value(v: &JsonValue, scope: Scope<'_>) -> Result<Value> {
         JsonValue::Str(s) => Value::Str(s.clone()),
         JsonValue::Number(text) => number(text)?,
         JsonValue::Bool(b) => Value::from(*b),
-        // The wire layer rejects an array inside an array, so this is not reached.
-        JsonValue::Many(_) => return Err(structure("nested arrays are not allowed")),
+        // The wire layer makes an array inside an array an invalid value,
+        // and `emit` refuses invalid values first, so this is not reached.
+        JsonValue::Many(_) | JsonValue::Invalid(_) => {
+            return Err(structure("not an attribute value"));
+        }
         JsonValue::Typed {
             value,
             datatype,

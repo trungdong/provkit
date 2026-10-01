@@ -13,17 +13,19 @@ use crate::{Document, Error, Result, strip_bom};
 ///
 /// # Errors
 ///
-/// - [`Error::Json`] for text that is not JSON.
+/// - [`Error::Json`] for text that is not JSON, wherever it is.
 /// - [`Error::JsonStructure`] for JSON that is not a PROV document. The
-///   message ends with the line and column where the reader knows them.
-/// - [`Error::InRecord`] wrapping the error for a name, literal or record
-///   PROV does not allow, and naming the record.
+///   message ends with the line and column of the offending token where
+///   the reader knows them.
+/// - [`Error::InRecord`] wrapping the error for an attribute value, name,
+///   literal or record PROV does not allow, and naming the record.
 /// - [`Error::InvalidPrefix`] and [`Error::ReservedPrefix`] for a `prefix`
 ///   entry that PROV-N could not write, returned as they are.
 pub fn read(text: &str) -> Result<Document> {
-    let wire: wire::JsonDocument = serde_json::from_str(strip_bom(text)).map_err(shape_error)?;
+    let text = strip_bom(text);
+    let wire: wire::JsonDocument = serde_json::from_str(text).map_err(shape_error)?;
     let mut builder = DocumentBuilder::new();
-    read::emit(&wire, &mut builder)?;
+    read::emit(&wire, text, &mut builder)?;
     Ok(builder.finish())
 }
 
