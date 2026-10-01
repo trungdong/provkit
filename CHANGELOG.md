@@ -126,18 +126,20 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     PROV-N writer writes a value bare when its text is `-?[0-9]+` and reads
     back as the same datatype, so `"5" %% xsd:long` is written quoted.
   - A PROV-JSON number is typed from its text and keeps it: an integer of
-    any size by range, any other number as `xsd:double`. The reader does not
-    depend on how serde_json represents numbers, so a dependant may enable
-    `arbitrary_precision`.
+    any size by range, any other number as `xsd:double`. An attribute value
+    reads the same whatever features of `serde_json` a dependant enables.
   - `json::read` returns `Error::Json` for text the JSON parser rejects, and
-    `Error::JsonStructure` for JSON that is not a PROV document, with the
-    line and column of the offending token. For a key the reader refuses (an
-    unknown section, a repeated `prefix` or `bundle`, a `bundle` inside a
-    bundle) the position is the end of that key's value. An attribute value
-    the reader cannot decode is a structure error, a string with a `\u`
-    escape that names a lone surrogate included. An error inside a record,
-    a bad attribute value included, is wrapped in `Error::InRecord`, which
-    names the section and the record's key.
+    `Error::JsonStructure` for JSON that is not a PROV document. An error
+    found while reading the JSON carries the line and column of the
+    offending token. For a key the reader refuses (an unknown section, a
+    repeated `prefix` or `bundle`, a `bundle` inside a bundle) the position
+    is just past that key's value. An attribute value the reader cannot
+    decode is such an error, a string with a `\u` escape that names a lone
+    surrogate included. An error found while building a record (a formal of
+    the wrong form, a blank identifier on an element or bundle, a name or
+    literal PROV does not allow) carries no position. An error inside a
+    record, of either sort, is wrapped in `Error::InRecord`, which names the
+    section and the record's key.
   - The PROV-N reader parses every extensibility expression (section 5,
     productions [49] to [51]) under both profiles and leaves it out of the
     document. Names inside one are not resolved and literals inside one are
@@ -175,8 +177,9 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     name, literal or record. `Error::DuplicateBundle` reports two bundles
     with one identifier in either reader.
     A message quotes at most 80 characters of rejected input and gives
-    the full length, and the error holds the whole text. A string that a
-    JSON structure error quotes is cut to the same length without the count.
+    the full length, and the error holds the whole text. A string that
+    `serde_json` quotes in a structure error is cut to the same length
+    without the count.
   - Public modules `json`, `provn` and `well_known`. Every other public item
     has one path. It is at the crate root, except `provn::Profile`,
     `provn::Ignored` and `provn::ReadReport`, which live under `provn`.

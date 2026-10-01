@@ -15,16 +15,19 @@ use crate::{Document, Error, Result, strip_bom};
 /// # Errors
 ///
 /// - [`Error::Json`] for text the JSON parser rejects.
-/// - [`Error::JsonStructure`] for JSON that is not a PROV document. The
-///   message ends with the line and column of the offending token. For a
-///   key the reader refuses (an unknown section, a repeated `prefix` or
-///   `bundle`, a `bundle` inside a bundle) the position is the end of that
-///   key's value. An attribute value the reader cannot decode is a
-///   structure error, a string with a `\u` escape that names a lone
-///   surrogate included.
-/// - [`Error::InRecord`] wrapping the error for an attribute value, name,
-///   literal or record PROV does not allow, and naming the section and the
-///   record's key.
+/// - [`Error::JsonStructure`] for JSON that is not a PROV document. An
+///   error found while reading the JSON ends with the line and column of
+///   the offending token. For a key the reader refuses (an unknown section,
+///   a repeated `prefix` or `bundle`, a `bundle` inside a bundle) the
+///   position is just past that key's value. An attribute value the reader
+///   cannot decode is such an error, a string with a `\u` escape that names
+///   a lone surrogate included. An error found while building a record (a
+///   formal of the wrong form, a blank identifier on an element or bundle)
+///   carries no position.
+/// - [`Error::InRecord`] wrapping an error inside a record: a bad attribute
+///   value, a formal of the wrong form, a blank identifier, or a name or
+///   literal PROV does not allow. It names the section and the record's
+///   key, which locates an error that carries no position.
 /// - [`Error::InvalidPrefix`] and [`Error::ReservedPrefix`] for a `prefix`
 ///   entry that PROV-N could not write, returned as they are.
 pub fn read(text: &str) -> Result<Document> {
@@ -53,20 +56,18 @@ fn shape_error(e: serde_json::Error) -> Error {
 /// expected a map`).
 ///
 /// serde prints the string escaped, so its true length is not known here
-/// and the cut is marked with `...` alone. A backslash at the cut is
-/// dropped, because it would be half an escape.
+/// and the cut is marked with `...` alone. A backslash at the cut that is
+/// half an escape is dropped: the last of an odd run of backslashes.
 fn clip_quoted(message: &str) -> String {
     let quoted = message.rfind("\", expected").and_then(|close| {
         let open = message[..close].find('"')? + 1;
         let (cut, _) = message[open..close].char_indices().nth(QUOTED)?;
-        Some((open + cut, close))
+        let kept = &message[open..open + cut];
+        let backslashes = kept.len() - kept.trim_end_matches('\\').len();
+        Some((open + cut - backslashes % 2, close))
     });
     match quoted {
-        Some((cut, close)) => format!(
-            "{}...{}",
-            message[..cut].trim_end_matches('\\'),
-            &message[close..]
-        ),
+        Some((cut, close)) => format!("{}...{}", &message[..cut], &message[close..]),
         None => message.to_owned(),
     }
 }
@@ -112,6 +113,18 @@ mod tests {
             format!(
                 "invalid type: string \"{}...\", expected a map",
                 "x".repeat(79)
+            )
+        );
+        // Whole pairs of backslashes stay: 200 of them are escaped as 400,
+        // and the cut after 80 splits no pair.
+        let backslashes = "\\".repeat(400);
+        assert_eq!(
+            clip_quoted(&format!(
+                "invalid type: string \"{backslashes}\", expected a map"
+            )),
+            format!(
+                "invalid type: string \"{}...\", expected a map",
+                "\\".repeat(80)
             )
         );
         // A short string, and a message that quotes nothing, are unchanged.

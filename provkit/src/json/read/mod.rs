@@ -57,8 +57,9 @@ fn position_of(input: &str, start: usize) -> Option<(usize, usize)> {
 /// The error for a value the wire layer could not read. It holds the wire
 /// layer's message and the position of the error in `input`, the text the
 /// document was read from. The position is the fragment's, moved on by the
-/// error's position inside the fragment. It equals the position `serde_json` gives the same
-/// error when it reads the document in one pass.
+/// error's position inside the fragment. It equals the position
+/// `serde_json` gives the same error when it reads the document in one
+/// pass.
 fn invalid_value(invalid: &InvalidValue, input: &str) -> Error {
     let position = position_of(input, invalid.start)
         .filter(|_| invalid.line > 0)

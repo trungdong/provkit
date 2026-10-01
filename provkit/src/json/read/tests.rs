@@ -1317,3 +1317,49 @@ fn an_error_under_a_duplicated_key_is_dropped_with_the_earlier_value() {
     assert_eq!(d.bundles[0].records.len(), 1);
     assert_eq!(d.bundles[0].records[0].id(), Some(&ex("f")));
 }
+
+#[test]
+fn a_later_member_of_a_value_object_replaces_an_earlier_one() {
+    let read = |value: &str| {
+        json::read(&one_record(
+            "entity",
+            "ex:e",
+            &format!(r#""ex:a": {value}"#),
+        ))
+    };
+    let cases = [
+        (r#"{"$": 1, "$": "x"}"#, Value::Str("x".into())),
+        (
+            r#"{"$": "1", "type": 5, "type": "xsd:int"}"#,
+            Value::typed("1", XSD_INT.clone()).unwrap(),
+        ),
+        (r#"{"$": "\ud800", "$": "x"}"#, Value::Str("x".into())),
+        (
+            r#"{"$": "x", "lang": null, "lang": "en"}"#,
+            Value::LangStr(LangStr::new("x", "en").unwrap()),
+        ),
+    ];
+    for (value, expected) in cases {
+        assert_eq!(values(&read(value).unwrap(), "a"), [expected], "{value}");
+    }
+    // The last value given is the member, so a bad one after a good one is
+    // an error. With several bad members, `$` is reported before `type`.
+    for (value, member, column) in [
+        (r#"{"$": "x", "$": 1}"#, "$", 87),
+        (r#"{"type": 5, "$": "x", "$": 1}"#, "$", 98),
+        (
+            r#"{"$": "x", "type": "xsd:string", "type": 5}"#,
+            "type",
+            112,
+        ),
+    ] {
+        let (_, _, error) = in_record(read(value).unwrap_err());
+        let expected = format!(
+            "expected a string as the `{member}` of a value object at line 1 column {column}"
+        );
+        assert!(
+            matches!(&error, Error::JsonStructure { message } if *message == expected),
+            "{value}: {error}"
+        );
+    }
+}

@@ -355,15 +355,10 @@ impl<'de> Visitor<'de> for ValueVisitor {
         Ok(invalid.map_or(JsonValue::Many(items), JsonValue::Invalid))
     }
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<JsonValue, A::Error> {
-        // As for an array, the object is read to its end after a member
-        // that is invalid, and the first such member stands for the object.
+        // A member given twice keeps its last value, as any repeated key
+        // does, so an earlier value that is invalid is dropped unreported.
         let (mut value, mut datatype, mut lang) = (None, None, None);
-        let mut invalid = None;
         while let Some(key) = map.next_key::<String>()? {
-            if invalid.is_some() {
-                map.next_value::<IgnoredAny>()?;
-                continue;
-            }
             let member = match key.as_str() {
                 "$" => &mut value,
                 "type" => &mut datatype,
@@ -376,19 +371,20 @@ impl<'de> Visitor<'de> for ValueVisitor {
                     )));
                 }
             };
-            match member_string(&key, map.next_value::<&RawValue>()?.get()) {
-                Ok(text) => *member = Some(text),
-                Err(found) => invalid = Some(found),
+            *member = Some(member_string(&key, map.next_value::<&RawValue>()?.get()));
+        }
+        // Of several invalid members, `$` is reported before `type`, and
+        // `type` before `lang`.
+        let members = (value.transpose(), datatype.transpose(), lang.transpose());
+        Ok(match members {
+            (Err(invalid), _, _) | (_, Err(invalid), _) | (_, _, Err(invalid)) => {
+                JsonValue::Invalid(invalid)
             }
-        }
-        if let Some(invalid) = invalid {
-            return Ok(JsonValue::Invalid(invalid));
-        }
-        let value = value.ok_or_else(|| de::Error::custom("a value object needs a `$` key"))?;
-        Ok(JsonValue::Typed {
-            value,
-            datatype,
-            lang,
+            (Ok(value), Ok(datatype), Ok(lang)) => JsonValue::Typed {
+                value: value.ok_or_else(|| de::Error::custom("a value object needs a `$` key"))?,
+                datatype,
+                lang,
+            },
         })
     }
 }
