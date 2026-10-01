@@ -5,6 +5,7 @@ use serde::de::value::{MapAccessDeserializer, SeqAccessDeserializer};
 use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::value::RawValue;
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -194,15 +195,15 @@ impl<T> OneOrMany<T> {
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum JsonValue {
     Str(String),
-    Int(i64),
-    UInt(u64),
-    Float(f64),
+    /// A JSON number, as its token text.
+    Number(String),
     Bool(bool),
     Typed {
         value: String,
         datatype: Option<String>,
         lang: Option<String>,
     },
+    /// An array of values. An element is never itself an array.
     Many(Vec<JsonValue>),
 }
 
@@ -216,67 +217,110 @@ impl JsonValue {
     }
 }
 
+/// The value is captured as raw JSON text first. A number is kept as that
+/// text, because the visitor interface hands it over as `i64`, `u64` or
+/// `f64` (or, when a dependant enables the `arbitrary_precision` feature of
+/// `serde_json`, as a private map), each of which loses the spelling.
 impl<'de> Deserialize<'de> for JsonValue {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        struct V;
-        impl<'de> Visitor<'de> for V {
-            type Value = JsonValue;
-            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                f.write_str("a string, number, boolean, {\"$\": ...} object or array")
-            }
-            fn visit_str<E: de::Error>(self, v: &str) -> Result<JsonValue, E> {
-                Ok(JsonValue::Str(v.to_owned()))
-            }
-            fn visit_string<E: de::Error>(self, v: String) -> Result<JsonValue, E> {
-                Ok(JsonValue::Str(v))
-            }
-            fn visit_i64<E: de::Error>(self, v: i64) -> Result<JsonValue, E> {
-                Ok(JsonValue::Int(v))
-            }
-            fn visit_u64<E: de::Error>(self, v: u64) -> Result<JsonValue, E> {
-                Ok(JsonValue::UInt(v))
-            }
-            fn visit_f64<E: de::Error>(self, v: f64) -> Result<JsonValue, E> {
-                Ok(JsonValue::Float(v))
-            }
-            fn visit_bool<E: de::Error>(self, v: bool) -> Result<JsonValue, E> {
-                Ok(JsonValue::Bool(v))
-            }
-            fn visit_unit<E: de::Error>(self) -> Result<JsonValue, E> {
-                Err(E::custom("null is not an attribute value"))
-            }
-            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<JsonValue, A::Error> {
-                let mut items = Vec::new();
-                while let Some(item) = seq.next_element()? {
-                    items.push(item);
+        from_raw(<&RawValue>::deserialize(d)?.get(), Nesting::Allowed)
+    }
+}
+
+/// Whether the value being read may be an array.
+#[derive(Clone, Copy, PartialEq)]
+enum Nesting {
+    Allowed,
+    Inside,
+}
+
+/// An element of an array of values, which cannot be an array itself.
+struct Element(JsonValue);
+
+impl<'de> Deserialize<'de> for Element {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        from_raw(<&RawValue>::deserialize(d)?.get(), Nesting::Inside).map(Element)
+    }
+}
+
+/// A value from its JSON text. The text is one complete JSON value: the
+/// outer parser has already checked its syntax.
+fn from_raw<E: de::Error>(text: &str, nesting: Nesting) -> Result<JsonValue, E> {
+    let text = text.trim_start_matches([' ', '\t', '\r', '\n']);
+    match text.as_bytes().first() {
+        Some(b'-' | b'0'..=b'9') => Ok(JsonValue::Number(text.to_owned())),
+        Some(b'[') if nesting == Nesting::Inside => Err(E::custom(
+            "nested arrays are not allowed in an attribute value",
+        )),
+        _ => {
+            let mut fragment = serde_json::Deserializer::from_str(text);
+            fragment
+                .deserialize_any(ValueVisitor)
+                .map_err(|e| E::custom(without_position(&e)))
+        }
+    }
+}
+
+/// The message of an error raised while parsing a fragment. Its line and
+/// column count from the fragment's start, so they are dropped; the outer
+/// parser adds the position in the document.
+fn without_position(e: &serde_json::Error) -> String {
+    let message = e.to_string();
+    match message.rfind(" at line ") {
+        Some(end) => message[..end].to_owned(),
+        None => message,
+    }
+}
+
+/// Builds a [`JsonValue`] from any JSON value but a number, which
+/// [`from_raw`] takes before the visitor runs.
+struct ValueVisitor;
+
+impl<'de> Visitor<'de> for ValueVisitor {
+    type Value = JsonValue;
+    fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("a string, number, boolean, {\"$\": ...} object or array")
+    }
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<JsonValue, E> {
+        Ok(JsonValue::Str(v.to_owned()))
+    }
+    fn visit_string<E: de::Error>(self, v: String) -> Result<JsonValue, E> {
+        Ok(JsonValue::Str(v))
+    }
+    fn visit_bool<E: de::Error>(self, v: bool) -> Result<JsonValue, E> {
+        Ok(JsonValue::Bool(v))
+    }
+    fn visit_unit<E: de::Error>(self) -> Result<JsonValue, E> {
+        Err(E::custom("null is not an attribute value"))
+    }
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<JsonValue, A::Error> {
+        let mut items = Vec::new();
+        while let Some(Element(item)) = seq.next_element()? {
+            items.push(item);
+        }
+        Ok(JsonValue::Many(items))
+    }
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<JsonValue, A::Error> {
+        let (mut value, mut datatype, mut lang) = (None, None, None);
+        while let Some(key) = map.next_key::<String>()? {
+            match key.as_str() {
+                "$" => value = Some(map.next_value_seed(StrAt("$"))?),
+                "type" => datatype = Some(map.next_value_seed(StrAt("type"))?),
+                "lang" => lang = Some(map.next_value_seed(StrAt("lang"))?),
+                other => {
+                    return Err(de::Error::custom(format!(
+                        "unknown key `{other}` in a value object, expected `$`, \
+                         `type` or `lang`"
+                    )));
                 }
-                Ok(JsonValue::Many(items))
-            }
-            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<JsonValue, A::Error> {
-                let (mut value, mut datatype, mut lang) = (None, None, None);
-                while let Some(key) = map.next_key::<String>()? {
-                    match key.as_str() {
-                        "$" => value = Some(map.next_value_seed(StrAt("$"))?),
-                        "type" => datatype = Some(map.next_value_seed(StrAt("type"))?),
-                        "lang" => lang = Some(map.next_value_seed(StrAt("lang"))?),
-                        other => {
-                            return Err(de::Error::custom(format!(
-                                "unknown key `{other}` in a value object, expected `$`, \
-                                 `type` or `lang`"
-                            )));
-                        }
-                    }
-                }
-                let value =
-                    value.ok_or_else(|| de::Error::custom("a value object needs a `$` key"))?;
-                Ok(JsonValue::Typed {
-                    value,
-                    datatype,
-                    lang,
-                })
             }
         }
-        d.deserialize_any(V)
+        let value = value.ok_or_else(|| de::Error::custom("a value object needs a `$` key"))?;
+        Ok(JsonValue::Typed {
+            value,
+            datatype,
+            lang,
+        })
     }
 }
 
@@ -284,9 +328,9 @@ impl Serialize for JsonValue {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
         match self {
             JsonValue::Str(v) => s.serialize_str(v),
-            JsonValue::Int(v) => s.serialize_i64(*v),
-            JsonValue::UInt(v) => s.serialize_u64(*v),
-            JsonValue::Float(v) => s.serialize_f64(*v),
+            JsonValue::Number(text) => RawValue::from_string(text.clone())
+                .map_err(serde::ser::Error::custom)?
+                .serialize(s),
             JsonValue::Bool(v) => s.serialize_bool(*v),
             JsonValue::Typed {
                 value,

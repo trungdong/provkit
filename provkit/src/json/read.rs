@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use super::wire::{JsonDocument, JsonRecord, JsonSection, JsonValue};
 use crate::sink::DocumentBuilder;
 use crate::value::trim_xsd_space;
-use crate::well_known::XSD_DATETIME;
+use crate::well_known::{XSD_DATETIME, XSD_DOUBLE};
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
     Result, Value,
@@ -170,16 +170,15 @@ fn formal_value(value: &JsonValue, key: &str, time: bool, scope: &Namespaces) ->
 }
 
 /// Reads a JSON attribute value as a [`Value`]. A string is a plain string,
-/// an integer takes the narrowest of `xsd:int`, `xsd:long` and `xsd:integer`,
-/// other numbers are `xsd:double`, a boolean is `xsd:boolean`, and a value
-/// object is read by its `lang` or `type`.
+/// an integer takes the narrowest of `xsd:int`, `xsd:long` and `xsd:integer`
+/// and any other number is `xsd:double`, each keeping its text, a boolean is
+/// `xsd:boolean`, and a value object is read by its `lang` or `type`.
 fn decode_value(v: &JsonValue, scope: &Namespaces) -> Result<Value> {
     Ok(match v {
         JsonValue::Str(s) => Value::Str(s.clone()),
-        JsonValue::Int(i) => Value::integer(&i.to_string()),
-        JsonValue::UInt(u) => Value::integer(&u.to_string()),
-        JsonValue::Float(f) => Value::from(*f),
+        JsonValue::Number(text) => number(text)?,
         JsonValue::Bool(b) => Value::from(*b),
+        // The wire layer rejects an array inside an array, so this is not reached.
         JsonValue::Many(_) => return Err(structure("nested arrays are not allowed")),
         JsonValue::Typed {
             value,
@@ -201,12 +200,24 @@ fn decode_value(v: &JsonValue, scope: &Namespaces) -> Result<Value> {
     })
 }
 
+/// A JSON number typed from its text: digits with an optional `-` are an
+/// integer, typed by range, and any other number is an `xsd:double`. The
+/// text is kept, so `1.50` and `1e400` read back as written.
+fn number(text: &str) -> Result<Value> {
+    let digits = text.strip_prefix('-').unwrap_or(text);
+    if digits.bytes().all(|b| b.is_ascii_digit()) {
+        Ok(Value::integer(text))
+    } else {
+        Value::typed(text, XSD_DOUBLE.clone())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::json;
     use crate::test_util::ex;
-    use crate::well_known::{XSD_BOOLEAN, XSD_DOUBLE, XSD_INT, XSD_INTEGER, XSD_LONG};
+    use crate::well_known::{XSD_BOOLEAN, XSD_INT, XSD_INTEGER, XSD_LONG};
 
     fn doc(json: &str) -> crate::Document {
         json::read(json).unwrap()
@@ -284,14 +295,77 @@ mod tests {
             Some(Value::Typed(t)) if t.lexical() == "9223372036854775808"
         ));
         assert_eq!(dt("neg"), *XSD_LONG);
-        // Beyond `u64`, serde_json gives a double, and its text is the
-        // double's shortest decimal, not the digits written.
-        assert_eq!(dt("huge"), *XSD_DOUBLE);
+        assert_eq!(dt("huge"), *XSD_INTEGER);
         assert!(matches!(
             e.attributes.get(&ex("huge")).next(),
-            Some(Value::Typed(t)) if t.lexical() == "12345678901234568000000"
+            Some(Value::Typed(t)) if t.lexical() == "12345678901234567890123"
         ));
         assert_eq!(dt("exp"), *XSD_DOUBLE);
+    }
+
+    #[test]
+    fn numbers_are_typed_from_their_text() {
+        let d = doc(&format!(
+            r#"{{{PFX}, "entity": {{"ex:e": {{
+            "ex:zero": -0, "ex:low": -9223372036854775809, "ex:high": 18446744073709551616,
+            "ex:huge": 1e400, "ex:frac": 1.50, "ex:exp": 1E2, "ex:negzero": -0.0
+        }}}}}}"#
+        ));
+        let Record::Entity(e) = &d.records[0] else {
+            panic!()
+        };
+        let get = |l: &str| e.attributes.get(&ex(l)).next().cloned().unwrap();
+        let literal = |v: &Value| match v {
+            Value::Typed(t) => (t.lexical().to_owned(), t.datatype().clone()),
+            other => panic!("expected a typed literal, got {other:?}"),
+        };
+        assert_eq!(literal(&get("zero")), ("-0".into(), XSD_INT.clone()));
+        assert_eq!(
+            literal(&get("low")),
+            ("-9223372036854775809".into(), XSD_INTEGER.clone())
+        );
+        assert_eq!(
+            literal(&get("high")),
+            ("18446744073709551616".into(), XSD_INTEGER.clone())
+        );
+        assert_eq!(literal(&get("huge")), ("1e400".into(), XSD_DOUBLE.clone()));
+        assert_eq!(
+            get("huge"),
+            Value::typed("INF", XSD_DOUBLE.clone()).unwrap()
+        );
+        assert_eq!(literal(&get("frac")), ("1.50".into(), XSD_DOUBLE.clone()));
+        assert_eq!(get("exp"), Value::typed("100", XSD_DOUBLE.clone()).unwrap());
+        assert_eq!(literal(&get("negzero")).1, *XSD_DOUBLE);
+    }
+
+    #[cfg(feature = "provn")]
+    #[test]
+    fn bare_integers_read_alike_in_both_formats() {
+        let json = doc(&format!(
+            r#"{{{PFX}, "entity": {{"ex:e": {{"ex:n": [-0, 0, 3000000000, -9223372036854775809]}}}}}}"#
+        ));
+        let provn = crate::provn::read(
+            "document\n default <http://default.org/>\n prefix ex <http://example.org/>\n \
+             entity(ex:e, [ex:n=-0, ex:n=0, ex:n=3000000000, ex:n=-9223372036854775809])\nendDocument",
+        )
+        .unwrap();
+        assert_eq!(json, provn);
+    }
+
+    #[test]
+    fn nested_arrays_are_an_error_at_any_depth() {
+        let nested = format!(r#"{{{PFX}, "entity": {{"ex:e": {{"ex:n": [[1]]}}}}}}"#);
+        let message = json::read(&nested).unwrap_err().to_string();
+        assert!(
+            message.contains("nested arrays are not allowed"),
+            "{message}"
+        );
+        let deep = format!(
+            r#"{{{PFX}, "entity": {{"ex:e": {{"ex:n": {}1{}}}}}}}"#,
+            "[".repeat(100_000),
+            "]".repeat(100_000)
+        );
+        assert!(json::read(&deep).is_err());
     }
 
     #[test]
@@ -651,7 +725,7 @@ mod tests {
         );
         assert_eq!(
             body["ex:d"],
-            serde_json::json!({"$": "1", "type": "xsd:double"})
+            serde_json::json!({"$": "1.0", "type": "xsd:double"})
         );
         assert_eq!(
             body["ex:b"],
@@ -804,7 +878,7 @@ mod tests {
         ));
         assert!(matches!(
             read(&ent(r#""ex:a": [["x"]]"#)),
-            Err(Error::JsonStructure { .. })
+            Err(Error::Json(_))
         ));
         assert!(matches!(
             read(&format!(

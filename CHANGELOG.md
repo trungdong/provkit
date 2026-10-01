@@ -120,6 +120,10 @@ index, query or store, and no PROV-JSONLD, PROV-XML, PROV-O or validation.
     `[ex:k=3000000000]` equal to the PROV-JSON `{"ex:k": 3000000000}`. The
     PROV-N writer writes a value bare when its text is `-?[0-9]+` and reads
     back as the same datatype, so `"5" %% xsd:long` is written quoted.
+  - A PROV-JSON number is typed from its text and keeps it: an integer of
+    any size by range, any other number as `xsd:double`. The reader does not
+    depend on how serde_json represents numbers, so a dependant may enable
+    `arbitrary_precision`.
   - The PROV-N reader parses every extensibility expression (section 5,
     productions [49] to [51]) under both profiles and leaves it out of the
     document. Names inside one are not resolved and literals inside one are
