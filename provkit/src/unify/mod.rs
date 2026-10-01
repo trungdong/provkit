@@ -8,25 +8,17 @@
 //! unifies only with another "none". Every formal here is an `Option`, so
 //! "none" and "unknown" are one state.
 //!
-//! - Constraint 53: `used`, `wasGeneratedBy`, `wasInvalidatedBy`,
-//!   `wasStartedBy`, `wasEndedBy`, `wasInformedBy`, `wasAttributedTo`,
-//!   `wasAssociatedWith` and `actedOnBehalfOf` are pairwise disjoint, so no
-//!   identifier names two of them.
-//! - Constraint 54: an entity, activity or agent identifier cannot also
-//!   identify any of those nine relations, `wasInfluencedBy` or
-//!   `wasDerivedFrom`.
-//! - Constraint 55: `entity` and `activity` are disjoint. An agent may also
-//!   be an entity or an activity.
-//!
-//! `wasInfluencedBy` and `wasDerivedFrom` are outside Constraint 53, so either
-//! may share an identifier with any relation, including each other.
+//! The kinds that may share an identifier are listed on
+//! [`Document::unified`].
 
 use std::collections::HashMap;
 
 use indexmap::IndexMap;
 
 use crate::error::clip;
-use crate::{Attributes, Bundle, Document, Error, Formal, FormalAttr, Kind, QName, Record, Result};
+use crate::{
+    Attributes, Bundle, Document, Error, Formal, FormalAttr, FormalRef, Kind, QName, Record, Result,
+};
 
 impl Document {
     /// A copy of the document in which records sharing an identifier and a
@@ -88,8 +80,8 @@ fn unify_records(records: &[Record]) -> Result<Vec<Record>> {
         record.check_attributes()?;
     }
 
-    // Positions per identifier, groups in first-seen order. PROV-DM gives
-    // these four kinds no identifier, so one carried by PROV-JSON is only a
+    // Positions per identifier, groups in first-seen order. PROV-DM gives a
+    // bare kind no identifier, so one carried by PROV-JSON is only a
     // grouping key and never merges.
     let mut groups: IndexMap<&QName, Vec<usize>> = IndexMap::new();
     for (i, r) in records.iter().enumerate() {
@@ -105,12 +97,12 @@ fn unify_records(records: &[Record]) -> Result<Vec<Record>> {
         if positions.len() < 2 {
             continue;
         }
-        check_kinds(id, positions.iter().map(|&i| records[i].kind()))?;
-
         let mut by_kind: IndexMap<Kind, Vec<usize>> = IndexMap::new();
         for &i in positions {
             by_kind.entry(records[i].kind()).or_default().push(i);
         }
+        check_kinds(id, by_kind.keys().copied())?;
+
         for (kind, members) in by_kind {
             let merged = merge(
                 kind,
@@ -168,13 +160,10 @@ fn may_share_an_identifier(a: Kind, b: Kind) -> bool {
 }
 
 /// Reject the pairs of kinds that Constraints 53, 54 and 55 forbid under one
-/// identifier.
+/// identifier. `kinds` holds each kind once, in first-seen order.
 fn check_kinds(id: &QName, kinds: impl Iterator<Item = Kind>) -> Result<()> {
     let mut seen: Vec<Kind> = Vec::new();
     for kind in kinds {
-        if seen.contains(&kind) {
-            continue;
-        }
         for &other in &seen {
             if !may_share_an_identifier(kind, other) {
                 return Err(Error::Unification {
@@ -196,29 +185,25 @@ fn check_kinds(id: &QName, kinds: impl Iterator<Item = Kind>) -> Result<()> {
 fn merge(kind: Kind, id: &QName, members: &[&Record]) -> Result<Record> {
     let mut formals: Vec<(FormalAttr, Formal)> = Vec::new();
     for &attr in kind.formals() {
-        let mut chosen: Option<Formal> = None;
-        for record in members {
-            let Some(value) = record.formal(attr) else {
-                continue;
-            };
-            let value = value.to_formal();
-            match &chosen {
+        let mut chosen: Option<FormalRef<'_>> = None;
+        for value in members.iter().filter_map(|record| record.formal(attr)) {
+            match chosen {
                 None => chosen = Some(value),
-                Some(existing) if *existing == value => {}
+                Some(existing) if existing == value => {}
                 Some(existing) => {
                     return Err(Error::Unification {
                         id: id.clone(),
                         reason: format!(
                             "{attr} is {} in one record and {} in another",
                             show(existing),
-                            show(&value)
+                            show(value)
                         ),
                     });
                 }
             }
         }
         if let Some(value) = chosen {
-            formals.push((attr, value));
+            formals.push((attr, value.to_formal()));
         }
     }
 
@@ -229,10 +214,10 @@ fn merge(kind: Kind, id: &QName, members: &[&Record]) -> Result<Record> {
     Record::from_parts(kind, Some(id.clone()), formals, attributes)
 }
 
-fn show(formal: &Formal) -> String {
+fn show(formal: FormalRef<'_>) -> String {
     let text = match formal {
-        Formal::Name(q) => q.to_string(),
-        Formal::Time(t) => t.to_string(),
+        FormalRef::Name(q) => q.to_string(),
+        FormalRef::Time(t) => t.to_string(),
     };
     clip(&text).into_owned()
 }

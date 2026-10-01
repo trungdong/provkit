@@ -257,11 +257,6 @@ mod tests {
             assert!(text.len() < 300, "{} bytes", text.len());
             assert!(text.contains(count.as_str()), "{text}");
         }
-        // The payload is whole.
-        let Error::InvalidQName(payload) = Error::InvalidQName(long.clone()) else {
-            unreachable!()
-        };
-        assert_eq!(payload.len(), long.len());
     }
 
     #[test]
