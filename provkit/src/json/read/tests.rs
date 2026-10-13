@@ -1,7 +1,7 @@
 use super::*;
 use crate::json;
 use crate::test_util::{ex, round_trip, written};
-use crate::well_known::{XSD_BOOLEAN, XSD_INT, XSD_INTEGER, XSD_LONG};
+use crate::well_known::{XSD_BOOLEAN, XSD_DATETIME, XSD_INT, XSD_INTEGER, XSD_LONG};
 
 fn doc(json: &str) -> crate::Document {
     json::read(json).unwrap()
@@ -703,7 +703,7 @@ fn an_ill_formed_time_formal_is_an_error() {
         let text = record(section, "ex:x", &format!(r#""{key}": "nope""#));
         let (_, _, error) = record_error(&text);
         assert!(
-            matches!(&error, Error::InvalidLiteral { datatype, .. } if datatype == "xsd:dateTime"),
+            matches!(&error, Error::InvalidLiteral { datatype, .. } if *datatype == *XSD_DATETIME),
             "{key}"
         );
     }

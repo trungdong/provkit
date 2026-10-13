@@ -1,5 +1,6 @@
 use crate::provn::Profile;
 use crate::test_util::{ex, located, syntax};
+use crate::well_known::XSD_DATETIME;
 use crate::{Document, Error, Kind, QName, Record, Value, provn};
 
 const HEAD: &str = "document\n  default <http://default.org/>\n  prefix ex <http://example.org/>\n";
@@ -623,7 +624,7 @@ fn an_ill_formed_time_argument_is_an_error() {
     ] {
         let (_, inner) = located(err(body, Profile::Default));
         assert!(
-            matches!(&inner, Error::InvalidLiteral { datatype, .. } if datatype == "xsd:dateTime"),
+            matches!(&inner, Error::InvalidLiteral { datatype, .. } if *datatype == *XSD_DATETIME),
             "{body}: {inner:?}"
         );
     }
@@ -637,7 +638,7 @@ fn a_year_beyond_i64_is_an_error() {
     let body = format!("wasGeneratedBy(ex:e, ex:a, {beyond})");
     let (_, inner) = located(err(&body, Profile::Default));
     assert!(
-        matches!(&inner, Error::InvalidLiteral { datatype, .. } if datatype == "xsd:dateTime"),
+        matches!(&inner, Error::InvalidLiteral { datatype, .. } if *datatype == *XSD_DATETIME),
         "{inner:?}"
     );
     // The largest year reads.

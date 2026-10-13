@@ -380,10 +380,7 @@ fn each_value_keeps_its_text() {
 
 #[test]
 fn typed_rejects_qualified_name_datatypes() {
-    for (datatype, spelling) in [
-        (XSD_QNAME.clone(), "xsd:QName"),
-        (PROV_QUALIFIED_NAME.clone(), "prov:QUALIFIED_NAME"),
-    ] {
+    for datatype in [XSD_QNAME.clone(), PROV_QUALIFIED_NAME.clone()] {
         for text in ["ex:foo", "not a name"] {
             match Value::typed(text, datatype.clone()) {
                 Err(Error::InvalidLiteral {
@@ -391,7 +388,7 @@ fn typed_rejects_qualified_name_datatypes() {
                     lexical,
                     reason,
                 }) => {
-                    assert_eq!(shown, spelling);
+                    assert_eq!(shown, datatype);
                     assert_eq!(lexical, text);
                     assert_eq!(
                         reason,
@@ -403,6 +400,31 @@ fn typed_rejects_qualified_name_datatypes() {
             }
         }
     }
+}
+
+#[test]
+fn an_invalid_literal_names_its_datatype_as_a_name() {
+    let Err(Error::InvalidLiteral { datatype, .. }) = Value::typed("a b", XSD_QNAME.clone()) else {
+        panic!("expected InvalidLiteral")
+    };
+    assert_eq!(datatype, *XSD_QNAME);
+    let Err(Error::InvalidLiteral { datatype, .. }) = DateTime::parse("x") else {
+        panic!("expected InvalidLiteral")
+    };
+    assert_eq!(datatype, *XSD_DATETIME);
+}
+
+#[test]
+fn an_invalid_literal_prints_an_outside_datatype_as_its_iri() {
+    let error = Error::InvalidLiteral {
+        datatype: ex("duration"),
+        lexical: "P".into(),
+        reason: "no designator".into(),
+    };
+    assert_eq!(
+        error.to_string(),
+        "invalid http://example.org/duration literal `P`: no designator"
+    );
 }
 
 fn example_names() -> Namespaces {

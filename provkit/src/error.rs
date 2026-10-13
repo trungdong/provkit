@@ -158,11 +158,12 @@ pub enum Error {
     #[error("`{}` is not a language tag", clip(.0))]
     InvalidLanguageTag(String),
     /// A literal's text is not valid for its datatype.
-    #[error("invalid {datatype} literal `{}`: {reason}", clip(.lexical))]
+    #[error("invalid {} literal `{}`: {reason}", short_name(.datatype), clip(.lexical))]
     #[non_exhaustive]
     InvalidLiteral {
-        /// The datatype, as `prefix:local` under its usual prefix (`xsd:dateTime`).
-        datatype: String,
+        /// The datatype. The message prints it as `xsd:local` or
+        /// `prov:local` under the reserved prefixes and as its IRI otherwise.
+        datatype: QName,
         /// The text, as written.
         lexical: String,
         /// What was wrong.
@@ -200,6 +201,16 @@ fn declaration(prefix: &str, iri: &str) -> String {
     }
 }
 
+/// A datatype as a message prints it: `xsd:local` or `prov:local` under the
+/// two reserved prefixes, the clipped IRI otherwise.
+pub(crate) fn short_name(name: &QName) -> Cow<'_, str> {
+    match name.namespace() {
+        crate::well_known::XSD => Cow::Owned(format!("xsd:{}", name.local())),
+        crate::well_known::PROV => Cow::Owned(format!("prov:{}", name.local())),
+        _ => Cow::Owned(clip(&name.to_string()).into_owned()),
+    }
+}
+
 /// `Result` with the crate's [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -232,7 +243,7 @@ mod tests {
             (Error::NoDefaultNamespace(long.clone()), &text_count),
             (
                 Error::InvalidLiteral {
-                    datatype: "xsd:dateTime".into(),
+                    datatype: crate::well_known::XSD_DATETIME.clone(),
                     lexical: long.clone(),
                     reason: "missing 'T'".into(),
                 },

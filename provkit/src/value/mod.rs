@@ -227,13 +227,8 @@ impl Value {
                 Err(_) => Value::literal(lexical, datatype),
             })
         } else if is_qname_datatype(&datatype) {
-            let shown = if datatype == *XSD_QNAME {
-                "xsd:QName"
-            } else {
-                "prov:QUALIFIED_NAME"
-            };
             Err(Error::InvalidLiteral {
-                datatype: shown.into(),
+                datatype,
                 lexical,
                 reason: QNAME_REASON.into(),
             })

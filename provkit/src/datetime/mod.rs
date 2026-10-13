@@ -5,6 +5,7 @@ use std::fmt::{self, Write as _};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
+use crate::well_known::XSD_DATETIME;
 use crate::{Error, Result};
 
 /// An `xsd:dateTime` value.
@@ -308,7 +309,7 @@ impl FromStr for DateTime {
 
 fn invalid(text: &str, reason: &str) -> Error {
     Error::InvalidLiteral {
-        datatype: "xsd:dateTime".into(),
+        datatype: XSD_DATETIME.clone(),
         lexical: text.into(),
         reason: reason.into(),
     }
