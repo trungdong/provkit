@@ -1122,15 +1122,15 @@ fn a_value_error_is_placed_at_its_token_and_names_its_record() {
 
 #[test]
 fn a_value_error_sits_where_serde_json_puts_it() {
-    // Each bad value with the line and column `serde_json` reports when it
-    // reads the same value in one pass.
+    // Each bad value with the line and column of its token, the column in
+    // characters.
     let cases = [
         (r#"{"$": 5}"#, 77),
         ("null", 74),
         ("{}", 72),
         (r#"{"$":"x","zz":1}"#, 83),
         ("[1, [2]]", 75),
-        (r#"["é", null]"#, 81),
+        (r#"["é", null]"#, 80),
     ];
     for (value, column) in cases {
         let text = one_record("entity", "ex:e", &format!(r#""ex:a": {value}"#));
@@ -1258,11 +1258,81 @@ fn a_value_object_member_that_is_not_a_string_names_the_member() {
     );
 }
 
-/// The 1-based column of the byte after the last `fragment` in the
-/// one-line `text`, where `serde_json` puts an error raised once a value
-/// has been read.
+/// The 1-based character column just past the last `fragment` in the
+/// one-line `text`, where an error raised once a value has been read is
+/// placed.
 fn column_after(text: &str, fragment: &str) -> usize {
-    text.rfind(fragment).unwrap() + fragment.len() + 1
+    let end = text.rfind(fragment).unwrap() + fragment.len();
+    text[..end].chars().count() + 1
+}
+
+/// The 1-based character column of the first byte of the last `fragment`.
+fn column_of(text: &str, fragment: &str) -> usize {
+    text[..text.rfind(fragment).unwrap()].chars().count() + 1
+}
+
+#[test]
+fn columns_count_characters_in_every_path() {
+    // One `é` on the line before each fault. A byte count would put every
+    // column one further right.
+    let prefix = r#"{"prefix": {"ex": "http://é.example/"}, "#;
+
+    // A value error inside a fragment, on the fragment's first line.
+    let text = format!(r#"{prefix}"entity": {{"ex:e": {{"ex:a": null}}}}}}"#);
+    let (_, _, message) = record_structure(&text);
+    let expected = format!(" at line 1 column {}", column_after(&text, "null") - 1);
+    assert!(message.ends_with(&expected), "{text}\n{message}");
+
+    // A value error on a fragment's second line: the column counts from
+    // that line. The unknown key `é` is placed at its closing quote, the
+    // fourth character and the fifth byte of its line (serde_json says 5).
+    let text =
+        format!("{prefix}\"entity\": {{\"ex:e\": {{\"ex:a\": {{\"$\": \"x\",\n \"é\": 1}}}}}}}}");
+    let (_, _, message) = record_structure(&text);
+    assert!(message.ends_with(" at line 2 column 4"), "{message}");
+
+    // An error after a repeated attribute.
+    let text = format!(r#"{prefix}"entity": {{"ex:e": {{"ex:a": 1, "ex:a": 2}}}}}}"#);
+    let (_, _, message) = record_structure(&text);
+    let expected = format!(
+        "duplicate field `ex:a` at line 1 column {}",
+        column_after(&text, "2")
+    );
+    assert_eq!(message, expected);
+
+    // An unknown section, refused by the outer pass once its value is read.
+    let text = format!(r#"{prefix}"zz": {{}}}}"#);
+    let Err(Error::JsonStructure { message }) = json::read(&text) else {
+        panic!("expected JsonStructure")
+    };
+    let expected = format!(
+        "unknown record kind `zz` at line 1 column {}",
+        column_after(&text, "{}")
+    );
+    assert_eq!(message, expected);
+
+    // A JSON syntax error at a multi-byte character: serde_json counts the
+    // character's first byte, so the character is in the column. `é` alone
+    // is column 1, and the `é` in `{"a": é}` is the seventh character.
+    for (text, column) in [("é", 1), (r#"{"a": é}"#, 7), (r#"{"a": ["é", é]}"#, 13)] {
+        let Err(Error::Json(e)) = json::read(text) else {
+            panic!("{text}: expected Error::Json")
+        };
+        assert_eq!(e.column(), Some(column), "{text}");
+        assert_eq!(column, column_of(text, "é"), "{text}");
+    }
+
+    // A JSON syntax error.
+    let text = format!(r#"{prefix}"entity": "#);
+    let Err(Error::Json(e)) = json::read(&text) else {
+        panic!("expected Error::Json")
+    };
+    assert_eq!(e.column(), Some(text.chars().count()));
+    assert!(
+        e.to_string()
+            .ends_with(&format!(" at line 1 column {}", text.chars().count())),
+        "{e}"
+    );
 }
 
 #[test]

@@ -82,7 +82,8 @@ pub enum Error {
     #[error("PROV-JSON: {message}")]
     #[non_exhaustive]
     JsonStructure {
-        /// What was wrong.
+        /// What was wrong, ending ` at line L column C` when the error has a
+        /// position; the column is in characters.
         message: String,
     },
     /// An error in one record of a PROV-JSON document, or in a bundle's key.

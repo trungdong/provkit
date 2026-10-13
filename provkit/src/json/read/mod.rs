@@ -38,8 +38,7 @@ fn namespaces(prefix: &IndexMap<String, String>) -> Result<Namespaces> {
 }
 
 /// Where a fragment of `input` starts, as a 1-based line and column, when
-/// the fragment lies inside `input`. The column counts bytes, as
-/// `serde_json` counts them.
+/// the fragment lies inside `input`. The column counts characters.
 fn position_of(input: &str, start: usize) -> Option<(usize, usize)> {
     let offset = start.checked_sub(input.as_ptr().addr())?;
     if offset >= input.len() {
@@ -48,14 +47,14 @@ fn position_of(input: &str, start: usize) -> Option<(usize, usize)> {
     let before = input.get(..offset)?;
     let line = 1 + before.matches('\n').count();
     let line_start = before.rfind('\n').map_or(0, |i| i + 1);
-    Some((line, offset - line_start + 1))
+    Some((line, before[line_start..].chars().count() + 1))
 }
 
-/// Where `serde_json` places an error that a map's visitor raises once a
-/// value has been read, given the address of the byte after that value. It
-/// skips the white space after the value and reads a closing brace that
-/// follows, but not a comma. The column is the number of bytes on the line
-/// before the next byte to read.
+/// Where an error that a map's visitor raises once a value has been read is
+/// placed, given the address of the byte after that value. It skips the
+/// white space after the value and reads a closing brace that follows, but
+/// not a comma. The column is the number of characters on the line before
+/// the next byte to read.
 fn after_value(input: &str, end: usize) -> Option<(usize, usize)> {
     let offset = end.checked_sub(input.as_ptr().addr())?;
     let rest = input.get(offset..)?;
@@ -63,15 +62,19 @@ fn after_value(input: &str, end: usize) -> Option<(usize, usize)> {
     let next = input.len() - after.len() + usize::from(after.starts_with('}'));
     let before = &input[..next];
     let line_start = before.rfind('\n').map_or(0, |i| i + 1);
-    Some((1 + before.matches('\n').count(), next - line_start))
+    Some((
+        1 + before.matches('\n').count(),
+        before[line_start..].chars().count(),
+    ))
 }
 
 /// The error for a value the wire layer could not read. It holds the wire
 /// layer's message and the position of the error in `input`, the text the
 /// document was read from. The position of an error inside a fragment is
 /// the fragment's, moved on by the error's position inside the fragment.
-/// Each equals the position `serde_json` gives the same error when it reads
-/// the document in one pass.
+/// Each is the position `serde_json` gives the same error when it reads the
+/// document in one pass, with the column counted in characters rather than
+/// bytes.
 fn invalid_value(invalid: &InvalidValue, input: &str) -> Error {
     let position = match invalid.at {
         Place::Inside {

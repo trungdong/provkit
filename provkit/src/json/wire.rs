@@ -9,6 +9,7 @@ use serde_json::value::RawValue;
 use std::fmt;
 use std::marker::PhantomData;
 
+use super::{char_column, without_position};
 use crate::Kind;
 use crate::error::clip;
 
@@ -352,7 +353,7 @@ pub(super) struct InvalidValue {
 pub(super) enum Place {
     /// An error raised while parsing a fragment of the input: the address
     /// of the fragment's first byte, to find it in the input, and the line
-    /// and column of the error inside the fragment.
+    /// and column, in characters, of the error inside the fragment.
     Inside {
         start: usize,
         line: usize,
@@ -364,14 +365,15 @@ pub(super) enum Place {
 }
 
 impl InvalidValue {
-    /// The error `e` raised while parsing `fragment`.
+    /// The error `e` raised while parsing `fragment`, with its column
+    /// counted in characters of the fragment's line.
     fn from_error(fragment: &str, e: &serde_json::Error) -> Self {
         InvalidValue {
             message: without_position(e),
             at: Place::Inside {
                 start: fragment.as_ptr().addr(),
                 line: e.line(),
-                column: e.column(),
+                column: char_column(fragment, e.line(), e.column()),
             },
         }
     }
@@ -422,16 +424,6 @@ fn from_raw(text: &str) -> JsonValue {
     serde_json::Deserializer::from_str(text)
         .deserialize_any(ValueVisitor)
         .unwrap_or_else(|e| JsonValue::Invalid(InvalidValue::from_error(text, &e)))
-}
-
-/// The message of an error raised while parsing a fragment. Its line and
-/// column count from the fragment's start, so they are dropped; the reader
-/// adds the position in the document. A string the message quotes is cut
-/// to the length every message keeps to.
-fn without_position(e: &serde_json::Error) -> String {
-    let message = e.to_string();
-    let end = message.rfind(" at line ").unwrap_or(message.len());
-    super::clip_quoted(&message[..end])
 }
 
 /// Builds a [`JsonValue`] from any JSON value but a number, which

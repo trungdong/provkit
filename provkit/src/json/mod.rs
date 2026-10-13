@@ -1,4 +1,7 @@
 //! PROV-JSON (W3C member submission, 2013) read and write.
+//!
+//! Every position in an error from this module is a 1-based line and a
+//! 1-based column counted in characters.
 
 mod read;
 mod wire;
@@ -15,10 +18,12 @@ use crate::{Document, Error, JsonError, Result, strip_bom};
 /// # Errors
 ///
 /// - [`Error::Json`] for text the JSON parser rejects, holding a
-///   [`JsonError`] with the line and column where parsing stopped.
+///   [`JsonError`] with the line and column, in characters, where parsing
+///   stopped.
 /// - [`Error::JsonStructure`] for JSON that is not a PROV document. An
 ///   error found while reading the JSON ends with the line and column of
-///   the offending token. An attribute value the reader cannot decode is
+///   the offending token, the column counted in characters, as the PROV-N
+///   reader counts it. An attribute value the reader cannot decode is
 ///   such an error, a string with a `\u` escape that names a lone surrogate
 ///   included. For a key the reader refuses (an unknown section, a key
 ///   given twice in one object, a `bundle` inside a bundle) the position is
@@ -39,7 +44,7 @@ use crate::{Document, Error, JsonError, Result, strip_bom};
 ///   entry that PROV-N could not write, returned as they are.
 pub fn read(text: &str) -> Result<Document> {
     let text = strip_bom(text);
-    let wire: wire::JsonDocument = serde_json::from_str(text).map_err(shape_error)?;
+    let wire: wire::JsonDocument = serde_json::from_str(text).map_err(|e| shape_error(e, text))?;
     let mut builder = DocumentBuilder::new();
     read::emit(&wire, text, &mut builder)?;
     Ok(builder.finish())
@@ -47,14 +52,40 @@ pub fn read(text: &str) -> Result<Document> {
 
 /// `serde_json` reports JSON of the wrong shape as a data error. That is
 /// valid JSON which is not PROV-JSON, so it is a structure error here. Any
-/// other error is text that is not JSON, positioned where `serde_json`
-/// stopped.
-fn shape_error(e: serde_json::Error) -> Error {
+/// other error is text that is not JSON. Either way the position is
+/// re-counted in characters.
+fn shape_error(e: serde_json::Error, text: &str) -> Error {
+    let (line, column) = (e.line(), char_column(text, e.line(), e.column()));
     if e.classify() == serde_json::error::Category::Data {
-        return structure(clip_quoted(&e.to_string()));
+        return structure(format!(
+            "{} at line {line} column {column}",
+            without_position(&e)
+        ));
     }
-    let (line, column) = (e.line(), e.column());
     Error::Json(JsonError::positioned(e, line, column))
+}
+
+/// The character column that `serde_json`'s byte column names on `line`
+/// of `text`, both 1-based: the number of characters in the part of that
+/// line the byte column covers. A byte column inside a multi-byte
+/// character counts that character, because the column covers its first
+/// byte.
+pub(super) fn char_column(text: &str, line: usize, byte_column: usize) -> usize {
+    let line_text = text.split('\n').nth(line.saturating_sub(1)).unwrap_or("");
+    let mut end = byte_column.min(line_text.len());
+    while !line_text.is_char_boundary(end) {
+        end += 1;
+    }
+    line_text[..end].chars().count()
+}
+
+/// The message of a `serde_json` error without the ` at line L column C`
+/// it ends with. A string the message quotes is cut to the length every
+/// message keeps to.
+pub(super) fn without_position(e: &serde_json::Error) -> String {
+    let message = e.to_string();
+    let end = message.rfind(" at line ").unwrap_or(message.len());
+    clip_quoted(&message[..end])
 }
 
 fn structure(message: impl Into<String>) -> Error {
