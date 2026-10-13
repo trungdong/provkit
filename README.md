@@ -57,7 +57,7 @@ quietly.
 | 1 | `compare` found a difference |
 | 2 | Any error: a usage error, a file that cannot be read or written, a format that cannot be told, a syntax error, a document the output format cannot hold, or with `--unified` a unification failure |
 
-A PROV-N error is printed as `file:line:column: message`. `compare` takes `-` for standard input on one side.
+An error with a position, in either format, is printed as `file:line:column: message`. `compare` takes `-` for standard input on one side.
 
 ## Library
 

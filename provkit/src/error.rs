@@ -24,7 +24,7 @@ pub(crate) fn clip(text: &str) -> Cow<'_, str> {
 /// Every failure the crate can report.
 ///
 /// A variant is feature-gated only when its payload type comes from an
-/// optional dependency: [`Error::Json`] holds a `serde_json::Error`. Every
+/// optional dependency: [`Error::Json`] holds a [`JsonError`]. Every
 /// other variant, including the ones only one reader or writer produces,
 /// exists under every feature set.
 ///
@@ -185,7 +185,7 @@ pub enum Error {
     /// JSON could not be parsed or printed.
     #[cfg(feature = "json")]
     #[error(transparent)]
-    Json(#[from] serde_json::Error),
+    Json(JsonError),
     /// A writer's output stream failed.
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -268,6 +268,79 @@ fn formal_text(formal: Option<&Formal>) -> Cow<'_, str> {
         None => Cow::Borrowed("absent"),
         Some(Formal::Name(q)) => Cow::Owned(clip(&q.to_string()).into_owned()),
         Some(Formal::Time(t)) => Cow::Owned(clip(&t.to_string()).into_owned()),
+    }
+}
+
+/// Text that is not JSON, or JSON that could not be printed: the payload of
+/// [`Error::Json`].
+///
+/// A reader error has a position, a 1-based line and column counted in
+/// characters, and prints as `serde_json`'s message followed by
+/// ` at line L column C`. A writer error has no position. The `serde_json`
+/// error is the [`source`](std::error::Error::source).
+///
+/// The type has no `From<serde_json::Error>`, so a caller's own `serde_json`
+/// call does not convert into [`Error`] by `?`:
+///
+/// ```compile_fail,E0277
+/// fn parse(text: &str) -> provkit::Result<serde_json::Value> {
+///     Ok(serde_json::from_str(text)?)
+/// }
+/// ```
+#[cfg(feature = "json")]
+#[derive(Debug, thiserror::Error)]
+#[error("{}{}", self.message(), self.suffix())]
+pub struct JsonError {
+    #[source]
+    source: serde_json::Error,
+    /// 1-based line and column in characters; `None` for a writer error.
+    position: Option<(usize, usize)>,
+}
+
+#[cfg(feature = "json")]
+impl JsonError {
+    /// A reader error at a position already counted in characters.
+    pub(crate) fn positioned(source: serde_json::Error, line: usize, column: usize) -> Self {
+        JsonError {
+            source,
+            position: Some((line, column)),
+        }
+    }
+
+    /// A writer error, which has no position.
+    pub(crate) fn unpositioned(source: serde_json::Error) -> Self {
+        JsonError {
+            source,
+            position: None,
+        }
+    }
+
+    /// 1-based line, counted from the start of the input; `None` for a
+    /// writer error.
+    #[must_use]
+    pub fn line(&self) -> Option<usize> {
+        self.position.map(|(line, _)| line)
+    }
+
+    /// 1-based column in characters, counted from the start of the line;
+    /// `None` for a writer error.
+    #[must_use]
+    pub fn column(&self) -> Option<usize> {
+        self.position.map(|(_, column)| column)
+    }
+
+    /// `serde_json`'s message without the byte position it ends with.
+    fn message(&self) -> String {
+        let text = self.source.to_string();
+        let end = text.rfind(" at line ").unwrap_or(text.len());
+        text[..end].to_owned()
+    }
+
+    fn suffix(&self) -> String {
+        match self.position {
+            Some((line, column)) => format!(" at line {line} column {column}"),
+            None => String::new(),
+        }
     }
 }
 

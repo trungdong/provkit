@@ -102,8 +102,20 @@ fn located(source: &str, error: provkit::Error) -> anyhow::Error {
             error,
             ..
         } => anyhow!("{source}:{line}:{column}: {error}"),
+        provkit::Error::Json(e) => match (e.line(), e.column()) {
+            (Some(line), Some(column)) => anyhow!("{source}:{line}:{column}: {}", message_of(&e)),
+            _ => anyhow!("{source}: {e}"),
+        },
         other => anyhow!("{source}: {other}"),
     }
+}
+
+/// A `JsonError`'s message without the ` at line L column C` it ends with,
+/// for the `file:line:column:` form that states the position once.
+fn message_of(e: &provkit::JsonError) -> String {
+    let text = e.to_string();
+    let end = text.rfind(" at line ").unwrap_or(text.len());
+    text[..end].to_owned()
 }
 
 /// How a failure to tell the format is worded.

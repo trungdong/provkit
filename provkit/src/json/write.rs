@@ -11,7 +11,9 @@ use super::wire::{
 };
 use crate::namespaces::WriteScope;
 use crate::well_known::{XSD_DATETIME, XSD_QNAME};
-use crate::{Bundle, Document, Error, FormalRef, Kind, Namespaces, QName, Record, Result, Value};
+use crate::{
+    Bundle, Document, Error, FormalRef, JsonError, Kind, Namespaces, QName, Record, Result, Value,
+};
 
 /// Write `document` as PROV-JSON, pretty-printed with two-space indentation.
 ///
@@ -30,7 +32,7 @@ pub fn write(document: &Document, out: &mut impl Write) -> Result<()> {
         if e.io_error_kind().is_some() {
             Error::Io(e.into())
         } else {
-            Error::Json(e)
+            Error::Json(JsonError::unpositioned(e))
         }
     })?;
     out.write_all(b"\n")?;

@@ -8,13 +8,14 @@ pub use write::{to_string, write};
 
 use crate::builder::DocumentBuilder;
 use crate::error::QUOTED;
-use crate::{Document, Error, Result, strip_bom};
+use crate::{Document, Error, JsonError, Result, strip_bom};
 
 /// Read a PROV-JSON document.
 ///
 /// # Errors
 ///
-/// - [`Error::Json`] for text the JSON parser rejects.
+/// - [`Error::Json`] for text the JSON parser rejects, holding a
+///   [`JsonError`] with the line and column where parsing stopped.
 /// - [`Error::JsonStructure`] for JSON that is not a PROV document. An
 ///   error found while reading the JSON ends with the line and column of
 ///   the offending token. An attribute value the reader cannot decode is
@@ -45,13 +46,15 @@ pub fn read(text: &str) -> Result<Document> {
 }
 
 /// `serde_json` reports JSON of the wrong shape as a data error. That is
-/// valid JSON which is not PROV-JSON, so it is a structure error here.
+/// valid JSON which is not PROV-JSON, so it is a structure error here. Any
+/// other error is text that is not JSON, positioned where `serde_json`
+/// stopped.
 fn shape_error(e: serde_json::Error) -> Error {
     if e.classify() == serde_json::error::Category::Data {
-        structure(clip_quoted(&e.to_string()))
-    } else {
-        Error::Json(e)
+        return structure(clip_quoted(&e.to_string()));
     }
+    let (line, column) = (e.line(), e.column());
+    Error::Json(JsonError::positioned(e, line, column))
 }
 
 fn structure(message: impl Into<String>) -> Error {

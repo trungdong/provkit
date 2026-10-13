@@ -3,6 +3,24 @@ use crate::json;
 use crate::test_util::{ex, round_trip, written};
 use crate::well_known::{XSD_BOOLEAN, XSD_DATETIME, XSD_INT, XSD_INTEGER, XSD_LONG};
 
+#[test]
+fn a_json_syntax_error_carries_its_position_and_its_source() {
+    let Err(Error::Json(e)) = json::read("{") else {
+        panic!("expected Error::Json")
+    };
+    assert_eq!((e.line(), e.column()), (Some(1), Some(1)));
+    assert!(e.to_string().ends_with(" at line 1 column 1"), "{e}");
+    let source = std::error::Error::source(&e).expect("source");
+    assert!(source.is::<serde_json::Error>());
+    // The outer error prints the inner one and forwards its source.
+    let outer = Error::Json(e);
+    assert!(
+        outer.to_string().ends_with(" at line 1 column 1"),
+        "{outer}"
+    );
+    assert!(std::error::Error::source(&outer).is_some());
+}
+
 fn doc(json: &str) -> crate::Document {
     json::read(json).unwrap()
 }

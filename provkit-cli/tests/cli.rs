@@ -278,10 +278,20 @@ fn positioned_errors_print_their_message_once() {
 }
 
 #[test]
+fn a_json_syntax_error_prints_its_position() {
+    let dir = scratch("a_json_syntax_error_prints_its_position");
+    let bad = write(&dir, "bad.json", "{");
+    convert(&[], &bad).code(2).stderr(format!(
+        "provkit: {}:1:1: EOF while parsing an object\n",
+        bad.display()
+    ));
+}
+
+#[test]
 fn stdin_errors_name_the_input_as_stdin() {
     convert_stdin(&["-f", "json"], "{")
         .code(2)
-        .stderr(predicate::str::starts_with("provkit: <stdin>: "));
+        .stderr(predicate::str::starts_with("provkit: <stdin>:1:1: "));
 }
 
 const PRECEDENCE: &str = "taken from -f/-t when given, else from the file extension";
