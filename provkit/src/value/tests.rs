@@ -415,6 +415,26 @@ fn an_invalid_literal_names_its_datatype_as_a_name() {
 }
 
 #[test]
+fn an_invalid_literal_reads_its_datatype_as_before() {
+    let qname = Value::typed("a b", XSD_QNAME.clone())
+        .unwrap_err()
+        .to_string();
+    assert!(qname.starts_with("invalid xsd:QName literal "), "{qname}");
+    let qualified = Value::typed("a b", PROV_QUALIFIED_NAME.clone())
+        .unwrap_err()
+        .to_string();
+    assert!(
+        qualified.starts_with("invalid prov:QUALIFIED_NAME literal "),
+        "{qualified}"
+    );
+    let datetime = DateTime::parse("x").unwrap_err().to_string();
+    assert!(
+        datetime.starts_with("invalid xsd:dateTime literal "),
+        "{datetime}"
+    );
+}
+
+#[test]
 fn an_invalid_literal_prints_an_outside_datatype_as_its_iri() {
     let error = Error::InvalidLiteral {
         datatype: ex("duration"),
