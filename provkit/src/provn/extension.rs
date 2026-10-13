@@ -235,7 +235,7 @@ mod tests {
         let body = r#"ex:f(zz:id; zz:a, -, 2011-11-16T16:05:33Z, "s", "s"@en, "x" %% xsd:dateTime, "s" %% 12, 5, -5, 'zz:q', ex:set(1), zz:g(-; 1), (1, {2}), {"k"}, [zz:k="v" %% zz:t, 7=1])"#;
         for profile in [Profile::Strict, Profile::Default] {
             let (doc, ignored) = report(body, profile).unwrap();
-            assert!(doc.records.is_empty());
+            assert!(doc.records.is_empty(), "{:?}", doc.records);
             assert_eq!(ignored.len(), 1);
             assert_eq!(ignored[0].name, "ex:f");
         }
@@ -282,7 +282,7 @@ mod tests {
     fn an_identifier_and_a_semicolon_precede_the_first_argument() {
         for profile in [Profile::Strict, Profile::Default] {
             let (doc, ignored) = report("ex:f(ex:e; ex:g)", profile).unwrap();
-            assert!(doc.records.is_empty());
+            assert!(doc.records.is_empty(), "{:?}", doc.records);
             assert_eq!(ignored.len(), 1);
         }
     }
@@ -292,7 +292,7 @@ mod tests {
         let body = "ex:f(1)\nbundle ex:b\n  ex:g(2)\n  entity(ex:e)\n  ex:h(3)\nendBundle";
         for profile in [Profile::Strict, Profile::Default] {
             let (doc, ignored) = report(body, profile).unwrap();
-            assert!(doc.records.is_empty());
+            assert!(doc.records.is_empty(), "{:?}", doc.records);
             assert_eq!(doc.bundles[0].records.len(), 1);
             let names: Vec<(&str, usize, usize)> = ignored
                 .iter()
@@ -312,7 +312,7 @@ mod tests {
     #[test]
     fn a_prefixed_prov_keyword_is_an_extension() {
         let (doc, ignored) = report("prov:entity(ex:e)", Profile::Strict).unwrap();
-        assert!(doc.records.is_empty());
+        assert!(doc.records.is_empty(), "{:?}", doc.records);
         assert_eq!(ignored[0].name, "prov:entity");
     }
 

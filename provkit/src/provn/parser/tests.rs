@@ -223,10 +223,10 @@ fn prov_mention_of_with_a_marker_is_a_mention_under_default() {
 fn an_identifier_on_prov_mention_of_is_an_extension_under_strict() {
     let body = "prov:mentionOf(ex:m; ex:e2, ex:e1, ex:b)";
     let (doc, ignored) = report(body, Profile::Strict);
-    assert!(doc.records.is_empty());
+    assert!(doc.records.is_empty(), "{:?}", doc.records);
     assert_eq!(ignored.len(), 1);
     let (doc, ignored) = report(body, Profile::Default);
-    assert!(ignored.is_empty());
+    assert!(ignored.is_empty(), "{ignored:?}");
     assert!(matches!(&doc.records[0], Record::Mention(m) if m.id == Some(ex("m"))));
     let (doc, _) = report("prov:mentionOf(-; ex:e2, ex:e1, ex:b)", Profile::Default);
     assert!(matches!(&doc.records[0], Record::Mention(m) if m.id.is_none()));
@@ -293,7 +293,11 @@ fn strict_reads_an_empty_bundle() {
     for profile in [Profile::Strict, Profile::Default] {
         let d = provn::read_with(text, profile).unwrap();
         assert_eq!(d.bundles.len(), 1);
-        assert!(d.bundles[0].records.is_empty());
+        assert!(
+            d.bundles[0].records.is_empty(),
+            "{:?}",
+            d.bundles[0].records
+        );
     }
 }
 

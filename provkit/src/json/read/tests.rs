@@ -1031,12 +1031,12 @@ fn a_prefix_that_is_not_a_pn_prefix_is_invalid() {
 fn an_empty_array_reads_as_nothing() {
     // No value under an attribute key.
     let d = doc(&entity(r#""ex:a": [], "ex:b": "kept""#));
-    assert!(values(&d, "a").is_empty());
+    assert!(values(&d, "a").is_empty(), "{:?}", values(&d, "a"));
     assert_eq!(values(&d, "b"), [Value::Str("kept".into())]);
     assert_eq!(d.records[0].attributes().len(), 1);
     // No record under an identifier.
     let d = doc(&format!(r#"{{{PFX}, "entity": {{"ex:e": []}}}}"#));
-    assert!(d.records.is_empty());
+    assert!(d.records.is_empty(), "{:?}", d.records);
 }
 
 #[test]

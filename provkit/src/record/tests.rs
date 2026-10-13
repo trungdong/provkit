@@ -181,7 +181,7 @@ fn from_parts_builds_every_kind_empty() {
         let r = Record::from_parts(kind, id.clone(), vec![], Attributes::new()).unwrap();
         assert_eq!(r.kind(), kind);
         assert_eq!(r.id(), id.as_ref());
-        assert!(r.formals().is_empty());
+        assert!(r.formals().is_empty(), "{:?}", r.formals());
         assert!(r.attributes().is_empty());
     }
 }
