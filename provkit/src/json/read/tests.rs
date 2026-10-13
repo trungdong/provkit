@@ -1038,10 +1038,9 @@ fn a_prefix_that_is_not_a_pn_prefix_is_invalid() {
         );
     }
     let in_bundle = r#"{"bundle": {"ex:b": {"prefix": {"1a": "http://example.org/"}}}}"#;
-    assert!(matches!(
-        json::read(in_bundle),
-        Err(Error::InvalidPrefix(p)) if p == "1a"
-    ));
+    let (section, key, error) = record_error(in_bundle);
+    assert_eq!((section.as_str(), key.as_str()), ("bundle", "ex:b"));
+    assert!(matches!(error, Error::InvalidPrefix(p) if p == "1a"));
     assert!(json::read(&table("a-b")).is_ok());
 }
 
@@ -1169,8 +1168,17 @@ fn every_kind_of_bad_value_names_its_record() {
         r#""used": {"_:u": {"prov:entity": null}}"#,
     );
     let (section, key, error) = record_error(&text);
+    assert_eq!((section.as_str(), key.as_str()), ("bundle", "ex:b"));
+    let Error::InRecord {
+        section,
+        key,
+        error,
+    } = error
+    else {
+        panic!("expected a nested InRecord, got {error:?}")
+    };
     assert_eq!((section.as_str(), key.as_str()), ("used", "_:u"));
-    assert!(matches!(error, Error::JsonStructure { .. }));
+    assert!(matches!(*error, Error::JsonStructure { .. }));
 }
 
 #[test]
@@ -1554,4 +1562,57 @@ fn an_unknown_member_of_a_value_object_is_placed_at_its_key() {
         "unknown key `zz` in a value object, expected `$`, `type` or `lang` at line 1 column {column}"
     );
     assert_eq!(message, expected);
+}
+
+#[test]
+fn an_error_inside_a_bundle_names_the_bundle() {
+    for body in [r#""zz:e": {}"#, r#""ex:e": {"ex:a": null}"#] {
+        let text = format!(
+            r#"{{"prefix": {{"ex": "http://example.org/"}}, "bundle": {{"ex:b": {{"entity": {{{body}}}}}}}}}"#
+        );
+        let (section, key, inner) = record_error(&text);
+        assert_eq!(
+            (section.as_str(), key.as_str()),
+            ("bundle", "ex:b"),
+            "{text}"
+        );
+        let Error::InRecord { section, key, .. } = inner else {
+            panic!("{text}: expected a nested InRecord, got {inner:?}")
+        };
+        assert_eq!(section, "entity", "{text}");
+        assert!(key == "zz:e" || key == "ex:e", "{text}");
+    }
+    let text = r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"ex:b": {"entity": {"zz:e": {}}}}}"#;
+    assert_eq!(
+        json::read(text).unwrap_err().to_string(),
+        "bundle `ex:b`: entity `zz:e`: undeclared prefix `zz`"
+    );
+}
+
+#[test]
+fn a_bad_namespace_table_in_a_bundle_names_the_bundle() {
+    for (entry, reserved) in [
+        (r#""1a": "http://example.org/""#, false),
+        (r#""prov": "http://x/""#, true),
+    ] {
+        let text = format!(
+            r#"{{"prefix": {{"ex": "http://example.org/"}}, "bundle": {{"ex:b": {{"prefix": {{{entry}}}}}}}}}"#
+        );
+        let (section, key, inner) = record_error(&text);
+        assert_eq!(
+            (section.as_str(), key.as_str()),
+            ("bundle", "ex:b"),
+            "{text}"
+        );
+        match inner {
+            Error::InvalidPrefix(p) if !reserved => assert_eq!(p, "1a", "{text}"),
+            Error::ReservedPrefix { .. } if reserved => {}
+            other => panic!("{text}: unexpected {other:?}"),
+        }
+    }
+    // The document's own table stays unwrapped.
+    assert!(matches!(
+        json::read(r#"{"prefix": {"prov": "http://x/"}}"#),
+        Err(Error::ReservedPrefix { .. })
+    ));
 }

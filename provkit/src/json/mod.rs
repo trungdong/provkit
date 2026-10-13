@@ -37,7 +37,9 @@ use crate::{Document, Error, JsonError, Result, strip_bom};
 ///   value, a repeated attribute or value-object key, a formal of the wrong
 ///   form, a blank identifier, or a name or literal PROV does not allow. It
 ///   names the section and the record's key, which locates an error that
-///   carries no position.
+///   carries no position. Inside a bundle the record's error is wrapped once
+///   more in an `InRecord` whose section is `bundle` and whose key is the
+///   bundle's, so the message reads ``bundle `ex:b`: entity `ex:e`: ...``.
 /// - [`Error::DuplicateBundle`], inside [`Error::InRecord`], for two bundles
 ///   with one identifier, a bundle key given twice included. Bundle keys are
 ///   checked before any bundle's content, so the repeat is reported whatever

@@ -140,7 +140,7 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
         if key.starts_with("_:") {
             return Err(located(needs_identifier("bundle", key)));
         }
-        let bundle_ns = namespaces(&bundle.prefix)?;
+        let bundle_ns = namespaces(&bundle.prefix).map_err(located)?;
         let id = Scope::within(&bundle_ns, &doc_ns)
             .resolve(key)
             .map_err(located)?;
@@ -149,8 +149,8 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
         }
         bundles.push((key, bundle, bundle_ns, id));
     }
-    for (_, bundle, _, _) in &bundles {
-        refuse_invalid(&bundle.sections, input)?;
+    for (key, bundle, _, _) in &bundles {
+        refuse_invalid(&bundle.sections, input).map_err(|e| in_record("bundle", key, e))?;
     }
 
     builder.start_document(doc_ns.clone());
@@ -161,7 +161,7 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
         builder
             .start_bundle(id, bundle_ns.clone())
             .map_err(located)?;
-        emit_sections(&bundle.sections, scope, builder)?;
+        emit_sections(&bundle.sections, scope, builder).map_err(located)?;
         builder.end_bundle();
     }
     builder.end_document();

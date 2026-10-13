@@ -87,6 +87,8 @@ pub enum Error {
         message: String,
     },
     /// An error in one record of a PROV-JSON document, or in a bundle's key.
+    /// Inside a bundle, the record's error sits in a second `InRecord`
+    /// naming the bundle.
     #[error("{section} `{}`: {error}", clip(.key))]
     #[non_exhaustive]
     InRecord {
