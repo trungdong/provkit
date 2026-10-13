@@ -1,8 +1,9 @@
 //! The crate's error type.
 
 use std::borrow::Cow;
+use std::fmt;
 
-use crate::{Kind, QName};
+use crate::{Formal, FormalAttr, Kind, QName};
 
 /// The most characters of rejected input that a message quotes.
 pub(crate) const QUOTED: usize = 80;
@@ -170,13 +171,13 @@ pub enum Error {
         reason: String,
     },
     /// Records sharing an identifier cannot be merged.
-    #[error("cannot unify records `{}`: {reason}", clip(&.id.to_string()))]
+    #[error("cannot unify records `{}`: {cause}", clip(&.id.to_string()))]
     #[non_exhaustive]
     Unification {
         /// The shared identifier.
         id: QName,
-        /// Which attribute or kinds conflict.
-        reason: String,
+        /// Which kinds or which formal attribute conflict.
+        cause: UnificationCause,
     },
     /// Two bundles in one document carry the same identifier.
     #[error("duplicate bundle `{}`", clip(&.0.to_string()))]
@@ -208,6 +209,65 @@ pub(crate) fn short_name(name: &QName) -> Cow<'_, str> {
         crate::well_known::XSD => Cow::Owned(format!("xsd:{}", name.local())),
         crate::well_known::PROV => Cow::Owned(format!("prov:{}", name.local())),
         _ => Cow::Owned(clip(&name.to_string()).into_owned()),
+    }
+}
+
+/// Why two records under one identifier cannot be merged, the payload of
+/// [`Error::Unification`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum UnificationCause {
+    /// The records are of two kinds that PROV-CONSTRAINTS 53 to 55 keep
+    /// apart under one identifier.
+    #[non_exhaustive]
+    Kinds {
+        /// The kind seen first.
+        first: Kind,
+        /// The kind seen second.
+        second: Kind,
+    },
+    /// One formal attribute holds two values that do not unify. `None` is
+    /// an absent formal.
+    #[non_exhaustive]
+    Formal {
+        /// The formal attribute.
+        attr: FormalAttr,
+        /// The value in the record seen first.
+        first: Option<Formal>,
+        /// The value in the record seen second.
+        second: Option<Formal>,
+    },
+}
+
+impl fmt::Display for UnificationCause {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UnificationCause::Kinds { first, second } => write!(
+                f,
+                "{} and {} cannot share an identifier",
+                first.name(),
+                second.name()
+            ),
+            UnificationCause::Formal {
+                attr,
+                first,
+                second,
+            } => write!(
+                f,
+                "{attr} is {} in one record and {} in another",
+                formal_text(first.as_ref()),
+                formal_text(second.as_ref())
+            ),
+        }
+    }
+}
+
+/// A formal value as a message prints it, clipped; `absent` for `None`.
+fn formal_text(formal: Option<&Formal>) -> Cow<'_, str> {
+    match formal {
+        None => Cow::Borrowed("absent"),
+        Some(Formal::Name(q)) => Cow::Owned(clip(&q.to_string()).into_owned()),
+        Some(Formal::Time(t)) => Cow::Owned(clip(&t.to_string()).into_owned()),
     }
 }
 
@@ -252,7 +312,10 @@ mod tests {
             (
                 Error::Unification {
                     id: huge_name.clone(),
-                    reason: "kinds differ".into(),
+                    cause: UnificationCause::Kinds {
+                        first: Kind::Usage,
+                        second: Kind::Generation,
+                    },
                 },
                 &name_count,
             ),

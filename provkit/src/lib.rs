@@ -81,7 +81,7 @@ pub(crate) mod test_util;
 pub use attributes::{Attributes, IntoIter as AttributesIntoIter, Iter as AttributesIter};
 pub use datetime::DateTime;
 pub use document::{Bundle, Document};
-pub use error::{Error, Result};
+pub use error::{Error, Result, UnificationCause};
 pub use namespaces::Namespaces;
 pub use qname::{QName, well_known};
 pub use record::{

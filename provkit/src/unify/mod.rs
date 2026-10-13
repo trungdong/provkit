@@ -15,9 +15,9 @@ use std::collections::HashMap;
 
 use indexmap::IndexMap;
 
-use crate::error::clip;
 use crate::{
-    Attributes, Bundle, Document, Error, Formal, FormalAttr, FormalRef, Kind, QName, Record, Result,
+    Attributes, Bundle, Document, Error, Formal, FormalAttr, FormalRef, Kind, QName, Record,
+    Result, UnificationCause,
 };
 
 impl Document {
@@ -52,7 +52,9 @@ impl Document {
     ///
     /// # Errors
     ///
-    /// - [`Error::Unification`] when two records conflict.
+    /// - [`Error::Unification`] when two records conflict. Its
+    ///   [`UnificationCause`](crate::UnificationCause) says whether two kinds or
+    ///   one formal attribute clash.
     /// - [`Error::InvalidRecord`] when a record carries an attribute that
     ///   spells one of its own formals (`prov:activity` on a generation).
     ///   Readers never produce such a record, but a hand-built one can.
@@ -168,11 +170,10 @@ fn check_kinds(id: &QName, kinds: impl Iterator<Item = Kind>) -> Result<()> {
             if !may_share_an_identifier(kind, other) {
                 return Err(Error::Unification {
                     id: id.clone(),
-                    reason: format!(
-                        "{} and {} cannot share an identifier",
-                        other.name(),
-                        kind.name()
-                    ),
+                    cause: UnificationCause::Kinds {
+                        first: other,
+                        second: kind,
+                    },
                 });
             }
         }
@@ -193,11 +194,11 @@ fn merge(kind: Kind, id: &QName, members: &[&Record]) -> Result<Record> {
                 Some(existing) => {
                     return Err(Error::Unification {
                         id: id.clone(),
-                        reason: format!(
-                            "{attr} is {} in one record and {} in another",
-                            show(existing),
-                            show(value)
-                        ),
+                        cause: UnificationCause::Formal {
+                            attr,
+                            first: Some(existing.to_formal()),
+                            second: Some(value.to_formal()),
+                        },
                     });
                 }
             }
@@ -212,14 +213,6 @@ fn merge(kind: Kind, id: &QName, members: &[&Record]) -> Result<Record> {
         attributes.extend_from(record.attributes());
     }
     Record::from_parts(kind, Some(id.clone()), formals, attributes)
-}
-
-fn show(formal: FormalRef<'_>) -> String {
-    let text = match formal {
-        FormalRef::Name(q) => q.to_string(),
-        FormalRef::Time(t) => t.to_string(),
-    };
-    clip(&text).into_owned()
 }
 
 #[cfg(test)]

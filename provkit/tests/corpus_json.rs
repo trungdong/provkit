@@ -3,7 +3,6 @@
 mod common;
 
 use common::{JSON_CORPUS_SIZE, Report, corpus_dir, files, only};
-use provkit::FormalAttr;
 
 #[test]
 fn reads_all_398() {
@@ -27,9 +26,6 @@ fn round_trips_all_398() {
     report.finish(JSON_CORPUS_SIZE);
 }
 
-/// The time formals a unification conflict may name.
-const TIME_FORMALS: [&str; 3] = ["prov:time", "prov:startTime", "prov:endTime"];
-
 /// The eight `scruffy-*` documents whose conflict is on a name, not a time.
 const NAME_CONFLICTS: [&str; 8] = [
     "scruffy-end3-M.json",
@@ -43,8 +39,8 @@ const NAME_CONFLICTS: [&str; 8] = [
 ];
 
 /// The 28 `scruffy-*` documents (14 pairs) each hold two records under one
-/// identifier that disagree on a formal. Each fails to unify. The reason names
-/// `prov:time` in 20 of them (generation, usage, invalidation and the first
+/// identifier that disagree on a formal. Each fails to unify. The cause names
+/// a time formal in 20 of them (generation, usage, invalidation and the first
 /// two start and end cases) and a `prov:` name attribute in the other 8.
 #[test]
 fn unification_over_the_corpus() {
@@ -57,17 +53,13 @@ fn unification_over_the_corpus() {
         };
         let scruffy = name.starts_with("scruffy-");
         match d.unified() {
-            Err(provkit::Error::Unification { reason, .. }) if scruffy => {
-                let formal = reason.split(' ').next().unwrap_or_default();
-                let local = formal.strip_prefix("prov:").unwrap_or_default();
-                if TIME_FORMALS.contains(&formal) {
+            Err(provkit::Error::Unification { cause, .. }) if scruffy => match cause {
+                provkit::UnificationCause::Formal { attr, .. } if attr.is_time() => {
                     on_time.push(name.clone());
-                } else if FormalAttr::from_local_name(local).is_some_and(|a| !a.is_time()) {
-                    on_name.push(name.clone());
-                } else {
-                    report.fail(&name, format!("unexpected conflict: {reason}"));
                 }
-            }
+                provkit::UnificationCause::Formal { .. } => on_name.push(name.clone()),
+                other => report.fail(&name, format!("unexpected conflict: {other}")),
+            },
             Err(e) if scruffy => {
                 report.fail(&name, format!("expected Error::Unification, got: {e}"));
             }

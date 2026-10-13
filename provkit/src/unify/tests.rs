@@ -2,7 +2,7 @@ use crate::test_util::{agent, bundle, document, entity, ex, prov, relation};
 use crate::well_known::PROV_LABEL;
 use crate::{
     Association, Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F,
-    Generation, Kind, Namespaces, QName, Record,
+    Generation, Kind, Namespaces, QName, Record, UnificationCause,
 };
 
 fn rec(kind: Kind, id: &str, formals: Vec<(F, Formal)>, label: Option<&str>) -> Record {
@@ -113,13 +113,22 @@ fn conflicting_times_fail() {
         gen_at(Some("g"), "2012-12-03T21:08:16Z"),
     ]);
     match d.unified() {
-        Err(Error::Unification { id, reason }) => {
+        Err(Error::Unification { id, cause }) => {
             assert_eq!(id, ex("g"));
+            assert_eq!(
+                cause,
+                UnificationCause::Formal {
+                    attr: F::Time,
+                    first: Some(t("2014-06-23T12:28:53Z")),
+                    second: Some(t("2012-12-03T21:08:16Z")),
+                }
+            );
+            let text = cause.to_string();
             assert!(
-                reason.contains("prov:time")
-                    && reason.contains("2014-06-23T12:28:53Z")
-                    && reason.contains("2012-12-03T21:08:16Z"),
-                "{reason}"
+                text.contains("prov:time")
+                    && text.contains("2014-06-23T12:28:53Z")
+                    && text.contains("2012-12-03T21:08:16Z"),
+                "{text}"
             );
         }
         other => panic!("{other:?}"),
@@ -133,12 +142,24 @@ fn conflicting_names_fail() {
             .map(|a| rec(Kind::Usage, "u", vec![(F::Activity, name(a))], None))
             .to_vec(),
     );
-    let Err(Error::Unification { reason, .. }) = d.unified() else {
+    let Err(Error::Unification { cause, .. }) = d.unified() else {
         panic!("expected a unification error")
     };
-    assert!(
-        reason.contains("prov:activity") && reason.contains("a1") && reason.contains("a2"),
-        "{reason}"
+    assert_eq!(
+        cause,
+        UnificationCause::Formal {
+            attr: F::Activity,
+            first: Some(name("a1")),
+            second: Some(name("a2")),
+        }
+    );
+    assert_eq!(
+        cause.to_string(),
+        format!(
+            "prov:activity is {} in one record and {} in another",
+            ex("a1"),
+            ex("a2")
+        )
     );
 }
 
@@ -150,10 +171,11 @@ fn a_conflict_between_long_names_gives_a_short_message() {
             .map(|c| rec(Kind::Usage, "u", vec![(F::Activity, long(c))], None))
             .to_vec(),
     );
-    let Err(Error::Unification { reason, .. }) = d.unified() else {
+    let Err(e @ Error::Unification { .. }) = d.unified() else {
         panic!("expected a unification error")
     };
-    assert!(reason.len() < 600, "{} bytes", reason.len());
+    let text = e.to_string();
+    assert!(text.len() < 600, "{} bytes", text.len());
 }
 
 #[test]
@@ -257,6 +279,24 @@ fn influence_and_derivation_share_with_any_relation() {
 
 #[test]
 fn constraint_53_relations_are_pairwise_disjoint() {
+    let d = document(vec![
+        rec(Kind::Usage, "x", vec![], None),
+        rec(Kind::Generation, "x", vec![], None),
+    ]);
+    let Err(Error::Unification { cause, .. }) = d.unified() else {
+        panic!("expected a unification error")
+    };
+    assert_eq!(
+        cause,
+        UnificationCause::Kinds {
+            first: Kind::Usage,
+            second: Kind::Generation,
+        }
+    );
+    assert_eq!(
+        cause.to_string(),
+        "used and wasGeneratedBy cannot share an identifier"
+    );
     for (i, &a) in CONSTRAINT_53.iter().enumerate() {
         for &b in &CONSTRAINT_53[i + 1..] {
             for (x, y) in [(a, b), (b, a)] {

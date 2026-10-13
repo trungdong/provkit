@@ -1,0 +1,3 @@
+# `Error` is 136 bytes because `Unification` carries two `Option<Formal>` beside the
+# identifier. Boxing a rare variant was judged worse than eight bytes on every `Result`.
+large-error-threshold = 144
