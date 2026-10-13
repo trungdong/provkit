@@ -26,11 +26,36 @@ pub(crate) fn clip(text: &str) -> Cow<'_, str> {
 /// optional dependency: [`Error::Json`] holds a `serde_json::Error`. Every
 /// other variant, including the ones only one reader or writer produces,
 /// exists under every feature set.
+///
+/// The enum and each of its struct variants are `#[non_exhaustive]`, so a
+/// `match` in another crate needs a wildcard arm and a pattern on a struct
+/// variant ends in `..`:
+///
+/// ```
+/// fn line(e: &provkit::Error) -> Option<usize> {
+///     match e {
+///         provkit::Error::Syntax { line, .. } | provkit::Error::At { line, .. } => Some(*line),
+///         _ => None,
+///     }
+/// }
+/// ```
+///
+/// Without the `..` the pattern does not compile:
+///
+/// ```compile_fail,E0638
+/// fn line(e: &provkit::Error) -> Option<usize> {
+///     match e {
+///         provkit::Error::Syntax { line, column, message } => Some(*line),
+///         _ => None,
+///     }
+/// }
+/// ```
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {
     /// PROV-N text the grammar rejects.
     #[error("PROV-N syntax error at line {line}, column {column}: {message}")]
+    #[non_exhaustive]
     Syntax {
         /// 1-based line.
         line: usize,
@@ -42,6 +67,7 @@ pub enum Error {
     /// An error at a position in PROV-N text: a name, literal or record the
     /// reader could parse but not accept.
     #[error("line {line}, column {column}: {error}")]
+    #[non_exhaustive]
     At {
         /// 1-based line.
         line: usize,
@@ -53,12 +79,14 @@ pub enum Error {
     },
     /// PROV-JSON that is valid JSON but not a PROV document.
     #[error("PROV-JSON: {message}")]
+    #[non_exhaustive]
     JsonStructure {
         /// What was wrong.
         message: String,
     },
     /// An error in one record of a PROV-JSON document, or in a bundle's key.
     #[error("{section} `{}`: {error}", clip(.key))]
+    #[non_exhaustive]
     InRecord {
         /// The section the record is in: a kind's name, or `bundle`.
         section: String,
@@ -70,6 +98,7 @@ pub enum Error {
     },
     /// Parts that do not make a record of their kind.
     #[error("{}: {message}", .kind.name())]
+    #[non_exhaustive]
     InvalidRecord {
         /// The kind being built.
         kind: Kind,
@@ -79,6 +108,7 @@ pub enum Error {
     /// A name PROV-N cannot write, because its namespace IRI holds a
     /// character `IRI_REF` forbids.
     #[error("PROV-N cannot write the name {}: {reason}", clip(&.name.to_string()))]
+    #[non_exhaustive]
     Unwritable {
         /// The name, which displays as its IRI.
         name: QName,
@@ -88,6 +118,7 @@ pub enum Error {
     /// A namespace declaration PROV-N cannot write, because the IRI holds a
     /// character `IRI_REF` forbids.
     #[error("PROV-N cannot declare {}: {reason}", declaration(.prefix, .iri))]
+    #[non_exhaustive]
     UnwritableNamespace {
         /// The prefix. The empty string stands for the default namespace.
         prefix: String,
@@ -107,6 +138,7 @@ pub enum Error {
         "prefix `{prefix}` is reserved for <{expected}> and cannot be declared as <{}>",
         clip(.found)
     )]
+    #[non_exhaustive]
     ReservedPrefix {
         /// The reserved prefix.
         prefix: String,
@@ -127,6 +159,7 @@ pub enum Error {
     InvalidLanguageTag(String),
     /// A literal's text is not valid for its datatype.
     #[error("invalid {datatype} literal `{}`: {reason}", clip(.lexical))]
+    #[non_exhaustive]
     InvalidLiteral {
         /// The datatype, as `prefix:local` under its usual prefix (`xsd:dateTime`).
         datatype: String,
@@ -137,6 +170,7 @@ pub enum Error {
     },
     /// Records sharing an identifier cannot be merged.
     #[error("cannot unify records `{}`: {reason}", clip(&.id.to_string()))]
+    #[non_exhaustive]
     Unification {
         /// The shared identifier.
         id: QName,

@@ -94,11 +94,13 @@ fn located(source: &str, error: provkit::Error) -> anyhow::Error {
             line,
             column,
             message,
+            ..
         } => anyhow!("{source}:{line}:{column}: {message}"),
         provkit::Error::At {
             line,
             column,
             error,
+            ..
         } => anyhow!("{source}:{line}:{column}: {error}"),
         other => anyhow!("{source}: {other}"),
     }
