@@ -430,6 +430,13 @@ fn from_raw(text: &str) -> JsonValue {
 /// [`from_raw`] takes before the visitor runs.
 struct ValueVisitor;
 
+/// Of the members of a value object read so far, the first invalid one in
+/// the order `$`, `type`, `lang`, if any. The caller reports it ahead of a
+/// fault in the member it is reading, which comes later in the text.
+fn earliest_invalid(members: [Option<Result<String, InvalidValue>>; 3]) -> Option<InvalidValue> {
+    members.into_iter().flatten().find_map(Result::err)
+}
+
 impl<'de> Visitor<'de> for ValueVisitor {
     type Value = JsonValue;
     fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -470,30 +477,38 @@ impl<'de> Visitor<'de> for ValueVisitor {
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<JsonValue, A::Error> {
         let (mut value, mut datatype, mut lang) = (None, None, None);
         while let Some(key) = map.next_key::<String>()? {
+            if !matches!(key.as_str(), "$" | "type" | "lang") {
+                // An unknown key is refused at the key, before its value is
+                // read. An invalid member read before it comes first in the
+                // text, so that one is reported instead; the rest of the
+                // object is read first, because the parser refuses an
+                // object left half read.
+                return match earliest_invalid([value, datatype, lang]) {
+                    Some(invalid) => {
+                        map.next_value::<IgnoredAny>()?;
+                        while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
+                        Ok(JsonValue::Invalid(invalid))
+                    }
+                    None => Err(de::Error::custom(format!(
+                        "unknown key `{}` in a value object, expected `$`, \
+                         `type` or `lang`",
+                        clip(&key)
+                    ))),
+                };
+            }
             let member: &mut Option<_> = match key.as_str() {
                 "$" => &mut value,
                 "type" => &mut datatype,
-                "lang" => &mut lang,
-                other => {
-                    return Err(de::Error::custom(format!(
-                        "unknown key `{}` in a value object, expected `$`, \
-                         `type` or `lang`",
-                        clip(other)
-                    )));
-                }
+                _ => &mut lang,
             };
             let text = map.next_value::<&RawValue>()?.get();
             if member.is_none() {
                 *member = Some(member_string(&key, text));
                 continue;
             }
-            // The member is given twice. An invalid member read before it
-            // comes first in the text, so that one is reported, with `$`
-            // before `type` before `lang` as below. The rest of the object
-            // is read first, because the parser refuses an object left half
-            // read.
-            let mut earlier = [value, datatype, lang].into_iter().flatten();
-            return match earlier.find_map(Result::err) {
+            // The member is given twice. The same rule: an invalid member
+            // read before it is reported first.
+            return match earliest_invalid([value, datatype, lang]) {
                 Some(invalid) => {
                     while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
                     Ok(JsonValue::Invalid(invalid))

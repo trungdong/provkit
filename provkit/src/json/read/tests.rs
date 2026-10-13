@@ -1459,6 +1459,11 @@ fn errors_in_a_record_are_reported_in_the_order_of_the_text() {
             r#""ex:a": {"$": 1, "$": "x"}"#,
             "expected a string as the `$` of a value object",
         ),
+        // Inside a value object, an invalid member before an unknown one.
+        (
+            r#""ex:a": {"$": 1, "zz": 2}"#,
+            "expected a string as the `$` of a value object",
+        ),
         (
             r#""ex:a": {"$": "\ud800", "lang": "en", "lang": "fr"}"#,
             "unexpected end of hex escape",
