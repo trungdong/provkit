@@ -39,7 +39,11 @@ use crate::{Document, Error, JsonError, Result, strip_bom};
 ///   names the section and the record's key, which locates an error that
 ///   carries no position.
 /// - [`Error::DuplicateBundle`], inside [`Error::InRecord`], for two bundles
-///   with one identifier, a bundle key given twice included.
+///   with one identifier, a bundle key given twice included. Bundle keys are
+///   checked before any bundle's content, so the repeat is reported whatever
+///   the second bundle holds. A bundle key that repeats, does not resolve or
+///   has a bad namespace table is reported after a fault in the document
+///   body and before any fault inside a bundle.
 /// - [`Error::InvalidPrefix`] and [`Error::ReservedPrefix`] for a `prefix`
 ///   entry that PROV-N could not write, returned as they are.
 pub fn read(text: &str) -> Result<Document> {

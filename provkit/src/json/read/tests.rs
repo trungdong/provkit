@@ -1433,10 +1433,38 @@ fn a_repeated_key_is_an_error_after_its_second_value() {
 
 #[test]
 fn a_repeated_bundle_key_is_a_duplicate_bundle() {
-    let text = r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"ex:b": {}, "ex:b": {}}}"#;
+    // Two empty bundles; a second bundle holding a value the wire layer
+    // rejects; and two spellings of one identifier.
+    for text in [
+        r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"ex:b": {}, "ex:b": {}}}"#,
+        r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"ex:b": {}, "ex:b": {"entity": {"ex:e": {"ex:a": null}}}}}"#,
+        r#"{"prefix": {"ex": "http://example.org/", "ex2": "http://example.org/"}, "bundle": {"ex:b": {}, "ex2:b": {"entity": {"ex:e": {"ex:a": null}}}}}"#,
+    ] {
+        let (section, key, error) = record_error(text);
+        assert_eq!(section, "bundle", "{text}");
+        assert!(key == "ex:b" || key == "ex2:b", "{text}: {key}");
+        assert!(
+            matches!(error, Error::DuplicateBundle(ref id) if *id == ex("b")),
+            "{text}: {error:?}"
+        );
+    }
+}
+
+#[test]
+fn a_bundle_key_fault_comes_after_the_body_and_before_the_bundle_body() {
+    // A wire-level fault in the document body is reported first.
+    let text = r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e": {"ex:a": null}}, "bundle": {"zz:b": {}}}"#;
+    let (section, _, _) = record_error(text);
+    assert_eq!(section, "entity");
+    // A bundle key that does not resolve is reported before a wire-level
+    // fault inside that bundle.
+    let text = r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"zz:b": {"entity": {"ex:e": {"ex:a": null}}}}}"#;
     let (section, key, error) = record_error(text);
-    assert_eq!((section.as_str(), key.as_str()), ("bundle", "ex:b"));
-    assert!(matches!(error, Error::DuplicateBundle(id) if id == ex("b")));
+    assert_eq!((section.as_str(), key.as_str()), ("bundle", "zz:b"));
+    assert!(
+        matches!(error, Error::UndeclaredPrefix(ref p) if p == "zz"),
+        "{error:?}"
+    );
 }
 
 #[test]

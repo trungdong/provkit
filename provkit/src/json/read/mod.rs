@@ -1,5 +1,7 @@
 //! Wire structs to document-builder events.
 
+use std::collections::HashSet;
+
 use indexmap::IndexMap;
 
 use super::structure;
@@ -117,26 +119,45 @@ fn refuse_invalid(sections: &IndexMap<Kind, JsonSection>, input: &str) -> Result
 }
 
 /// Builds the document `wire` holds. `input` is the text `wire` was read
-/// from. A value the wire layer could not read is refused before anything
-/// is built, so it is reported ahead of an error in a name or a literal,
-/// as an error of the JSON parser is.
+/// from. Faults are reported in this order: a value in the document body
+/// the wire layer could not read; a bundle key that repeats, does not
+/// resolve or has a bad namespace table, in bundle order; a value inside a
+/// bundle the wire layer could not read; then every error found while
+/// building records, in document order. So a wire-level fault is reported
+/// ahead of an error in a name or a literal, as an error of the JSON parser
+/// is, and a bundle's key ahead of its content.
 pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuilder) -> Result<()> {
     refuse_invalid(&wire.sections, input)?;
-    for (_, bundle) in &wire.bundle {
-        refuse_invalid(&bundle.sections, input)?;
-    }
     let doc_ns = namespaces(&wire.prefix)?;
-    builder.start_document(doc_ns.clone());
-    emit_sections(&wire.sections, Scope::of(&doc_ns), builder)?;
+
+    // Every bundle's key, resolved in its own scope (PROV-N 3.7.4), and
+    // checked for a repeat before any bundle body is read. `start_bundle`
+    // checks again for a hand-built document.
+    let mut ids = HashSet::new();
+    let mut bundles = Vec::with_capacity(wire.bundle.len());
     for (key, bundle) in &wire.bundle {
-        let bundle_ns = namespaces(&bundle.prefix)?;
-        let scope = Scope::within(&bundle_ns, &doc_ns);
         let located = |e| in_record("bundle", key, e);
         if key.starts_with("_:") {
             return Err(located(needs_identifier("bundle", key)));
         }
-        // The bundle's own name resolves in the bundle scope (PROV-N 3.7.4).
-        let id = scope.resolve(key).map_err(located)?;
+        let bundle_ns = namespaces(&bundle.prefix)?;
+        let id = Scope::within(&bundle_ns, &doc_ns)
+            .resolve(key)
+            .map_err(located)?;
+        if !ids.insert(id.clone()) {
+            return Err(located(Error::DuplicateBundle(id)));
+        }
+        bundles.push((key, bundle, bundle_ns, id));
+    }
+    for (_, bundle, _, _) in &bundles {
+        refuse_invalid(&bundle.sections, input)?;
+    }
+
+    builder.start_document(doc_ns.clone());
+    emit_sections(&wire.sections, Scope::of(&doc_ns), builder)?;
+    for (key, bundle, bundle_ns, id) in bundles {
+        let located = |e| in_record("bundle", key, e);
+        let scope = Scope::within(&bundle_ns, &doc_ns);
         builder
             .start_bundle(id, bundle_ns.clone())
             .map_err(located)?;
