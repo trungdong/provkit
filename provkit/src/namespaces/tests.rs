@@ -41,6 +41,15 @@ fn undeclared_prefix_and_bare_without_default_fail() {
 }
 
 #[test]
+fn a_full_iri_is_an_undeclared_prefix_naming_its_scheme() {
+    let mut ns = Namespaces::new();
+    ns.declare("ex", "http://example.org/").unwrap();
+    assert!(
+        matches!(ns.resolve("http://example.org/e"), Err(Error::UndeclaredPrefix(p)) if p == "http")
+    );
+}
+
+#[test]
 fn malformed_names_are_invalid() {
     let mut ns = Namespaces::new();
     ns.set_default("http://default.org/");
