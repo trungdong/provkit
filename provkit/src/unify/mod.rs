@@ -6,7 +6,8 @@
 //! Definition 4 makes non-expandable, where `-` is the constant "none" and
 //! unifies only with another absent value. These are the `plan` of an
 //! association, the `activity` of a derivation, and the `generation` and
-//! `usage` of a derivation whose `activity` is absent.
+//! `usage` of a derivation whose `activity` is absent. After the merge, each
+//! record is kept once, at its first position.
 //!
 //! The kinds that may share an identifier are listed on
 //! [`Document::unified`].
@@ -27,17 +28,17 @@ impl Document {
     /// Formal attributes unify position by position. An absent value takes
     /// the concrete one, equal values unify, and two different concrete
     /// values are an [`Error::Unification`] naming the identifier, the
-    /// attribute and both values. Non-formal attributes are the union in
-    /// first-seen order. The merged record takes the first member's position.
+    /// attribute and both values. In four positions an absent value is the
+    /// constant "none" and conflicts with a present one: the `plan` of
+    /// `wasAssociatedWith`, the `activity` of `wasDerivedFrom`, and the
+    /// `generation` and `usage` of a `wasDerivedFrom` whose `activity` is
+    /// absent (PROV-CONSTRAINTS Definition 4, Table 3, Constraint 23).
+    /// Non-formal attributes are the union in first-seen order. The merged
+    /// record takes the first member's position.
+    ///
     /// After the merge, a record equal to an earlier one in the same scope
     /// is dropped, so the result holds each record once; two records that
-    /// differ in any formal or attribute both stay. Bundles unify
-    /// independently and the rule does not cross a bundle boundary.
-    /// In four positions an absent value is the constant "none" and conflicts
-    /// with a present one: the `plan` of `wasAssociatedWith`, the `activity`
-    /// of `wasDerivedFrom`, and the `generation` and `usage` of a
-    /// `wasDerivedFrom` whose `activity` is absent (PROV-CONSTRAINTS
-    /// Definition 4, Table 3, Constraint 23).
+    /// differ in any formal or attribute both stay.
     ///
     /// Kinds that PROV-CONSTRAINTS forbids under one identifier are an
     /// error:
@@ -56,8 +57,9 @@ impl Document {
     /// merge, and neither do `hadMember`, `alternateOf`, `specializationOf`
     /// and `mentionOf` records, which PROV-DM gives no identifier.
     ///
-    /// Bundles unify independently. Bundles that share an identifier are
-    /// combined first, as document equality treats them.
+    /// Bundles unify independently, and a record in a bundle is never
+    /// dropped as a repeat of one outside it. Bundles that share an
+    /// identifier are combined first, as document equality treats them.
     ///
     /// # Errors
     ///

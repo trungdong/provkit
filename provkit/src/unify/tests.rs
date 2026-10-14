@@ -204,9 +204,10 @@ fn unified_keeps_the_namespace_tables() {
 
 #[test]
 fn an_absent_formal_unifies_with_a_present_one_except_where_it_means_none() {
-    // PROV-CONSTRAINTS Definition 4 makes two positions non-expandable: the
-    // plan of an association and the activity of a derivation. `-` there is
-    // the constant "none", which unifies only with "none".
+    // Two positions are always "none": the plan of an association and the
+    // activity of a derivation. The generation and usage of a derivation
+    // are "none" only without an activity, so the loop below gives every
+    // derivation one.
     let none_positions = [
         (Kind::Association, F::Plan),
         (Kind::Derivation, F::Activity),

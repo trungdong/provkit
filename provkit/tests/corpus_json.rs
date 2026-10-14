@@ -168,14 +168,17 @@ fn constraints_corpus_fails_to_unify_where_a_none_position_differs() {
                     second,
                     ..
                 } if first.is_none() != second.is_none() => {
-                    assert!(
-                        matches!(
-                            attr,
-                            provkit::FormalAttr::Plan | provkit::FormalAttr::Activity
-                        ),
-                        "{name}: {attr}"
-                    );
-                    none_failures.push(name);
+                    if matches!(
+                        attr,
+                        provkit::FormalAttr::Plan
+                            | provkit::FormalAttr::Activity
+                            | provkit::FormalAttr::Generation
+                            | provkit::FormalAttr::Usage
+                    ) {
+                        none_failures.push(name);
+                    } else {
+                        report.fail(&name, format!("none-position conflict on {attr}"));
+                    }
                 }
                 provkit::UnificationCause::Formal { attr, .. } => {
                     others.push((name, attr.to_string()));
