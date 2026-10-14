@@ -6,6 +6,7 @@ use serde::de::{self, DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor
 use serde::ser::{SerializeMap, SerializeSeq};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::value::RawValue;
+use std::collections::HashSet;
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -27,9 +28,11 @@ pub(super) type JsonSection = IndexMap<String, OneOrMany<JsonRecord>>;
 pub(super) struct JsonDocument {
     pub prefix: IndexMap<String, String>,
     pub sections: IndexMap<Kind, JsonSection>,
-    /// Every bundle under its key. A key given twice is kept twice, so the
-    /// builder refuses it as it refuses two spellings of one identifier.
+    /// Every bundle under its key, in order, up to the first key given
+    /// twice.
     pub bundle: Vec<(String, JsonBundle)>,
+    /// The first bundle key given twice, whose value was skipped unread.
+    pub repeated_bundle: Option<String>,
 }
 
 pub(super) struct JsonBundle {
@@ -57,7 +60,7 @@ struct ContainerVisitor {
 type Container = (
     IndexMap<String, String>,
     IndexMap<Kind, JsonSection>,
-    Vec<(String, JsonBundle)>,
+    Bundles,
 );
 
 impl<'de> Visitor<'de> for ContainerVisitor {
@@ -78,7 +81,7 @@ impl<'de> Visitor<'de> for ContainerVisitor {
                     continue;
                 }
                 ("bundle", _) if self.bundles && bundle.is_none() => {
-                    bundle = Some(map.next_value::<Bundles>()?.0);
+                    bundle = Some(map.next_value::<Bundles>()?);
                     continue;
                 }
                 ("prefix", _) => de::Error::duplicate_field("prefix"),
@@ -111,7 +114,8 @@ impl<'de> Deserialize<'de> for JsonDocument {
         Ok(JsonDocument {
             prefix,
             sections,
-            bundle,
+            bundle: bundle.list,
+            repeated_bundle: bundle.repeated,
         })
     }
 }
@@ -188,8 +192,15 @@ impl<'de, V: Deserialize<'de>> Deserialize<'de> for Unique<V> {
     }
 }
 
-/// The `bundle` object of a document, every entry kept in order.
-struct Bundles(Vec<(String, JsonBundle)>);
+/// The `bundle` object of a document, every entry kept in order up to the
+/// first key given twice. That key's value and the rest of the object are
+/// skipped, so a fault inside them does not stand in front of the repeat,
+/// which the reader reports in its place among the bundle keys.
+#[derive(Default)]
+struct Bundles {
+    list: Vec<(String, JsonBundle)>,
+    repeated: Option<String>,
+}
 
 impl<'de> Deserialize<'de> for Bundles {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
@@ -200,11 +211,24 @@ impl<'de> Deserialize<'de> for Bundles {
                 f.write_str("a map")
             }
             fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Bundles, A::Error> {
-                let mut out = Vec::new();
-                while let Some(entry) = map.next_entry()? {
-                    out.push(entry);
+                let mut list = Vec::new();
+                let mut seen = HashSet::new();
+                while let Some(key) = map.next_key::<String>()? {
+                    if !seen.insert(key.clone()) {
+                        // The parser refuses an object left half read.
+                        map.next_value::<IgnoredAny>()?;
+                        while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
+                        return Ok(Bundles {
+                            list,
+                            repeated: Some(key),
+                        });
+                    }
+                    list.push((key, map.next_value()?));
                 }
-                Ok(Bundles(out))
+                Ok(Bundles {
+                    list,
+                    repeated: None,
+                })
             }
         }
         d.deserialize_map(V)

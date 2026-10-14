@@ -131,19 +131,14 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
     let doc_ns = namespaces(&wire.prefix)?;
 
     // Every bundle's key, resolved in its own scope (PROV-N 3.7.4), and
-    // checked for a repeat before any bundle body is read. A spelling seen
-    // before is refused before its bundle's table is read, since that table
-    // lies inside the repeated value; two spellings of one identifier are
-    // refused once both resolve. `start_bundle` checks again for a
-    // hand-built document.
+    // checked for a repeat before any bundle body is read. Two spellings of
+    // one identifier are refused once both resolve. `start_bundle` checks
+    // again for a hand-built document.
     let mut spellings: HashMap<&str, QName> = HashMap::new();
     let mut ids = HashSet::new();
     let mut bundles = Vec::with_capacity(wire.bundle.len());
     for (key, bundle) in &wire.bundle {
         let located = |e| in_record("bundle", key, e);
-        if let Some(first) = spellings.get(key.as_str()) {
-            return Err(located(Error::DuplicateBundle(first.clone())));
-        }
         if key.starts_with("_:") {
             return Err(located(needs_identifier("bundle", key)));
         }
@@ -156,6 +151,13 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
         }
         spellings.insert(key.as_str(), id.clone());
         bundles.push((key, bundle, bundle_ns, id));
+    }
+    // A key spelt twice comes after the keys before it. The wire layer
+    // stops at it, unread, so its bundle's table cannot stand in front of
+    // it, and the first bundle under it has resolved above.
+    if let Some(key) = &wire.repeated_bundle {
+        let first = spellings[key.as_str()].clone();
+        return Err(in_record("bundle", key, Error::DuplicateBundle(first)));
     }
     for (key, bundle, _, _) in &bundles {
         refuse_invalid(&bundle.sections, input).map_err(|e| in_record("bundle", key, e))?;

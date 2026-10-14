@@ -74,6 +74,7 @@ fn to_wire(document: &Document) -> Result<JsonDocument> {
         prefix: prefix_table(&table, |_| true),
         sections,
         bundle: bundles.into_iter().collect(),
+        repeated_bundle: None,
     })
 }
 

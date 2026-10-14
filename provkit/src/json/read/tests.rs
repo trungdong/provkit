@@ -1481,6 +1481,42 @@ fn a_bundle_key_spelt_twice_is_refused_before_its_table_is_read() {
 }
 
 #[test]
+fn a_repeated_bundle_key_is_reported_whatever_its_value_holds() {
+    for value in [
+        r#"{"entity": {"ex:e": {}, "ex:e": {}}}"#,
+        r#"{"entity": {}, "entity": {}}"#,
+        r#"{"prefix": {"a": "http://a.org/", "a": "http://b.org/"}}"#,
+        r#"{"zzz": {}}"#,
+        r#"{"bundle": {}}"#,
+        "1",
+    ] {
+        let text = format!(
+            r#"{{"prefix": {{"ex": "http://example.org/"}}, "bundle": {{"ex:b": {{}}, "ex:b": {value}}}}}"#
+        );
+        let (section, key, error) = record_error(&text);
+        assert_eq!(
+            (section.as_str(), key.as_str()),
+            ("bundle", "ex:b"),
+            "{text}"
+        );
+        assert!(
+            matches!(error, Error::DuplicateBundle(ref id) if *id == ex("b")),
+            "{text}: {error:?}"
+        );
+    }
+    // A fault the parser finds inside the first bundle comes first.
+    let text =
+        r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"ex:b": {"zzz": {}}, "ex:b": {}}}"#;
+    let Err(Error::JsonStructure { message }) = json::read(text) else {
+        panic!("{text}: expected JsonStructure")
+    };
+    assert!(
+        message.starts_with("unknown record kind `zzz`"),
+        "{message}"
+    );
+}
+
+#[test]
 fn a_bundle_key_fault_comes_after_the_body_and_before_the_bundle_body() {
     // A wire-level fault in the document body is reported first.
     let text = r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e": {"ex:a": null}}, "bundle": {"zz:b": {}}}"#;
