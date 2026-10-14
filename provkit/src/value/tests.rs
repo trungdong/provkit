@@ -644,8 +644,9 @@ fn native_floats_equal_their_xsd_spellings() {
     for v in [0.0f32, 1.0, 1e30, f32::MAX, f32::MIN_POSITIVE, 0.1] {
         assert_eq!(Value::from(v), typed(&format!("{v:e}"), &XSD_FLOAT), "{v}");
     }
-    // The spelling follows Python's repr thresholds: an exponent below 1e-4
-    // and from 1e16 upwards, plain digits between.
+    // The spelling follows Python's repr thresholds: an exponent when the
+    // magnitude is not zero and is below 1e-4 or from 1e16 upwards, plain
+    // digits otherwise.
     let lexical = |v: Value| match v {
         Value::Typed(t) => t.lexical().to_owned(),
         other => panic!("{other:?}"),
