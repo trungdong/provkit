@@ -72,7 +72,7 @@ impl Attributes {
     ///
     /// let mut a = Attributes::new();
     /// let name = QName::new("http://example.org/", "k")?;
-    /// a.insert(name.clone(), Value::from("v"));
+    /// a.insert(name.clone(), "v");
     /// let first = a.get(&QName::new("http://example.org/", "k")?).next();
     /// assert_eq!(first, Some(&Value::from("v")));
     /// # Ok::<(), provkit::Error>(())
