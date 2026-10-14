@@ -7,7 +7,10 @@ permissions:
   contents: read
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -15,30 +18,55 @@ jobs:
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1 (2026-09-12)
         with:
           # Pinned, so a new lint in a later toolchain does not fail a push that
-          # changed no code. Raise it with `rust-version`.
+          # changed no code. Raise it with `rust-version`, together with the
+          # pin in release.yml.
           toolchain: "1.98"
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
       - run: cargo fmt --check
+        if: matrix.os == 'ubuntu-latest'
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        if: matrix.os == 'ubuntu-latest'
       - run: cargo test --workspace --all-features
-      - run: cargo package -p provkit
+      - run: cargo package --workspace
+        if: matrix.os == 'ubuntu-latest'
       - run: cargo test --manifest-path "target/package/provkit-$(cargo pkgid -p provkit | sed 's/.*[#@]//')/Cargo.toml"
+        if: matrix.os == 'ubuntu-latest'
       - run: cargo test -p provkit --no-default-features --features provn
+        if: matrix.os == 'ubuntu-latest'
       - run: cargo test -p provkit --no-default-features --features json
+        if: matrix.os == 'ubuntu-latest'
       - run: cargo check -p provkit --no-default-features --tests
         env:
           RUSTFLAGS: -D warnings
+        if: matrix.os == 'ubuntu-latest'
       - run: cargo check -p provkit --no-default-features --features provn --tests
         env:
           RUSTFLAGS: -D warnings
+        if: matrix.os == 'ubuntu-latest'
       - run: cargo check -p provkit --no-default-features --features json --tests
         env:
           RUSTFLAGS: -D warnings
+        if: matrix.os == 'ubuntu-latest'
       - run: cargo doc --workspace --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+        if: matrix.os == 'ubuntu-latest'
       - run: cargo build -p provkit --target wasm32-unknown-unknown
+        if: matrix.os == 'ubuntu-latest'
+  clippy-stable:
+    # Shows the next toolchain's lints before the pin moves; never blocks.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1 (2026-09-12)
+        with:
+          toolchain: stable
+          components: clippy
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
   deny:
     runs-on: ubuntu-latest
     steps:

@@ -106,6 +106,8 @@ submodule at `corpus/`, shared with ProvPy (`prov`, Python). Clone with
 cargo test --workspace
 ```
 
+CI runs the tests on Linux and Windows, and the remaining checks on Linux.
+
 Three checks run in CI only: the `wasm32-unknown-unknown` build, `cargo deny`
 for supply-chain audits, and `typos` for spell checking. To run them locally,
 install the tools with `cargo install cargo-deny typos-cli` and add the wasm32
