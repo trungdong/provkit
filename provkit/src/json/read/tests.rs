@@ -1522,6 +1522,14 @@ fn a_bundle_key_fault_comes_after_the_body_and_before_the_bundle_body() {
     let text = r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e": {"ex:a": null}}, "bundle": {"zz:b": {}}}"#;
     let (section, _, _) = record_error(text);
     assert_eq!(section, "entity");
+    // So is an error building a record in the document body.
+    let text = r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"zz:e": {}}, "bundle": {"ex:b": {}, "ex:b": {}}}"#;
+    let (section, key, error) = record_error(text);
+    assert_eq!((section.as_str(), key.as_str()), ("entity", "zz:e"));
+    assert!(
+        matches!(error, Error::UndeclaredPrefix(ref p) if p == "zz"),
+        "{error:?}"
+    );
     // A bundle key that does not resolve is reported before a wire-level
     // fault inside that bundle.
     let text = r#"{"prefix": {"ex": "http://example.org/"}, "bundle": {"zz:b": {"entity": {"ex:e": {"ex:a": null}}}}}"#;

@@ -119,16 +119,24 @@ fn refuse_invalid(sections: &IndexMap<Kind, JsonSection>, input: &str) -> Result
 }
 
 /// Builds the document `wire` holds. `input` is the text `wire` was read
-/// from. Faults are reported in this order: a value in the document body
-/// the wire layer could not read; a bundle key that repeats, does not
-/// resolve or has a bad namespace table, in bundle order; a value inside a
-/// bundle the wire layer could not read; then every error found while
-/// building records, in document order. So a wire-level fault is reported
-/// ahead of an error in a name or a literal, as an error of the JSON parser
-/// is, and a bundle's key ahead of its content.
+/// from. Faults are reported in this order:
+///
+/// 1. a value in the document body the wire layer could not read;
+/// 2. a fault in the document's own namespace table;
+/// 3. an error building a record in the document body, in record order;
+/// 4. a bundle key that repeats, does not resolve or has a bad namespace
+///    table, in bundle order;
+/// 5. a value inside a bundle the wire layer could not read;
+/// 6. an error building a record inside a bundle, in document order.
+///
+/// So the document body is reported whole before any bundle key, a bundle's
+/// key ahead of its content, and inside a bundle a wire-level fault ahead of
+/// an error in a name or a literal, as an error of the JSON parser is.
 pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuilder) -> Result<()> {
     refuse_invalid(&wire.sections, input)?;
     let doc_ns = namespaces(&wire.prefix)?;
+    builder.start_document(doc_ns.clone());
+    emit_sections(&wire.sections, Scope::of(&doc_ns), builder)?;
 
     // Every bundle's key, resolved in its own scope (PROV-N 3.7.4), and
     // checked for a repeat before any bundle body is read. Two spellings of
@@ -163,8 +171,6 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
         refuse_invalid(&bundle.sections, input).map_err(|e| in_record("bundle", key, e))?;
     }
 
-    builder.start_document(doc_ns.clone());
-    emit_sections(&wire.sections, Scope::of(&doc_ns), builder)?;
     for (key, bundle, bundle_ns, id) in bundles {
         let located = |e| in_record("bundle", key, e);
         let scope = Scope::within(&bundle_ns, &doc_ns);
