@@ -348,7 +348,7 @@ fn many_bundles_under_many_prefixes_stay_linear() {
 
 /// Minting a prefix per namespace must not restart its search at `ns1`
 /// each time, or a document with many undeclared namespaces writes in
-/// quadratic time. 20,000 namespaces take about 13 seconds before the
+/// quadratic time. 20,000 namespaces take about a minute before the
 /// counter and well under a second with it.
 #[test]
 fn minting_many_prefixes_is_linear() {
