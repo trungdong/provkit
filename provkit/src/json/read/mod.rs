@@ -119,7 +119,9 @@ fn refuse_invalid(sections: &IndexMap<Kind, JsonSection>, input: &str) -> Result
 }
 
 /// Builds the document `wire` holds. `input` is the text `wire` was read
-/// from. Faults are reported in this order:
+/// from. A fault the JSON parser refuses has already stopped the read, in
+/// the order of the text, so this sees only the faults the wire layer
+/// keeps. They are reported in this order:
 ///
 /// 1. a value in the document body the wire layer could not read;
 /// 2. a fault in the document's own namespace table;

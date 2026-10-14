@@ -41,11 +41,14 @@ use crate::{Document, Error, JsonError, Result, strip_bom};
 ///   more in an `InRecord` whose section is `bundle` and whose key is the
 ///   bundle's, so the message reads ``bundle `ex:b`: entity `ex:e`: ...``.
 /// - [`Error::DuplicateBundle`], inside [`Error::InRecord`], for two bundles
-///   with one identifier, a bundle key given twice included. Bundle keys are
-///   checked before any bundle's content, so the repeat is reported whatever
-///   the second bundle holds. A bundle key that repeats, does not resolve or
-///   has a bad namespace table is reported after the document body and
-///   before anything inside a bundle.
+///   with one identifier, a bundle key given twice included. The value of a
+///   repeated bundle key is checked only as JSON, not as a bundle, so the
+///   repeat is reported whatever that value holds, unless it is not JSON. A bundle key that repeats, does not
+///   resolve or has a bad namespace table is reported after the document
+///   body and before any fault inside a bundle that the JSON parser does not
+///   itself refuse. A fault the parser refuses, such as text that is not
+///   JSON, an unknown section or a key repeated among the sections, is
+///   reported in the order of the text, ahead of every other fault.
 /// - [`Error::InvalidPrefix`] and [`Error::ReservedPrefix`] for a `prefix`
 ///   entry that PROV-N could not write, returned as they are.
 pub fn read(text: &str) -> Result<Document> {
