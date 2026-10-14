@@ -137,7 +137,17 @@ fn an_identifier_on_a_bare_kind_is_written_and_reads_back() {
     );
     assert_eq!(line(r.clone()), "hadMember(ex:m; ex:c, ex:e)");
     let d = document(vec![r]);
-    assert_eq!(provn::read(&provn::to_string(&d).unwrap()).unwrap(), d);
+    let text = provn::to_string(&d).unwrap();
+    assert_eq!(provn::read(&text).unwrap(), d);
+    // The grammar gives these kinds no identifier, so `Strict` refuses what
+    // the writer wrote, as it refuses `-` in a required argument.
+    assert!(
+        matches!(
+            provn::read_with(&text, provn::Profile::Strict),
+            Err(Error::Syntax { .. })
+        ),
+        "{text}"
+    );
 }
 
 #[test]
