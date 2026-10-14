@@ -420,19 +420,17 @@ mod tests {
     #[test]
     fn every_value_variant_round_trips() {
         let mut a = Attributes::new();
-        a.insert(ex("s"), "plain".into());
-        a.insert(ex("l"), LangStr::new("bonjour", "fr").unwrap().into());
-        a.insert(ex("q"), ex("q").into());
+        a.insert(ex("s"), "plain");
+        a.insert(ex("l"), LangStr::new("bonjour", "fr").unwrap());
+        a.insert(ex("q"), ex("q"));
         a.insert(
             ex("d"),
-            crate::DateTime::parse("2011-11-16T16:05:33.5+01:00")
-                .unwrap()
-                .into(),
+            crate::DateTime::parse("2011-11-16T16:05:33.5+01:00").unwrap(),
         );
-        a.insert(ex("i"), 7i32.into());
-        a.insert(ex("f"), 1.5f64.into());
-        a.insert(ex("b"), true.into());
-        a.insert(ex("s"), "second".into());
+        a.insert(ex("i"), 7i32);
+        a.insert(ex("f"), 1.5f64);
+        a.insert(ex("b"), true);
+        a.insert(ex("s"), "second");
         let mut d = document(vec![element(Kind::Entity, ex("e"), a)]);
         for &kind in Kind::ALL {
             d.records
@@ -467,7 +465,7 @@ mod tests {
     fn records_sharing_an_identifier_are_written_as_an_array() {
         let tagged = |tag: &str| {
             let mut attributes = Attributes::new();
-            attributes.insert(ex("tag"), tag.into());
+            attributes.insert(ex("tag"), tag);
             element(Kind::Entity, ex("e"), attributes)
         };
         let d = document(vec![tagged("one"), tagged("two"), entity("single")]);
@@ -481,7 +479,7 @@ mod tests {
         let mut attributes = Attributes::new();
         attributes.insert(
             QName::new(crate::well_known::PROV, "activity").unwrap(),
-            ex("a2").into(),
+            ex("a2"),
         );
         let d = document(vec![Record::Generation(Generation {
             id: None,

@@ -27,9 +27,24 @@ impl Attributes {
         Self::default()
     }
 
-    /// Add a pair. Returns `false` if it was already present.
-    pub fn insert(&mut self, name: QName, value: Value) -> bool {
-        Arc::make_mut(&mut self.pairs).insert((name, value))
+    /// Add a pair. Returns `false` if it was already present. The value is
+    /// anything that converts into a [`Value`]: a string, a native number
+    /// or boolean, a [`QName`], a [`DateTime`](crate::DateTime).
+    ///
+    /// ```
+    /// use provkit::{Attributes, QName};
+    ///
+    /// let ex = |local: &str| QName::new("http://example.org/", local);
+    /// let mut a = Attributes::new();
+    /// assert!(a.insert(ex("s")?, "text"));
+    /// assert!(a.insert(ex("n")?, 5));
+    /// assert!(a.insert(ex("q")?, ex("name")?));
+    /// assert!(!a.insert(ex("n")?, 5));
+    /// assert_eq!(a.len(), 3);
+    /// # Ok::<(), provkit::Error>(())
+    /// ```
+    pub fn insert(&mut self, name: QName, value: impl Into<Value>) -> bool {
+        Arc::make_mut(&mut self.pairs).insert((name, value.into()))
     }
 
     /// Remove a pair, keeping the order of the rest. Returns `false` if it
@@ -246,20 +261,20 @@ mod tests {
     fn ordered_deduplicated_set_equal() {
         let mut a = Attributes::new();
         assert!(a.is_empty());
-        assert!(a.insert(PROV_TYPE.clone(), "t".into()));
-        assert!(a.insert(PROV_LABEL.clone(), "l".into()));
-        assert!(!a.insert(PROV_TYPE.clone(), "t".into()));
+        assert!(a.insert(PROV_TYPE.clone(), "t"));
+        assert!(a.insert(PROV_LABEL.clone(), "l"));
+        assert!(!a.insert(PROV_TYPE.clone(), "t"));
         assert_eq!(a.len(), 2);
         let names: Vec<_> = a.iter().map(|(n, _)| n.local().to_owned()).collect();
         assert_eq!(names, ["type", "label"]);
 
         let mut b = Attributes::new();
-        b.insert(PROV_LABEL.clone(), "l".into());
-        b.insert(PROV_TYPE.clone(), "t".into());
+        b.insert(PROV_LABEL.clone(), "l");
+        b.insert(PROV_TYPE.clone(), "t");
         assert_eq!(a, b);
         assert_eq!(hash(&a), hash(&b));
 
-        b.insert(PROV_TYPE.clone(), "u".into());
+        b.insert(PROV_TYPE.clone(), "u");
         assert_ne!(a, b);
         assert_eq!(b.get(&PROV_TYPE).count(), 2);
     }
@@ -395,7 +410,7 @@ mod tests {
     #[test]
     fn extend_from_an_empty_set_shares_storage() {
         let mut src = Attributes::new();
-        src.insert(PROV_TYPE.clone(), "t".into());
+        src.insert(PROV_TYPE.clone(), "t");
         let mut dst = Attributes::new();
         dst.extend_from(&src);
         assert!(dst.shares_storage_with(&src));
@@ -404,10 +419,10 @@ mod tests {
     #[test]
     fn extend_from_skips_present_pairs() {
         let mut a = Attributes::new();
-        a.insert(PROV_TYPE.clone(), "t".into());
+        a.insert(PROV_TYPE.clone(), "t");
         let mut b = Attributes::new();
-        b.insert(PROV_TYPE.clone(), "t".into());
-        b.insert(PROV_LABEL.clone(), "l".into());
+        b.insert(PROV_TYPE.clone(), "t");
+        b.insert(PROV_LABEL.clone(), "l");
         a.extend_from(&b);
         assert_eq!(a.len(), 2);
         assert_eq!(a, b);

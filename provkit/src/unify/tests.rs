@@ -8,7 +8,7 @@ use crate::{
 fn rec(kind: Kind, id: &str, formals: Vec<(F, Formal)>, label: Option<&str>) -> Record {
     let mut a = Attributes::new();
     if let Some(l) = label {
-        a.insert(PROV_LABEL.clone(), l.into());
+        a.insert(PROV_LABEL.clone(), l);
     }
     Record::from_parts(kind, Some(ex(id)), formals, a).unwrap()
 }
@@ -27,7 +27,7 @@ fn gen_at(id: Option<&str>, time: &str) -> Record {
 fn hand_built(clash: bool) -> Record {
     let mut attributes = Attributes::new();
     if clash {
-        attributes.insert(prov("activity"), ex("a").into());
+        attributes.insert(prov("activity"), ex("a"));
     }
     Record::Generation(Generation {
         id: Some(ex("g")),
@@ -508,7 +508,7 @@ fn two_spellings_of_one_iri_merge() {
         ]
         .map(|(ns, local, label)| {
             let mut a = Attributes::new();
-            a.insert(PROV_LABEL.clone(), label.into());
+            a.insert(PROV_LABEL.clone(), label);
             Record::from_parts(
                 Kind::Generation,
                 Some(split(ns, local)),
