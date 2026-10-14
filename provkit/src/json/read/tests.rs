@@ -1459,6 +1459,28 @@ fn a_repeated_bundle_key_is_a_duplicate_bundle() {
 }
 
 #[test]
+fn a_bundle_key_spelt_twice_is_refused_before_its_table_is_read() {
+    // The second bundle rebinds the key's prefix, or declares a reserved
+    // one. Either way the repeated key is reported, with the first
+    // bundle's identifier.
+    for table in [r#""ex": "http://other.org/""#, r#""prov": "http://x.org/""#] {
+        let text = format!(
+            r#"{{"prefix": {{"ex": "http://example.org/"}}, "bundle": {{"ex:b": {{}}, "ex:b": {{"prefix": {{{table}}}}}}}}}"#
+        );
+        let (section, key, error) = record_error(&text);
+        assert_eq!(
+            (section.as_str(), key.as_str()),
+            ("bundle", "ex:b"),
+            "{text}"
+        );
+        assert!(
+            matches!(error, Error::DuplicateBundle(ref id) if *id == ex("b")),
+            "{text}: {error:?}"
+        );
+    }
+}
+
+#[test]
 fn a_bundle_key_fault_comes_after_the_body_and_before_the_bundle_body() {
     // A wire-level fault in the document body is reported first.
     let text = r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e": {"ex:a": null}}, "bundle": {"zz:b": {}}}"#;

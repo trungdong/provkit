@@ -1,6 +1,6 @@
 //! Wire structs to document-builder events.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexMap;
 
@@ -131,12 +131,19 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
     let doc_ns = namespaces(&wire.prefix)?;
 
     // Every bundle's key, resolved in its own scope (PROV-N 3.7.4), and
-    // checked for a repeat before any bundle body is read. `start_bundle`
-    // checks again for a hand-built document.
+    // checked for a repeat before any bundle body is read. A spelling seen
+    // before is refused before its bundle's table is read, since that table
+    // lies inside the repeated value; two spellings of one identifier are
+    // refused once both resolve. `start_bundle` checks again for a
+    // hand-built document.
+    let mut spellings: HashMap<&str, QName> = HashMap::new();
     let mut ids = HashSet::new();
     let mut bundles = Vec::with_capacity(wire.bundle.len());
     for (key, bundle) in &wire.bundle {
         let located = |e| in_record("bundle", key, e);
+        if let Some(first) = spellings.get(key.as_str()) {
+            return Err(located(Error::DuplicateBundle(first.clone())));
+        }
         if key.starts_with("_:") {
             return Err(located(needs_identifier("bundle", key)));
         }
@@ -147,6 +154,7 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
         if !ids.insert(id.clone()) {
             return Err(located(Error::DuplicateBundle(id)));
         }
+        spellings.insert(key.as_str(), id.clone());
         bundles.push((key, bundle, bundle_ns, id));
     }
     for (key, bundle, _, _) in &bundles {
