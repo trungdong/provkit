@@ -107,6 +107,7 @@ cargo test --workspace
 ```
 
 CI runs the tests on Linux and Windows, and the remaining checks on Linux.
+Releases follow [RELEASING.md](https://github.com/trungdong/provkit/blob/main/RELEASING.md).
 
 Three checks run in CI only: the `wasm32-unknown-unknown` build, `cargo deny`
 for supply-chain audits, and `typos` for spell checking. To run them locally,
