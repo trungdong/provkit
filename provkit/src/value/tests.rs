@@ -644,6 +644,28 @@ fn native_floats_equal_their_xsd_spellings() {
     for v in [0.0f32, 1.0, 1e30, f32::MAX, f32::MIN_POSITIVE, 0.1] {
         assert_eq!(Value::from(v), typed(&format!("{v:e}"), &XSD_FLOAT), "{v}");
     }
+    // The spelling follows Python's repr thresholds: an exponent below 1e-4
+    // and from 1e16 upwards, plain digits between.
+    let lexical = |v: Value| match v {
+        Value::Typed(t) => t.lexical().to_owned(),
+        other => panic!("{other:?}"),
+    };
+    for (v, text) in [
+        (1e300, "1e300"),
+        (f64::MAX, "1.7976931348623157e308"),
+        (5e-324, "5e-324"),
+        (1e16, "1e16"),
+        (1e15, "1000000000000000"),
+        (1e-4, "0.0001"),
+        (1e-5, "1e-5"),
+        (100.0, "100"),
+        (0.0, "0"),
+        (-0.0, "-0"),
+    ] {
+        assert_eq!(lexical(Value::from(v)), text, "{v:?}");
+    }
+    assert_eq!(lexical(Value::from(1e30f32)), "1e30");
+    assert_eq!(lexical(Value::from(0.1f32)), "0.1");
     assert_eq!(Value::from(f64::INFINITY), typed("+INF", &XSD_DOUBLE));
     assert_eq!(Value::from(f64::NAN), Value::from(-f64::NAN));
     assert_eq!(hash(&Value::from(f64::NAN)), hash(&Value::from(-f64::NAN)));

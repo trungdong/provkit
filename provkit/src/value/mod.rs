@@ -497,7 +497,10 @@ macro_rules! from_native {
     };
 }
 
-// Floats use the XSD spellings of the non-finite values.
+// Floats use the XSD spellings of the non-finite values. A finite value is
+// written with an exponent below 1e-4 and from 1e16 upwards, and as plain
+// digits between, which are the thresholds of Python's `repr`; the digits
+// are the shortest that read back to the same value either way.
 macro_rules! from_float {
     ($($t:ty => $dt:ident),* $(,)?) => {
         $(
@@ -508,7 +511,12 @@ macro_rules! from_float {
                     } else if v.is_infinite() {
                         if v > 0.0 { "INF" } else { "-INF" }.to_owned()
                     } else {
-                        v.to_string()
+                        let magnitude = v.abs();
+                        if magnitude != 0.0 && !(1e-4..1e16).contains(&magnitude) {
+                            format!("{v:e}")
+                        } else {
+                            v.to_string()
+                        }
                     };
                     Value::literal(lexical, $dt.clone())
                 }
