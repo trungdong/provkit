@@ -245,6 +245,13 @@ mod tests {
         assert!(split_late < other && other > split_early);
         assert!(QName::new("http://a/", "z").unwrap() < QName::new("http://b/", "a").unwrap());
         assert!(QName::new("http://a/", "b").unwrap() < QName::new("http://a/b", "c").unwrap());
+        // Normalisation and invisible characters make distinct names.
+        let nfc = QName::new("http://example.org/", "caf\u{e9}").unwrap();
+        let nfd = QName::new("http://example.org/", "cafe\u{301}").unwrap();
+        assert_ne!(nfc, nfd);
+        let plain = QName::new("http://example.org/", "a").unwrap();
+        let joined = QName::new("http://example.org/", "a\u{200C}").unwrap();
+        assert_ne!(plain, joined);
         assert!(split_late.is("http://example.org/f", "oo/bar"));
         assert!(!split_late.is("http://example.org/", "foo/ba"));
     }

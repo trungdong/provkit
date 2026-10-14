@@ -1517,6 +1517,26 @@ fn a_repeated_bundle_key_is_reported_whatever_its_value_holds() {
 }
 
 #[test]
+fn an_id_or_a_qualified_section_inside_a_bundle_is_an_unknown_kind() {
+    for section in [
+        r#""@id": "ex:b""#,
+        r#""qualifiedSpecializationOf": {"_:q": {}}"#,
+    ] {
+        let text = format!(
+            r#"{{"prefix": {{"ex": "http://example.org/"}}, "bundle": {{"ex:b": {{{section}}}}}}}"#
+        );
+        let name = section.split('"').nth(1).unwrap();
+        let Err(Error::JsonStructure { message }) = json::read(&text) else {
+            panic!("{text}: expected JsonStructure")
+        };
+        assert!(
+            message.starts_with(&format!("unknown record kind `{name}`")),
+            "{message}"
+        );
+    }
+}
+
+#[test]
 fn a_bundle_key_fault_comes_after_the_body_and_before_the_bundle_body() {
     // A wire-level fault in the document body is reported first.
     let text = r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e": {"ex:a": null}}, "bundle": {"zz:b": {}}}"#;
