@@ -16,8 +16,9 @@ pub use write::{name, statement, to_string, write};
 #[non_exhaustive]
 pub enum Profile {
     /// The whole grammar of the Recommendation and the MUST statements of
-    /// its prose, with the departures `CONFORMANCE.md` records. `Strict`
-    /// rejects:
+    /// its prose, with the departures
+    /// [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
+    /// records. `Strict` rejects:
     ///
     /// - `mentionOf` without the `prov:` prefix.
     /// - `-` in a required position of a relation.
@@ -38,9 +39,10 @@ pub enum Profile {
     /// `PN_PREFIX`, and every other text the grammar rejects.
     Strict,
     /// The grammar plus the six extensions that `Strict` rejects, which
-    /// `ProvToolbox` and `ProvPy` write. `prov:mentionOf` with an identifier
-    /// or with `-` for a name is a mention under `Default`, as bare
-    /// `mentionOf` is.
+    /// `ProvPy` and `ProvToolbox` write, with the exceptions that
+    /// [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
+    /// lists. `prov:mentionOf` with an identifier or with `-` for a name is a
+    /// mention under `Default`, as bare `mentionOf` is.
     #[default]
     Default,
 }

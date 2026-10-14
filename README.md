@@ -3,7 +3,7 @@
 W3C PROV data model in Rust, with PROV-JSON and PROV-N read and write, and a
 `provkit` command-line tool to convert and compare documents.
 
-Status: 0.1.0, the first release. The minimum supported Rust version is 1.98.
+Status: the first release. The minimum supported Rust version is 1.98.
 
 ## Install
 
@@ -14,7 +14,19 @@ cargo binstall provkit-cli
 
 The second command fetches a release binary. The binary is `provkit`.
 Prebuilt binaries are on the
-[Releases](https://github.com/trungdong/provkit/releases) page.
+[Releases](https://github.com/trungdong/provkit/releases) page. Each release
+carries one archive per target, with a digest file named after the archive
+(`provkit-<target>.sha256`) and a build-provenance attestation:
+
+- `provkit-x86_64-apple-darwin.tar.gz`
+- `provkit-aarch64-apple-darwin.tar.gz`
+- `provkit-x86_64-unknown-linux-gnu.tar.gz`
+- `provkit-x86_64-unknown-linux-musl.tar.gz`
+- `provkit-aarch64-unknown-linux-gnu.tar.gz`
+- `provkit-x86_64-pc-windows-msvc.zip`
+
+Each archive holds the binary and `THIRD-PARTY.md`, the licence notices of
+the crates it links.
 
 ## Command line
 
@@ -38,8 +50,8 @@ provkit compare --unified a.json b.provn
 provkit compare -f json a.txt b.txt
 ```
 
-Input format comes from `-f json|provn` (on `compare`, for both sides), else the file extension, else the
-content. The sniffer treats `document` followed by whitespace, a comment or
+Input format comes from `-f json|provn` (on `compare`, for both sides), else
+the file extension, else the content. The sniffer treats `document` followed by whitespace, a comment or
 the end of input as PROV-N, and `{` as PROV-JSON. A comment glued to the
 keyword is part of the name in PROV-N, so the reader then rejects it; the
 departures in CONFORMANCE.md say why. Output format comes from `-t`, else
@@ -81,19 +93,23 @@ fn main() -> Result<(), provkit::Error> {
 ```
 
 Document equality is set-based. `Document::unified()` merges records that
-share an identifier and kind, and fails where PROV-CONSTRAINTS 53 to 55 forbid
-the sharing or where formal attributes conflict. `provn::read_with` takes a
+share an identifier and kind, keeps each record once, and fails where
+PROV-CONSTRAINTS 53 to 55 forbid the sharing, where formal attributes
+conflict, or where an absent value in one of the four non-expandable positions
+of PROV-CONSTRAINTS Table 3 meets a present one. `provn::read_with` takes a
 `provn::Profile`. `Strict` accepts the whole PROV-N grammar and the MUST
-statements of its prose, with the departures CONFORMANCE.md records, and
-`Default` (the profile `provn::read` uses) also accepts what ProvToolbox and
-ProvPy write. `provn::read_report` returns a `ReadReport` with the document and
+statements of its prose, with the departures
+[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md) records, and `Default` (the profile
+`provn::read` uses) adds the extensions ProvPy and ProvToolbox write, with the
+exceptions that file lists. `provn::read_report` returns a `ReadReport` with the document and
 the expressions left out. API documentation: `cargo doc --open -p provkit`.
 
 ## Conformance
 
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md) lists where provkit departs from the PROV
-Recommendations, where it differs from ProvPy 3.2.2 (with the ProvPy issue
-number) and its implementation limits, each with its reason and test.
+[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md) lists where provkit departs
+from the PROV Recommendations, where it differs from ProvPy 3.2.2 (with the
+ProvPy issue number) and from ProvToolbox 2.0.4, and its implementation limits,
+each with its reason and test.
 [CHANGELOG.md](https://github.com/trungdong/provkit/blob/main/CHANGELOG.md) lists the releases.
 
 ## Tests and CI
@@ -101,6 +117,22 @@ number) and its implementation limits, each with its reason and test.
 The tests read the [prov-corpus](https://github.com/trungdong/prov-corpus)
 submodule at `corpus/`, shared with ProvPy (`prov`, Python). Clone with
 `--recurse-submodules`, or run `git submodule update --init`.
+
+The corpus is a git submodule holding examples extracted and modified from the
+PROV-N and PROV-DM Recommendations, under the
+[W3C Document Licence](https://www.w3.org/copyright/document-license/).
+
+> Copyright © 2012-2013 W3C® (MIT, ERCIM, Keio, Beihang). This software or
+> document includes material copied from or derived from PROV-N: The
+> Provenance Notation, W3C Recommendation 30 April 2013,
+> <https://www.w3.org/TR/2013/REC-prov-n-20130430/>.
+
+> Copyright © 2011-2013 W3C® (MIT, ERCIM, Keio, Beihang). This software or
+> document includes material copied from or derived from PROV-DM: The PROV
+> Data Model, W3C Recommendation 30 April 2013,
+> <https://www.w3.org/TR/2013/REC-prov-dm-20130430/>.
+
+The published crates do not include the corpus.
 
 ```sh
 cargo test --workspace

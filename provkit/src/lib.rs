@@ -30,16 +30,21 @@
 //!   order, namespace tables, blank-node labels and the spelling of a
 //!   number, boolean or `dateTime`.
 //! - [`Document::unified`] merges records that share an identifier and kind,
-//!   and returns [`Error::Unification`] when their formal attributes conflict
-//!   or when PROV-CONSTRAINTS 53 to 55 forbid the sharing.
+//!   keeps each record once, and returns [`Error::Unification`] when their
+//!   formal attributes conflict, when an absent value in one of the four
+//!   non-expandable positions of PROV-CONSTRAINTS Table 3 meets a present
+//!   one, or when PROV-CONSTRAINTS 53 to 55 forbid the sharing.
 //! - [`provn::Profile`] selects how strictly PROV-N input is checked:
 //!   `Strict` reads the whole grammar and the MUST statements of its prose,
-//!   with the departures `CONFORMANCE.md` records, and `Default` adds the
-//!   extensions that `ProvToolbox` and `ProvPy` write.
+//!   with the departures
+//!   [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
+//!   records, and `Default` adds the extensions `ProvPy` and `ProvToolbox`
+//!   write, with the exceptions that file lists.
 //!
-//! `CONFORMANCE.md` in the repository lists where provkit departs from the
-//! PROV Recommendations, where it differs from `ProvPy` 3.2.2, and its
-//! implementation limits.
+//! [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
+//! in the repository lists where provkit departs from the PROV
+//! Recommendations, where it differs from `ProvPy` 3.2.2 and from
+//! `ProvToolbox` 2.0.4, and its implementation limits.
 //!
 //! # Features
 //!
