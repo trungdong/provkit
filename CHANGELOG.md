@@ -12,8 +12,8 @@ The first release.
   and named `Bundle`s, readers and writers for PROV-JSON and PROV-N (the
   `json` and `provn` modules, each behind a default feature), set-based
   document equality, and `Document::unified()`, which merges records that
-  share an identifier under PROV-CONSTRAINTS and keeps each record once. The
-  API reference is on [docs.rs](https://docs.rs/provkit/0.1.0);
+  share an identifier and kind under PROV-CONSTRAINTS and keeps each record
+  once. The API reference is on [docs.rs](https://docs.rs/provkit/0.1.0);
   [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
   lists where the library departs from the Recommendations, where it differs
   from ProvPy 3.2.2 and ProvToolbox 2.0.4, and its implementation limits,

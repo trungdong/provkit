@@ -35,10 +35,11 @@ enum Command {
     /// Compare two documents and print the records found on one side only.
     ///
     /// Formats are taken from -f when given, else from each file's extension
-    /// (.json, .provn), else by looking at the content. Names the output cannot write with a declared prefix get an
-    /// `nsN` prefix. A `prefix` line, printed after the records of its scope,
-    /// applies to the whole scope. The listing is not a PROV-N document: its
-    /// names resolve with the declarations of the file it came from.
+    /// (.json, .provn), else by looking at the content. Names the output
+    /// cannot write with a declared prefix get an `nsN` prefix. A `prefix`
+    /// line, printed after the records of its scope, applies to the whole
+    /// scope. The listing is not a PROV-N document: its names resolve with
+    /// the declarations of the file it came from.
     ///
     /// Exit codes: 0 when the documents are equal (nothing is printed), 1
     /// when they differ, 2 on any error.

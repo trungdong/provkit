@@ -34,7 +34,7 @@
 //!   formal attributes conflict, when an absent value in one of the four
 //!   non-expandable positions of PROV-CONSTRAINTS Table 3 meets a present
 //!   one, or when PROV-CONSTRAINTS 53 to 55 forbid the sharing.
-//! - [`provn::Profile`] selects how strictly PROV-N input is checked:
+//! - [`provn::Profile`] selects how strictly PROV-N input is checked.
 //!   `Strict` reads the whole grammar and the MUST statements of its prose,
 //!   with the departures
 //!   [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)

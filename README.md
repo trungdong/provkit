@@ -14,9 +14,10 @@ cargo binstall provkit-cli
 
 The second command fetches a release binary. The binary is `provkit`.
 Prebuilt binaries are on the
-[Releases](https://github.com/trungdong/provkit/releases) page. Each release
-carries one archive per target, with a digest file named after the archive
-(`provkit-<target>.sha256`) and a build-provenance attestation:
+[Releases](https://github.com/trungdong/provkit/releases) page. Each
+release carries one archive per target and its digest file, named after the
+archive (`provkit-<target>.sha256`), and each archive has a build-provenance
+attestation:
 
 - `provkit-x86_64-apple-darwin.tar.gz`
 - `provkit-aarch64-apple-darwin.tar.gz`
@@ -51,13 +52,15 @@ provkit compare -f json a.txt b.txt
 ```
 
 Input format comes from `-f json|provn` (on `compare`, for both sides), else
-the file extension, else the content. The sniffer treats `document` followed by whitespace, a comment or
-the end of input as PROV-N, and `{` as PROV-JSON. A comment glued to the
-keyword is part of the name in PROV-N, so the reader then rejects it; the
-departures in CONFORMANCE.md say why. Output format comes from `-t`, else
-the `-o` extension (`.json` or `.provn`, in any letter case). PROV-N is the
-default on standard output only, so `-o out.txt` needs `-t json` or
-`-t provn`. `-` means standard input or output.
+the file extension, else the content. The sniffer treats `document` followed
+by whitespace, a comment or the end of input as PROV-N, and `{` as
+PROV-JSON. A comment glued to the keyword is part of the name in PROV-N, so
+the reader then rejects it; the departures in
+[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
+say why. Output format comes from `-t`, else the `-o` extension (`.json` or
+`.provn`, in any letter case). PROV-N is the default on standard output
+only, so `-o out.txt` needs `-t json` or `-t provn`. `-` means standard
+input or output.
 
 `compare` declares the `nsN` prefixes it mints for names with no declared
 prefix, with a `prefix nsN <IRI>` line after the records of each scope. Such a
@@ -99,18 +102,20 @@ conflict, or where an absent value in one of the four non-expandable positions
 of PROV-CONSTRAINTS Table 3 meets a present one. `provn::read_with` takes a
 `provn::Profile`. `Strict` accepts the whole PROV-N grammar and the MUST
 statements of its prose, with the departures
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md) records, and `Default` (the profile
-`provn::read` uses) adds the extensions ProvPy and ProvToolbox write, with the
-exceptions that file lists. `provn::read_report` returns a `ReadReport` with the document and
-the expressions left out. API documentation: `cargo doc --open -p provkit`.
+[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
+records, and `Default` (the profile `provn::read` uses) adds the extensions
+ProvPy and ProvToolbox write, with the exceptions that file lists.
+`provn::read_report` returns a `ReadReport` with the document and the
+expressions left out. API documentation: `cargo doc --open -p provkit`.
 
 ## Conformance
 
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md) lists where provkit departs
-from the PROV Recommendations, where it differs from ProvPy 3.2.2 (with the
-ProvPy issue number) and from ProvToolbox 2.0.4, and its implementation limits,
-each with its reason and test.
-[CHANGELOG.md](https://github.com/trungdong/provkit/blob/main/CHANGELOG.md) lists the releases.
+[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
+lists where provkit departs from the PROV Recommendations, where it differs
+from ProvPy 3.2.2 (with the ProvPy issue number) and from ProvToolbox 2.0.4,
+and its implementation limits, each with its reason and test.
+[CHANGELOG.md](https://github.com/trungdong/provkit/blob/main/CHANGELOG.md)
+lists the releases.
 
 ## Tests and CI
 
@@ -118,7 +123,7 @@ The tests read the [prov-corpus](https://github.com/trungdong/prov-corpus)
 submodule at `corpus/`, shared with ProvPy (`prov`, Python). Clone with
 `--recurse-submodules`, or run `git submodule update --init`.
 
-The corpus is a git submodule holding examples extracted and modified from the
+The corpus holds examples extracted and modified from the
 PROV-N and PROV-DM Recommendations, under the
 [W3C Document Licence](https://www.w3.org/copyright/document-license/).
 
@@ -139,7 +144,8 @@ cargo test --workspace
 ```
 
 CI runs the tests on Linux and Windows, and the remaining checks on Linux.
-Releases follow [RELEASING.md](https://github.com/trungdong/provkit/blob/main/RELEASING.md).
+Releases follow
+[RELEASING.md](https://github.com/trungdong/provkit/blob/main/RELEASING.md).
 
 Three checks run in CI only: the `wasm32-unknown-unknown` build, `cargo deny`
 for supply-chain audits, and `typos` for spell checking. To run them locally,

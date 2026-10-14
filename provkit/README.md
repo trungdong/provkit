@@ -33,10 +33,11 @@ namespace tables, blank-node labels and the spelling of a number, boolean or
 each record once, and fails where PROV-CONSTRAINTS 53 to 55 forbid the
 sharing, where formal attributes conflict, or where an absent value in one of
 the four non-expandable positions of PROV-CONSTRAINTS Table 3 meets a present
-one. `provn::read_with` takes a `provn::Profile`: `Strict` accepts the whole
+one. `provn::read_with` takes a `provn::Profile`. `Strict` accepts the whole
 PROV-N grammar and the MUST statements of its prose, with the departures
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md) records, and `Default` adds the
-extensions ProvPy and ProvToolbox write, with the exceptions that file lists.
+[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
+records, and `Default` adds the extensions ProvPy and ProvToolbox write, with
+the exceptions that file lists.
 
 ## Features
 

@@ -1,9 +1,10 @@
 # Releasing
 
-Both crates share one version. It is set in two places in the root
-`Cargo.toml`: `version` under `[workspace.package]` and the `version` of the
-`provkit` entry under `[workspace.dependencies]`. A release is a tag `v<version>` on `main`. `release.yml` checks
-that the tag matches the version of `provkit-cli` and builds the binaries.
+Both crates share one version. It is set twice in the root `Cargo.toml`,
+as `version` under `[workspace.package]` and as the `version` of the
+`provkit` entry under `[workspace.dependencies]`. A release is a tag
+`v<version>` on `main`. `release.yml` checks that the tag matches the
+version of `provkit-cli` and builds the binaries.
 
 The repository must be public before the tag is pushed. GitHub's artifact
 attestations fail in a private repository on a free personal account.
@@ -12,7 +13,7 @@ attestations fail in a private repository on a free personal account.
 
 1. Set the date of the entry in `CHANGELOG.md` to the release day. Set both
    versions in `Cargo.toml` if they are not already the one to release.
-2. Run the checks CI runs: `cargo fmt --check`, `cargo clippy --workspace
+2. Run the main checks CI runs: `cargo fmt --check`, `cargo clippy --workspace
    --all-targets --all-features -- -D warnings`, `cargo test --workspace
    --all-features`, `cargo doc --workspace --no-deps` with
    `RUSTDOCFLAGS=-D warnings`, `cargo deny check` and `typos`. Then run
