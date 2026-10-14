@@ -85,9 +85,24 @@ impl Document {
         Cow::Owned(merged)
     }
 
-    /// Top-level records carrying `id`, in assertion order.
-    pub fn records_with_id<'a>(&'a self, id: &'a QName) -> impl Iterator<Item = &'a Record> + 'a {
-        self.records.iter().filter(move |r| r.id() == Some(id))
+    /// Top-level records carrying `id`, in assertion order. The iterator
+    /// borrows the document alone, so the key may be a temporary:
+    ///
+    /// ```
+    /// use provkit::{Attributes, Document, Entity, QName, Record};
+    ///
+    /// let mut doc = Document::new();
+    /// doc.records.push(Record::Entity(Entity {
+    ///     id: QName::new("http://example.org/", "e1")?,
+    ///     attributes: Attributes::new(),
+    /// }));
+    /// let first = doc.records_with_id(&QName::new("http://example.org/", "e1")?).next();
+    /// assert!(first.is_some());
+    /// # Ok::<(), provkit::Error>(())
+    /// ```
+    pub fn records_with_id<'a>(&'a self, id: &QName) -> impl Iterator<Item = &'a Record> + 'a {
+        let id = id.clone();
+        self.records.iter().filter(move |r| r.id() == Some(&id))
     }
 
     /// Every record, with the top level first and then each bundle in order.

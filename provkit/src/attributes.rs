@@ -49,11 +49,24 @@ impl Attributes {
         }
     }
 
-    /// Every value under `name`, in insertion order.
-    pub fn get<'a>(&'a self, name: &'a QName) -> impl Iterator<Item = &'a Value> + 'a {
+    /// Every value under `name`, in insertion order. The iterator borrows
+    /// the set alone, so the key may be a temporary:
+    ///
+    /// ```
+    /// use provkit::{Attributes, QName, Value};
+    ///
+    /// let mut a = Attributes::new();
+    /// let name = QName::new("http://example.org/", "k")?;
+    /// a.insert(name.clone(), Value::from("v"));
+    /// let first = a.get(&QName::new("http://example.org/", "k")?).next();
+    /// assert_eq!(first, Some(&Value::from("v")));
+    /// # Ok::<(), provkit::Error>(())
+    /// ```
+    pub fn get<'a>(&'a self, name: &QName) -> impl Iterator<Item = &'a Value> + 'a {
+        let name = name.clone();
         self.pairs
             .iter()
-            .filter(move |(n, _)| n == name)
+            .filter(move |(n, _)| *n == name)
             .map(|(_, v)| v)
     }
 
