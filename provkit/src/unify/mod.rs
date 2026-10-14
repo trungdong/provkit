@@ -1,12 +1,12 @@
 //! Merging records that share an identifier, and rejecting the sharing
 //! that PROV-CONSTRAINTS forbids.
 //!
-//! The merge follows the key constraints (22 and 23) with one difference:
-//! an absent formal unifies with any value, in every position. In four
-//! positions (`plan` of an association; `activity`, `generation` and
-//! `usage` of a derivation) PROV-CONSTRAINTS reads `-` as "none", which
-//! unifies only with another "none". Every formal here is an `Option`, so
-//! "none" and "unknown" are one state.
+//! The merge follows the key constraints (22 and 23). An absent formal is
+//! an existential and unifies with any value, except in the positions
+//! Definition 4 makes non-expandable, where `-` is the constant "none" and
+//! unifies only with another absent value. These are the `plan` of an
+//! association, the `activity` of a derivation, and the `generation` and
+//! `usage` of a derivation whose `activity` is absent.
 //!
 //! The kinds that may share an identifier are listed on
 //! [`Document::unified`].
@@ -29,6 +29,11 @@ impl Document {
     /// values are an [`Error::Unification`] naming the identifier, the
     /// attribute and both values. Non-formal attributes are the union in
     /// first-seen order. The merged record takes the first member's position.
+    /// In four positions an absent value is the constant "none" and conflicts
+    /// with a present one: the `plan` of `wasAssociatedWith`, the `activity`
+    /// of `wasDerivedFrom`, and the `generation` and `usage` of a
+    /// `wasDerivedFrom` whose `activity` is absent (PROV-CONSTRAINTS
+    /// Definition 4, Table 3, Constraint 23).
     ///
     /// Kinds that PROV-CONSTRAINTS forbids under one identifier are an
     /// error:
@@ -142,6 +147,26 @@ const DISJOINT_RELATIONS: [Kind; 9] = [
     Kind::Delegation,
 ];
 
+/// PROV-CONSTRAINTS Definition 4 and Table 3: the positions in which an
+/// absent value is always the constant "none" rather than an existential, so
+/// it unifies only with another absent value (Constraint 23).
+const NONE_POSITIONS: [(Kind, FormalAttr); 2] = [
+    (Kind::Association, FormalAttr::Plan),
+    (Kind::Derivation, FormalAttr::Activity),
+];
+
+/// Whether `attr` of `record` is a position where an absent value is "none".
+///
+/// Besides [`NONE_POSITIONS`], Table 3 gives wasDerivedFrom(id; e2, e1, -, g,
+/// u) non-expandable `g` and `u`, so the `generation` and `usage` of a
+/// derivation are "none" when its `activity` is absent.
+fn is_none_position(kind: Kind, attr: FormalAttr, record: &Record) -> bool {
+    NONE_POSITIONS.contains(&(kind, attr))
+        || (kind == Kind::Derivation
+            && matches!(attr, FormalAttr::Generation | FormalAttr::Usage)
+            && record.formal(FormalAttr::Activity).is_none())
+}
+
 /// Whether PROV-CONSTRAINTS lets two different kinds share an identifier.
 fn may_share_an_identifier(a: Kind, b: Kind) -> bool {
     let in_53 = |k| DISJOINT_RELATIONS.contains(&k);
@@ -186,21 +211,38 @@ fn check_kinds(id: &QName, kinds: impl Iterator<Item = Kind>) -> Result<()> {
 fn merge(kind: Kind, id: &QName, members: &[&Record]) -> Result<Record> {
     let mut formals: Vec<(FormalAttr, Formal)> = Vec::new();
     for &attr in kind.formals() {
+        let conflict =
+            |first: Option<FormalRef<'_>>, second: Option<FormalRef<'_>>| Error::Unification {
+                id: id.clone(),
+                cause: UnificationCause::Formal {
+                    attr,
+                    first: first.map(FormalRef::to_formal),
+                    second: second.map(FormalRef::to_formal),
+                },
+            };
+        // The activity position has already agreed by the time a derivation
+        // reaches its generation and usage, so the first member decides.
+        if is_none_position(kind, attr, members[0]) {
+            // A constant: every member must hold the same value, absent
+            // included.
+            let first = members[0].formal(attr);
+            for record in &members[1..] {
+                let value = record.formal(attr);
+                if value != first {
+                    return Err(conflict(first, value));
+                }
+            }
+            if let Some(value) = first {
+                formals.push((attr, value.to_formal()));
+            }
+            continue;
+        }
         let mut chosen: Option<FormalRef<'_>> = None;
         for value in members.iter().filter_map(|record| record.formal(attr)) {
             match chosen {
                 None => chosen = Some(value),
                 Some(existing) if existing == value => {}
-                Some(existing) => {
-                    return Err(Error::Unification {
-                        id: id.clone(),
-                        cause: UnificationCause::Formal {
-                            attr,
-                            first: Some(existing.to_formal()),
-                            second: Some(value.to_formal()),
-                        },
-                    });
-                }
+                Some(existing) => return Err(conflict(Some(existing), Some(value))),
             }
         }
         if let Some(value) = chosen {

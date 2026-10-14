@@ -95,6 +95,121 @@ fn unification_over_the_corpus() {
     report.finish(JSON_CORPUS_SIZE);
 }
 
+/// Number of PROV-JSON documents in `corpus/constraints/`.
+const CONSTRAINTS_CORPUS_SIZE: usize = 171;
+
+/// The six files on which the `ProvToolbox` validator expects a failed merge:
+/// an association with and without a plan, a derivation with and without
+/// an activity, under one identifier.
+const NONE_POSITION_FAILURES: [&str; 6] = [
+    "association-fail4.json",
+    "association-fail5.json",
+    "derivation-fail1.json",
+    "derivation-fail2.json",
+    "derivation-fail3.json",
+    "derivation-fail4.json",
+];
+
+/// Every other constraints file that fails `unified()`, with its cause: the
+/// formal two present values disagree on, or `kinds` for a clash of kinds
+/// under one identifier. All other constraints files unify.
+const OTHER_FAILURES: [(&str, &str); 33] = [
+    ("association-fail1.json", "prov:agent"),
+    ("association-fail2.json", "prov:activity"),
+    ("association-fail3.json", "prov:plan"),
+    ("delegation-fail1.json", "prov:responsible"),
+    ("delegation-fail2.json", "prov:delegate"),
+    ("delegation-fail3.json", "prov:activity"),
+    ("end-fail1.json", "prov:activity"),
+    ("end-fail2.json", "prov:trigger"),
+    ("end-fail3.json", "prov:ender"),
+    ("end-fail5.json", "prov:time"),
+    ("generation-fail2.json", "prov:entity"),
+    ("generation-fail3.json", "prov:activity"),
+    ("generation-fail4.json", "prov:time"),
+    ("invalidation-fail2.json", "prov:entity"),
+    ("invalidation-fail3.json", "prov:activity"),
+    ("invalidation-fail4.json", "prov:time"),
+    ("start-fail1.json", "prov:activity"),
+    ("start-fail2.json", "prov:trigger"),
+    ("start-fail3.json", "prov:starter"),
+    ("start-fail5.json", "prov:time"),
+    ("start-fail6.json", "prov:time"),
+    ("start-fail8.json", "prov:time"),
+    ("type-f1-FAIL-c50-c55.json", "kinds"),
+    ("type-f3-FAIL-c54.json", "kinds"),
+    ("type-f4-FAIL-c53.json", "kinds"),
+    ("unification-activity-f1-FAIL-c22.json", "prov:startTime"),
+    ("unification-entity-activity-f1-FAIL-c55.json", "kinds"),
+    ("unification-generation-f1-FAIL-c23.json", "prov:entity"),
+    ("unification-object-relation-f1-FAIL-c54.json", "kinds"),
+    ("unification-relation-kind-f1-FAIL-c53.json", "kinds"),
+    ("usage-fail2.json", "prov:activity"),
+    ("usage-fail3.json", "prov:entity"),
+    ("usage-fail4.json", "prov:time"),
+];
+
+#[test]
+fn constraints_corpus_fails_to_unify_where_a_none_position_differs() {
+    let mut report = Report::default();
+    let mut none_failures = Vec::new();
+    let mut others = Vec::new();
+    for (name, text) in files(&corpus_dir("constraints"), "json") {
+        report.checked += 1;
+        let Some(d) = report.read_json(&name, &text) else {
+            continue;
+        };
+        match d.unified() {
+            Ok(_) => {}
+            Err(provkit::Error::Unification { cause, .. }) => match cause {
+                provkit::UnificationCause::Formal {
+                    attr,
+                    first,
+                    second,
+                    ..
+                } if first.is_none() != second.is_none() => {
+                    assert!(
+                        matches!(
+                            attr,
+                            provkit::FormalAttr::Plan | provkit::FormalAttr::Activity
+                        ),
+                        "{name}: {attr}"
+                    );
+                    none_failures.push(name);
+                }
+                provkit::UnificationCause::Formal { attr, .. } => {
+                    others.push((name, attr.to_string()));
+                }
+                provkit::UnificationCause::Kinds { .. } => others.push((name, "kinds".to_owned())),
+                other => report.fail(&name, format!("unexpected conflict: {other}")),
+            },
+            Err(e) => report.fail(&name, format!("expected Error::Unification, got: {e}")),
+        }
+    }
+    // The filter narrows the set, so the lists are checked only without it.
+    if only().is_none() {
+        if none_failures != NONE_POSITION_FAILURES {
+            report.fail(
+                "constraints",
+                format!(
+                    "none-position failures {none_failures:?}, expected {NONE_POSITION_FAILURES:?}"
+                ),
+            );
+        }
+        let expected: Vec<(String, String)> = OTHER_FAILURES
+            .iter()
+            .map(|&(n, c)| (n.to_owned(), c.to_owned()))
+            .collect();
+        if others != expected {
+            report.fail(
+                "constraints",
+                format!("other failures {others:?}, expected {expected:?}"),
+            );
+        }
+    }
+    report.finish(CONSTRAINTS_CORPUS_SIZE);
+}
+
 /// The text of the first Rust code block in `markdown`.
 fn first_rust_block(markdown: &str) -> &str {
     let (_, after) = markdown.split_once("```rust\n").expect("a Rust code block");

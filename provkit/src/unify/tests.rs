@@ -1,8 +1,8 @@
 use crate::test_util::{agent, bundle, document, entity, ex, prov, relation};
 use crate::well_known::PROV_LABEL;
 use crate::{
-    Association, Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F,
-    Generation, Kind, Namespaces, QName, Record, UnificationCause,
+    Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Generation, Kind,
+    Namespaces, QName, Record, UnificationCause,
 };
 
 fn rec(kind: Kind, id: &str, formals: Vec<(F, Formal)>, label: Option<&str>) -> Record {
@@ -203,33 +203,60 @@ fn unified_keeps_the_namespace_tables() {
 }
 
 #[test]
-fn an_absent_formal_unifies_with_a_present_one_in_every_position() {
-    // PROV-CONSTRAINTS makes `plan` non-expandable, so `-` there means
-    // "no plan" and would not unify with a plan. The model holds every
-    // formal as an `Option`, so it cannot tell the two apart, and merges.
-    let association = |plan: Option<QName>| {
-        Record::Association(Association {
-            id: Some(ex("assoc")),
-            activity: Some(ex("a")),
-            agent: Some(ex("ag")),
-            plan,
-            attributes: Attributes::new(),
-        })
-    };
-    let d = document(vec![association(None), association(Some(ex("pl")))]);
-    let u = d.unified().unwrap();
-    assert_eq!(u.records, vec![association(Some(ex("pl")))]);
+fn an_absent_formal_unifies_with_a_present_one_except_where_it_means_none() {
+    // PROV-CONSTRAINTS Definition 4 makes two positions non-expandable: the
+    // plan of an association and the activity of a derivation. `-` there is
+    // the constant "none", which unifies only with "none".
+    let none_positions = [
+        (Kind::Association, F::Plan),
+        (Kind::Derivation, F::Activity),
+    ];
+    for &(kind, attr) in &none_positions {
+        let with = rec(kind, "x", vec![(attr, name("v"))], None);
+        let without = rec(kind, "x", vec![], None);
+        for (first, second) in [(&with, &without), (&without, &with)] {
+            let d = document(vec![first.clone(), second.clone()]);
+            let Err(Error::Unification { id, cause }) = d.unified() else {
+                panic!("{kind:?} {attr}: expected a conflict")
+            };
+            assert_eq!(id, ex("x"));
+            assert_eq!(
+                cause,
+                UnificationCause::Formal {
+                    attr,
+                    first: first.formal(attr).map(crate::FormalRef::to_formal),
+                    second: second.formal(attr).map(crate::FormalRef::to_formal),
+                },
+                "{kind:?} {attr}"
+            );
+        }
+        // Two absent values agree.
+        let d = document(vec![without.clone(), without.clone()]);
+        assert_eq!(d.unified().unwrap().records, vec![without.clone()]);
+    }
 
-    // Every formal of every kind that merges, in either order.
+    // Every other formal of every kind that merges, in either order.
     for &kind in Kind::ALL.iter().filter(|k| !k.is_bare()) {
         for &attr in kind.formals() {
+            if none_positions.contains(&(kind, attr)) {
+                continue;
+            }
             let present = if attr.is_time() {
                 t("2011-11-16T16:05:33Z")
             } else {
                 name("v")
             };
-            let with = rec(kind, "x", vec![(attr, present)], None);
-            let without = rec(kind, "x", vec![], None);
+            // The generation and usage of a derivation are "none" only when
+            // its activity is absent, so these records name an activity.
+            let base: Vec<(F, Formal)> = if kind == Kind::Derivation {
+                vec![(F::Activity, name("a"))]
+            } else {
+                vec![]
+            };
+            let mut with_formals = base.clone();
+            with_formals.push((attr, present));
+            let with = rec(kind, "x", with_formals, None);
+            let without = rec(kind, "x", base, None);
             for pair in [[&with, &without], [&without, &with]] {
                 let d = document(pair.iter().map(|&r| r.clone()).collect());
                 assert_eq!(
@@ -240,6 +267,72 @@ fn an_absent_formal_unifies_with_a_present_one_in_every_position() {
             }
         }
     }
+}
+
+#[test]
+fn a_derivation_without_an_activity_holds_its_generation_and_usage_as_none() {
+    // PROV-CONSTRAINTS Table 3 lists the generation and usage of
+    // wasDerivedFrom(id; e2, e1, -, g, u) as non-expandable.
+    for attr in [F::Generation, F::Usage] {
+        let with = rec(Kind::Derivation, "x", vec![(attr, name("v"))], None);
+        let without = rec(Kind::Derivation, "x", vec![], None);
+        for (first, second) in [(&with, &without), (&without, &with)] {
+            let d = document(vec![first.clone(), second.clone()]);
+            let Err(Error::Unification { id, cause }) = d.unified() else {
+                panic!("{attr}: expected a conflict")
+            };
+            assert_eq!(id, ex("x"));
+            assert_eq!(
+                cause,
+                UnificationCause::Formal {
+                    attr,
+                    first: first.formal(attr).map(crate::FormalRef::to_formal),
+                    second: second.formal(attr).map(crate::FormalRef::to_formal),
+                },
+                "{attr}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_derivation_with_an_activity_merges_an_absent_generation_or_usage() {
+    for attr in [F::Generation, F::Usage] {
+        let activity = (F::Activity, name("a"));
+        let with = rec(
+            Kind::Derivation,
+            "x",
+            vec![activity.clone(), (attr, name("v"))],
+            None,
+        );
+        let without = rec(Kind::Derivation, "x", vec![activity], None);
+        for pair in [[&with, &without], [&without, &with]] {
+            let d = document(pair.iter().map(|&r| r.clone()).collect());
+            assert_eq!(d.unified().unwrap().records, vec![with.clone()], "{attr}");
+        }
+    }
+}
+
+#[test]
+fn derivations_that_disagree_on_the_activity_fail_on_the_activity_first() {
+    let with = rec(
+        Kind::Derivation,
+        "x",
+        vec![(F::Activity, name("a")), (F::Generation, name("g"))],
+        None,
+    );
+    let without = rec(Kind::Derivation, "x", vec![], None);
+    let d = document(vec![with, without]);
+    let Err(Error::Unification { cause, .. }) = d.unified() else {
+        panic!("expected a conflict")
+    };
+    assert!(matches!(
+        cause,
+        UnificationCause::Formal {
+            attr: F::Activity,
+            ..
+        }
+    ));
 }
 
 fn pair(a: Kind, b: Kind) -> crate::Result<Document> {
