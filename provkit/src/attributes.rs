@@ -1,7 +1,7 @@
 //! Non-formal attributes of a record.
 
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::Arc;
+use std::hash::{BuildHasher, Hash, Hasher, RandomState};
+use std::sync::{Arc, LazyLock};
 
 use indexmap::{Equivalent, IndexSet};
 
@@ -229,19 +229,19 @@ impl PartialEq for Attributes {
 
 impl Eq for Attributes {}
 
+/// One hasher for the pairs, keyed once per process. Equal sets hash alike
+/// within a process, which is what `Hash` promises, and a collision between
+/// two pairs found against fixed keys does not carry over.
+static PAIR_HASHER: LazyLock<RandomState> = LazyLock::new(RandomState::new);
+
 impl Hash for Attributes {
     // Order-independent: per-pair hashes are sorted before they reach the
-    // outer hasher. `DefaultHasher::new` has fixed keys, so equal sets hash
-    // alike in every instance.
+    // outer hasher.
     fn hash<H: Hasher>(&self, state: &mut H) {
         let mut hashes: Vec<u64> = self
             .pairs
             .iter()
-            .map(|pair| {
-                let mut h = DefaultHasher::new();
-                pair.hash(&mut h);
-                h.finish()
-            })
+            .map(|pair| PAIR_HASHER.hash_one(pair))
             .collect();
         hashes.sort_unstable();
         hashes.len().hash(state);
