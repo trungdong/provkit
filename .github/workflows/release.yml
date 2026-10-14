@@ -23,6 +23,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
   binaries:
     needs: [check-version, create-release]
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     strategy:
       matrix:
         include:
@@ -39,11 +43,27 @@ jobs:
           submodules: true
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1 (2026-09-12)
         with:
-          toolchain: stable
-      - uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1.30.2
+          # The toolchain CI tests (see ci.yml); raise both pins together.
+          toolchain: "1.98"
+      - uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-about
+      - run: cargo about generate about.hbs -o THIRD-PARTY.md
+      - id: upload
+        uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1.30.2
         with:
           bin: provkit
           target: ${{ matrix.target }}
           manifest-path: provkit-cli/Cargo.toml
+          include: THIRD-PARTY.md
+          checksum: sha256
           locked: true
           token: ${{ secrets.GITHUB_TOKEN }}
+      # The upload action reports the one archive it built (.tar.gz, or .zip
+      # on Windows) and leaves it in the working directory. The .sha256 files
+      # are not attested.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ steps.upload.outputs.tar }}
+            ${{ steps.upload.outputs.zip }}

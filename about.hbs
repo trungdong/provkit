@@ -1,0 +1,22 @@
+# Third-party notices
+
+The `provkit` binary links the crates below. Each is used under the licence
+shown, whose text follows.
+
+{{#each overview}}
+- {{name}}: {{count}} crate{{#if (ne count 1)}}s{{/if}}
+{{/each}}
+
+{{#each licenses}}
+## {{name}}
+
+Used by:
+{{#each used_by}}
+- {{crate.name}} {{crate.version}}
+{{/each}}
+
+```
+{{text}}
+```
+
+{{/each}}

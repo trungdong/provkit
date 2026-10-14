@@ -38,3 +38,10 @@ must_use_candidate = "allow"
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "warn"
+
+# Release binaries: cross-crate optimisation (thin LTO), one codegen unit per
+# crate and no symbols. Debug builds are untouched.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
