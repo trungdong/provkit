@@ -27,9 +27,13 @@ pub struct Namespaces {
     /// For each IRI, the prefixes bound to it in declaration order, so the
     /// first one answers `prefix_for`. Kept in step with `prefixes`.
     by_iri: HashMap<Arc<str>, Vec<Box<str>>>,
+    /// The number after the last `nsN` this table minted, where the next
+    /// search starts. Zero before the first mint. Not part of equality.
+    next_minted: usize,
 }
 
 /// Compares the default namespace and the bindings, ignoring their order.
+/// The minting counter takes no part.
 impl PartialEq for Namespaces {
     fn eq(&self, other: &Self) -> bool {
         self.default == other.default && self.prefixes == other.prefixes
@@ -346,8 +350,11 @@ impl<'a> WriteScope<'a> {
 
     /// Bind the first `nsN` that neither table uses and that `accept` takes
     /// to `namespace`, in `own`, even when `namespace` already has a prefix.
+    /// The search starts after the last number `own` minted, so minting many
+    /// prefixes is linear; a prefix the caller declared since is still
+    /// skipped by the lookup.
     pub(crate) fn mint_prefix(&mut self, namespace: &str, accept: impl Fn(&str) -> bool) -> String {
-        let mut n = 1;
+        let mut n = self.own.next_minted.max(1);
         loop {
             let candidate = format!("ns{n}");
             if !self.own.prefixes.contains_key(candidate.as_str())
@@ -355,6 +362,7 @@ impl<'a> WriteScope<'a> {
                 && accept(&candidate)
             {
                 self.own.bind(&candidate, Arc::from(namespace));
+                self.own.next_minted = n + 1;
                 return candidate;
             }
             n += 1;

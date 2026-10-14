@@ -493,3 +493,19 @@ fn a_bundle_default_writes_bare_and_the_document_default_takes_a_prefix() {
     let inherited = QName::new("http://doc.org/", "bare").unwrap();
     assert_eq!(scope.render_parts(&inherited), Some("ns2".to_owned()));
 }
+
+#[test]
+fn minting_continues_past_the_last_minted_number() {
+    let mut ns = Namespaces::new();
+    assert_eq!(ns.ensure_prefix("http://a/"), "ns1");
+    ns.declare("ns2", "http://taken/").unwrap();
+    assert_eq!(ns.ensure_prefix("http://b/"), "ns3");
+    assert_eq!(ns.ensure_prefix("http://c/"), "ns4");
+    // A minted prefix is a binding like any other to equality.
+    let mut other = Namespaces::new();
+    other.declare("ns1", "http://a/").unwrap();
+    other.declare("ns2", "http://taken/").unwrap();
+    other.declare("ns3", "http://b/").unwrap();
+    other.declare("ns4", "http://c/").unwrap();
+    assert_eq!(ns, other);
+}

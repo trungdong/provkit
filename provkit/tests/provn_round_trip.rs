@@ -345,3 +345,30 @@ fn many_bundles_under_many_prefixes_stay_linear() {
     assert_eq!(back, read);
     assert!(elapsed.as_secs() < 10, "took {elapsed:?}");
 }
+
+/// Minting a prefix per namespace must not restart its search at `ns1`
+/// each time, or a document with many undeclared namespaces writes in
+/// quadratic time. 20,000 namespaces take about 13 seconds before the
+/// counter and well under a second with it.
+#[test]
+fn minting_many_prefixes_is_linear() {
+    let records = (0..20_000)
+        .map(|i| {
+            let id = QName::new(&format!("http://ns{i}.example/"), "e").unwrap();
+            element(Kind::Entity, id, Attributes::new())
+        })
+        .collect();
+    let d = document(records);
+    let start = std::time::Instant::now();
+    let text = provn::to_string(&d).unwrap();
+    let elapsed = start.elapsed();
+    assert!(elapsed.as_secs() < 5, "took {elapsed:?}");
+    assert!(
+        text.contains("prefix ns1 <http://ns0.example/>"),
+        "ns1 first"
+    );
+    assert!(
+        text.contains("prefix ns20000 <http://ns19999.example/>"),
+        "ns20000 last"
+    );
+}
