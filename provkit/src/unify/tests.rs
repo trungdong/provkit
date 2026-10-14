@@ -498,17 +498,56 @@ fn output_order_follows_first_members() {
 }
 
 #[test]
-fn records_without_identifiers_never_merge() {
+fn records_without_identifiers_never_merge_but_an_exact_repeat_is_kept_once() {
     let of_e = relation(Kind::Generation, None, vec![(F::Entity, name("e"))]);
     let d = document(vec![
         of_e.clone(),
-        of_e,
+        of_e.clone(),
         gen_at(None, "2014-06-23T12:28:53Z"),
         gen_at(None, "2012-12-03T21:08:16Z"),
     ]);
     let u = d.unified().unwrap();
-    assert_eq!(u.records.len(), 4);
-    assert_eq!(u.records, d.records);
+
+    // The two generations at different times stay apart: they have no
+    // identifier to merge on. The exact repeat is one record.
+    assert_eq!(
+        u.records,
+        vec![
+            of_e,
+            gen_at(None, "2014-06-23T12:28:53Z"),
+            gen_at(None, "2012-12-03T21:08:16Z"),
+        ]
+    );
+}
+
+#[test]
+fn an_exact_repeat_of_a_bare_kind_is_kept_once_and_a_near_repeat_is_not() {
+    let member = relation(
+        Kind::Membership,
+        None,
+        vec![(F::Collection, name("c")), (F::Entity, name("e"))],
+    );
+    let mut labelled = relation(Kind::Generation, None, vec![(F::Entity, name("e"))]);
+    labelled.attributes_mut().insert(PROV_LABEL.clone(), "l");
+    let plain = relation(Kind::Generation, None, vec![(F::Entity, name("e"))]);
+    let d = document(vec![
+        member.clone(),
+        member.clone(),
+        plain.clone(),
+        labelled.clone(),
+    ]);
+    assert_eq!(d.unified().unwrap().records, vec![member, plain, labelled]);
+}
+
+#[test]
+fn the_repeat_rule_stops_at_the_bundle_boundary() {
+    let plain = relation(Kind::Generation, None, vec![(F::Entity, name("e"))]);
+    let mut d = document(vec![plain.clone()]);
+    d.bundles
+        .push(bundle("b", vec![plain.clone(), plain.clone()]));
+    let u = d.unified().unwrap();
+    assert_eq!(u.records, vec![plain.clone()]);
+    assert_eq!(u.bundles[0].records, vec![plain]);
 }
 
 #[test]

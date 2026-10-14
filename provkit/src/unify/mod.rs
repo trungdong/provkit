@@ -11,7 +11,7 @@
 //! The kinds that may share an identifier are listed on
 //! [`Document::unified`].
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use indexmap::IndexMap;
 
@@ -29,6 +29,10 @@ impl Document {
     /// values are an [`Error::Unification`] naming the identifier, the
     /// attribute and both values. Non-formal attributes are the union in
     /// first-seen order. The merged record takes the first member's position.
+    /// After the merge, a record equal to an earlier one in the same scope
+    /// is dropped, so the result holds each record once; two records that
+    /// differ in any formal or attribute both stay. Bundles unify
+    /// independently and the rule does not cross a bundle boundary.
     /// In four positions an absent value is the constant "none" and conflicts
     /// with a present one: the `plan` of `wasAssociatedWith`, the `activity`
     /// of `wasDerivedFrom`, and the `generation` and `usage` of a
@@ -123,14 +127,30 @@ fn unify_records(records: &[Record]) -> Result<Vec<Record>> {
         }
     }
 
-    Ok(records
+    let merged = records
         .iter()
         .enumerate()
         .filter_map(|(i, r)| match replacement.remove(&i) {
             Some(merged) => merged,
             None => Some(r.clone()),
         })
-        .collect())
+        .collect();
+    Ok(each_once(merged))
+}
+
+/// `records` with each record kept once: a record equal to an earlier one
+/// is dropped and the earlier one keeps its position. A document is a set
+/// of records, so the normal form holds each once.
+fn each_once(records: Vec<Record>) -> Vec<Record> {
+    let keep: Vec<bool> = {
+        let mut seen = HashSet::new();
+        records.iter().map(|r| seen.insert(r)).collect()
+    };
+    records
+        .into_iter()
+        .zip(keep)
+        .filter_map(|(record, keep)| keep.then_some(record))
+        .collect()
 }
 
 /// Constraint 53: these relation kinds cannot share an identifier with one
