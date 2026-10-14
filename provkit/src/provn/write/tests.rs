@@ -179,7 +179,9 @@ fn values_follow_the_grammar() {
 
 #[test]
 fn an_integer_is_bare_only_as_an_xsd_int() {
-    // Only an xsd:int is bare. Every reader types a bare integer as xsd:int at least, and one reads nothing else.
+    // Only an xsd:int is written bare. Every reader types a bare integer
+    // within the 32-bit range as xsd:int, and ProvToolbox reads no wider
+    // bare integer.
     let cases = [
         ("5", &XSD_INT, true),
         ("-2147483648", &XSD_INT, true),

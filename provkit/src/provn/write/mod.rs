@@ -317,9 +317,9 @@ fn string(s: &str) -> String {
 /// A value is written bare when its datatype is `xsd:int`, its text is an
 /// `INT_LITERAL` (an optional minus sign and at least one digit) and reading
 /// that text back gives `xsd:int`. Every other integer is quoted with its
-/// datatype, which every reader accepts, where a bare value above the
-/// 32-bit range is typed by range here and in `ProvPy` and refused by
-/// `ProvToolbox`.
+/// datatype, a form every reader accepts. A bare integer above the 32-bit
+/// range is typed by range here and in `ProvPy`, and `ProvToolbox` refuses
+/// it.
 fn bare_int(lexical: &str, datatype: &QName) -> bool {
     *datatype == *XSD_INT && is_int_literal(lexical) && integer_datatype(lexical) == datatype
 }
