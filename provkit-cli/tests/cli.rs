@@ -524,14 +524,14 @@ fn compare_does_not_redeclare_a_declared_prefix() {
 }
 
 #[test]
-fn compare_with_unrecognisable_standard_input_offers_no_flag() {
+fn compare_with_unrecognisable_standard_input_offers_the_flag() {
     provkit()
         .args(["compare", "-"])
         .arg(corpus("json/activity1.json"))
         .write_stdin("hello")
         .assert()
         .code(2)
-        .stderr("provkit: cannot tell the format of standard input: it starts with neither `{` nor `document`\n");
+        .stderr("provkit: cannot tell the format of standard input; use -f json or -f provn\n");
     convert_stdin(&[], "hello")
         .code(2)
         .stderr("provkit: cannot tell the format of standard input; use -f json or -f provn\n");
@@ -761,4 +761,80 @@ fn a_word_starting_with_document_is_not_provn() {
     convert_stdin(&[], "documentary\n")
         .code(2)
         .stderr(predicate::str::contains("cannot tell the format"));
+}
+
+#[test]
+fn compare_takes_a_format_flag_for_both_sides() {
+    let (a, b) = two_docs(
+        "compare_takes_a_format_flag_for_both_sides",
+        "txt",
+        r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e1": {}}}"#,
+        r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e1": {}}}"#,
+    );
+    provkit()
+        .args(["compare", "-f", "json"])
+        .arg(&a)
+        .arg(&b)
+        .assert()
+        .code(0);
+}
+
+#[test]
+fn compare_format_flag_overrides_the_extension() {
+    let (a, b) = two_docs(
+        "compare_format_flag_overrides_the_extension",
+        "provn",
+        r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e1": {}}}"#,
+        r#"{"prefix": {"ex": "http://example.org/"}, "entity": {"ex:e2": {}}}"#,
+    );
+    // The extension says PROV-N, so the JSON text fails to parse.
+    compare(&a, &b).code(2);
+    provkit()
+        .args(["compare", "-f", "json"])
+        .arg(&a)
+        .arg(&b)
+        .assert()
+        .code(1);
+}
+
+#[test]
+fn compare_names_the_flag_when_standard_input_cannot_be_sniffed() {
+    let dir = scratch("compare_names_the_flag_when_standard_input_cannot_be_sniffed");
+    let b = write(&dir, "b.provn", PROVN);
+    provkit()
+        .arg("compare")
+        .arg("-")
+        .arg(&b)
+        .write_stdin("hello")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("use -f json or -f provn"));
+    provkit()
+        .args(["compare", "-f", "provn", "-"])
+        .arg(&b)
+        .write_stdin(PROVN)
+        .assert()
+        .code(0);
+}
+
+#[test]
+fn a_utf16_file_gets_a_hint() {
+    let dir = scratch("a_utf16_file_gets_a_hint");
+    let mut bytes = vec![0xFF, 0xFE];
+    for unit in "document\nendDocument\n".encode_utf16() {
+        bytes.extend(unit.to_le_bytes());
+    }
+    let path = dir.join("utf16.provn");
+    std::fs::write(&path, &bytes).unwrap();
+    convert(&[], &path).code(2).stderr(format!(
+        "provkit: {}: stream did not contain valid UTF-8; the file starts with a UTF-16 byte-order mark; convert it to UTF-8\n",
+        path.display()
+    ));
+    // Invalid UTF-8 without the mark keeps the plain message.
+    let other = dir.join("latin1.provn");
+    std::fs::write(&other, b"document\n  entity(ex:\xE9)\nendDocument\n").unwrap();
+    convert(&[], &other).code(2).stderr(format!(
+        "provkit: {}: stream did not contain valid UTF-8\n",
+        other.display()
+    ));
 }

@@ -4,7 +4,7 @@ mod compare;
 mod format;
 
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read as _, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -34,8 +34,8 @@ enum Command {
     Convert(ConvertArgs),
     /// Compare two documents and print the records found on one side only.
     ///
-    /// Formats come from the file extension (.json, .provn), else from the
-    /// content. Names the output cannot write with a declared prefix get an
+    /// Formats are taken from -f when given, else from each file's extension
+    /// (.json, .provn), else by looking at the content. Names the output cannot write with a declared prefix get an
     /// `nsN` prefix. A `prefix` line, printed after the records of its scope,
     /// applies to the whole scope. The listing is not a PROV-N document: its
     /// names resolve with the declarations of the file it came from.
@@ -118,19 +118,10 @@ fn message_of(e: &provkit::JsonError) -> String {
     text[..end].to_owned()
 }
 
-/// How a failure to tell the format is worded.
-#[derive(Clone, Copy)]
-enum Hint {
-    /// The command has `-f`, so the message names it.
-    FromFlag,
-    /// The command has no `-f`.
-    None,
-}
-
 /// Reads `path` (or standard input for `-`) and parses it with the resolved
 /// format. Extensibility expressions the PROV-N reader ignores are reported
 /// once on standard error.
-fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Document> {
+fn read_document(path: &Path, from: Option<Format>) -> Result<Document> {
     let is_stdin = path == Path::new("-");
     let label = shown(path);
     let text = if is_stdin {
@@ -138,20 +129,25 @@ fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Docume
     } else {
         fs::read_to_string(path)
     }
-    .with_context(|| label.clone())?;
+    .map_err(|e| {
+        let hint = if !is_stdin
+            && e.kind() == io::ErrorKind::InvalidData
+            && starts_with_utf16_mark(path)
+        {
+            "; the file starts with a UTF-16 byte-order mark; convert it to UTF-8"
+        } else {
+            ""
+        };
+        anyhow!("{label}: {e}{hint}")
+    })?;
     // `-` has no extension, so standard input goes straight to sniffing.
     let format = from
         .or_else(|| Format::from_path(path))
         .or_else(|| Format::sniff(&text))
-        .ok_or_else(|| match (is_stdin, hint) {
-            (true, Hint::None) => anyhow!(
-                "cannot tell the format of standard input: it starts with neither `{{` nor `document`"
-            ),
-            (true, Hint::FromFlag) => {
+        .ok_or_else(|| {
+            if is_stdin {
                 anyhow!("cannot tell the format of standard input; use -f json or -f provn")
-            }
-            (false, Hint::None) => anyhow!("{label}: cannot tell the format"),
-            (false, Hint::FromFlag) => {
+            } else {
                 anyhow!("{label}: cannot tell the format; use -f json or -f provn")
             }
         })?;
@@ -165,6 +161,15 @@ fn read_document(path: &Path, from: Option<Format>, hint: Hint) -> Result<Docume
         }
     };
     Ok(document)
+}
+
+/// Whether the file at `path` begins with a UTF-16 byte-order mark, little
+/// or big endian. Read only after the UTF-8 read has failed.
+fn starts_with_utf16_mark(path: &Path) -> bool {
+    let mut head = [0u8; 2];
+    fs::File::open(path)
+        .and_then(|mut f| f.read_exact(&mut head))
+        .is_ok_and(|()| matches!(head, [0xFF, 0xFE] | [0xFE, 0xFF]))
 }
 
 /// Prints one warning on standard error for the extensibility expressions
@@ -202,7 +207,7 @@ fn convert(args: &ConvertArgs) -> Result<()> {
             )
         })?,
     };
-    let doc = read_document(&args.input, args.from, Hint::FromFlag)?;
+    let doc = read_document(&args.input, args.from)?;
 
     // Serialise first, so a library error never leaves a partial file.
     let mut buf = Vec::new();

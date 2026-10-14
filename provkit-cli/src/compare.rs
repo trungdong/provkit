@@ -10,7 +10,8 @@ use anyhow::{Context, Result};
 use clap::Args;
 use provkit::{Bundle, Document, Error, FormalRef, Namespaces, QName, Record, provn};
 
-use crate::{Hint, read_document, shown, write_stdout};
+use crate::format::Format;
+use crate::{read_document, shown, write_stdout};
 
 /// Arguments of `provkit compare`.
 #[derive(Args)]
@@ -19,6 +20,10 @@ pub struct CompareArgs {
     a: PathBuf,
     /// Second document, or - for standard input. Only one of the two may be -.
     b: PathBuf,
+    /// Format of both documents; otherwise each file's extension, then its
+    /// content, decides.
+    #[arg(short = 'f', long = "from", value_enum)]
+    from: Option<Format>,
     /// Merge records that share an identifier on each side before comparing.
     #[arg(long)]
     unified: bool,
@@ -30,8 +35,8 @@ pub fn run(args: &CompareArgs) -> Result<ExitCode> {
     if args.a == stdin && args.b == stdin {
         anyhow::bail!("standard input can be read once; give one document as a file");
     }
-    let mut a = read_document(&args.a, None, Hint::None)?;
-    let mut b = read_document(&args.b, None, Hint::None)?;
+    let mut a = read_document(&args.a, args.from)?;
+    let mut b = read_document(&args.b, args.from)?;
     if args.unified {
         a = a.unified().with_context(|| shown(&args.a))?;
         b = b.unified().with_context(|| shown(&args.b))?;

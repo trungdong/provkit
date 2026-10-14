@@ -33,9 +33,12 @@ provkit compare a.json b.provn
 
 # Merge records that share an identifier on each side first
 provkit compare --unified a.json b.provn
+
+# Name the format of both sides
+provkit compare -f json a.txt b.txt
 ```
 
-Input format comes from `-f json|provn`, else the file extension, else the
+Input format comes from `-f json|provn` (on `compare`, for both sides), else the file extension, else the
 content. The sniffer treats `document` followed by whitespace, a comment or
 the end of input as PROV-N, and `{` as PROV-JSON. A comment glued to the
 keyword is part of the name in PROV-N, so the reader then rejects it; the
