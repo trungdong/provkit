@@ -329,6 +329,38 @@ mod tests {
     }
 
     #[test]
+    fn a_bundle_redeclaring_a_document_prefix_writes_it_only_at_another_iri() {
+        // The same IRI: inherited, so no prefix block.
+        let mut d = document(vec![]);
+        let mut same = bundle("b1", vec![entity("e")]);
+        same.namespaces
+            .declare("ex", "http://example.org/")
+            .unwrap();
+        d.bundles.push(same);
+        let (text, v) = round_trip(&d);
+        assert!(v["bundle"]["ex:b1"].is_object(), "{text}");
+        assert!(v["bundle"]["ex:b1"].get("prefix").is_none(), "{text}");
+
+        // Another IRI: the bundle's own binding wins and is declared. In the
+        // bundle's scope `ex` names other.org, so the bundle's own IRI is
+        // written under a minted `ns1`, declared beside `ex`.
+        let mut d = document(vec![]);
+        let mut other = bundle("b2", vec![entity_in("http://other.org/", "o")]);
+        other.namespaces.declare("ex", "http://other.org/").unwrap();
+        d.bundles.push(other);
+        let (text, v) = round_trip(&d);
+        assert_eq!(
+            v["bundle"]["ns1:b2"]["prefix"],
+            serde_json::json!({"ex": "http://other.org/", "ns1": "http://example.org/"}),
+            "{text}"
+        );
+        assert!(
+            v["bundle"]["ns1:b2"]["entity"].get("ex:o").is_some(),
+            "{text}"
+        );
+    }
+
+    #[test]
     fn output_is_indented_by_two_spaces_and_ends_with_a_newline() {
         let d = document(vec![entity("e")]);
         assert_eq!(
