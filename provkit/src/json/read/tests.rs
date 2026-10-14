@@ -1594,27 +1594,30 @@ fn errors_in_a_record_are_reported_in_the_order_of_the_text() {
 }
 
 #[test]
-fn of_several_invalid_members_the_dollar_comes_first() {
-    for value in [
-        r#"{"type": 5, "$": 1}"#,
-        r#"{"lang": 5, "type": 5, "$": 1}"#,
-        r#"{"type": 5, "lang": 5, "$": 1, "$": "x"}"#,
+fn of_several_invalid_members_the_first_in_the_text_comes_first() {
+    for (value, first) in [
+        (r#"{"type": 5, "$": 1}"#, "`type`"),
+        (r#"{"lang": 5, "type": 5, "$": 1}"#, "`lang`"),
+        (r#"{"type": 5, "lang": 5, "$": 1, "$": "x"}"#, "`type`"),
+        (r#"{"lang": 5, "$": "x", "type": 5}"#, "`lang`"),
+        // An unknown key after two invalid members.
+        (r#"{"type": 1, "$": 2, "zz": 3}"#, "`type`"),
     ] {
         let text = one_record("entity", "ex:e", &format!(r#""ex:a": {value}"#));
         let (_, _, message) = record_structure(&text);
-        assert!(
-            message.starts_with("expected a string as the `$` of a value object"),
-            "{value}\n{message}"
-        );
+        let expected = format!("expected a string as the {first} of a value object");
+        assert!(message.starts_with(&expected), "{value}\n{message}");
     }
+    // A `type` holding a lone surrogate, before an invalid `$` and an
+    // unknown key.
     let text = one_record(
         "entity",
         "ex:e",
-        r#""ex:a": {"lang": 5, "$": "x", "type": 5}"#,
+        r#""ex:a": {"type": "\ud800", "$": 1, "zz": 2}"#,
     );
     let (_, _, message) = record_structure(&text);
     assert!(
-        message.starts_with("expected a string as the `type` of a value object"),
+        message.starts_with("unexpected end of hex escape"),
         "{message}"
     );
 }

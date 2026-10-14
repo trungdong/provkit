@@ -454,13 +454,6 @@ fn from_raw(text: &str) -> JsonValue {
 /// [`from_raw`] takes before the visitor runs.
 struct ValueVisitor;
 
-/// Of the members of a value object read so far, the first invalid one in
-/// the order `$`, `type`, `lang`, if any. The caller reports it ahead of a
-/// fault in the member it is reading, which comes later in the text.
-fn earliest_invalid(members: [Option<Result<String, InvalidValue>>; 3]) -> Option<InvalidValue> {
-    members.into_iter().flatten().find_map(Result::err)
-}
-
 impl<'de> Visitor<'de> for ValueVisitor {
     type Value = JsonValue;
     fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -499,7 +492,11 @@ impl<'de> Visitor<'de> for ValueVisitor {
         Ok(invalid.map_or(JsonValue::Many(items), JsonValue::Invalid))
     }
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<JsonValue, A::Error> {
+        // Each member is `Some` once read, holding `None` when it is
+        // invalid. The first invalid member in the text is kept apart and
+        // reported ahead of any later fault.
         let (mut value, mut datatype, mut lang) = (None, None, None);
+        let mut invalid = None;
         while let Some(key) = map.next_key::<String>()? {
             if !matches!(key.as_str(), "$" | "type" | "lang") {
                 // An unknown key is refused at the key, before its value is
@@ -507,7 +504,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
                 // text, so that one is reported instead; the rest of the
                 // object is read first, because the parser refuses an
                 // object left half read.
-                return match earliest_invalid([value, datatype, lang]) {
+                return match invalid {
                     Some(invalid) => {
                         map.next_value::<IgnoredAny>()?;
                         while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
@@ -520,19 +517,25 @@ impl<'de> Visitor<'de> for ValueVisitor {
                     ))),
                 };
             }
-            let member: &mut Option<_> = match key.as_str() {
+            let member: &mut Option<Option<String>> = match key.as_str() {
                 "$" => &mut value,
                 "type" => &mut datatype,
                 _ => &mut lang,
             };
             let text = map.next_value::<&RawValue>()?.get();
             if member.is_none() {
-                *member = Some(member_string(&key, text));
+                *member = Some(match member_string(&key, text) {
+                    Ok(content) => Some(content),
+                    Err(found) => {
+                        invalid = invalid.or(Some(found));
+                        None
+                    }
+                });
                 continue;
             }
             // The member is given twice. The same rule: an invalid member
             // read before it is reported first.
-            return match earliest_invalid([value, datatype, lang]) {
+            return match invalid {
                 Some(invalid) => {
                     while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
                     Ok(JsonValue::Invalid(invalid))
@@ -540,18 +543,15 @@ impl<'de> Visitor<'de> for ValueVisitor {
                 None => Err(de::Error::custom(duplicate(&key))),
             };
         }
-        // Of several invalid members, `$` is reported before `type`, and
-        // `type` before `lang`.
-        let members = (value.transpose(), datatype.transpose(), lang.transpose());
-        Ok(match members {
-            (Err(invalid), _, _) | (_, Err(invalid), _) | (_, _, Err(invalid)) => {
-                JsonValue::Invalid(invalid)
-            }
-            (Ok(value), Ok(datatype), Ok(lang)) => JsonValue::Typed {
-                value: value.ok_or_else(|| de::Error::custom("a value object needs a `$` key"))?,
-                datatype,
-                lang,
-            },
+        if let Some(invalid) = invalid {
+            return Ok(JsonValue::Invalid(invalid));
+        }
+        Ok(JsonValue::Typed {
+            value: value
+                .flatten()
+                .ok_or_else(|| de::Error::custom("a value object needs a `$` key"))?,
+            datatype: datatype.flatten(),
+            lang: lang.flatten(),
         })
     }
 }
