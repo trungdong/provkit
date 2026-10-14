@@ -8,7 +8,7 @@ use super::lexer::{Token, TokenKind, tokenize};
 use crate::namespaces::WriteScope;
 use crate::pn;
 use crate::value::{integer_datatype, is_int_literal};
-use crate::well_known::XSD_DATETIME;
+use crate::well_known::{XSD_DATETIME, XSD_INT};
 use crate::{
     Bundle, Document, Error, FormalAttr, FormalRef, Namespaces, QName, Record, Result, Value,
 };
@@ -314,11 +314,14 @@ fn string(s: &str) -> String {
     out
 }
 
-/// A value is written bare when its text is an `INT_LITERAL`, an optional
-/// minus sign and at least one digit, and reading that text back gives the
-/// same datatype.
+/// A value is written bare when its datatype is `xsd:int`, its text is an
+/// `INT_LITERAL` (an optional minus sign and at least one digit) and reading
+/// that text back gives `xsd:int`. Every other integer is quoted with its
+/// datatype, which every reader accepts, where a bare value above the
+/// 32-bit range is typed by range here and in `ProvPy` and refused by
+/// `ProvToolbox`.
 fn bare_int(lexical: &str, datatype: &QName) -> bool {
-    is_int_literal(lexical) && integer_datatype(lexical) == datatype
+    *datatype == *XSD_INT && is_int_literal(lexical) && integer_datatype(lexical) == datatype
 }
 
 fn value(v: &Value, names: &mut WriteScope<'_>) -> Result<String> {

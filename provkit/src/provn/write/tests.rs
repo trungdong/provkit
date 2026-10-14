@@ -168,16 +168,17 @@ fn values_follow_the_grammar() {
 }
 
 #[test]
-fn an_integer_is_bare_only_when_it_reads_back_the_same() {
+fn an_integer_is_bare_only_as_an_xsd_int() {
+    // Only an xsd:int is bare. Every reader types a bare integer as xsd:int at least, and one reads nothing else.
     let cases = [
         ("5", &XSD_INT, true),
         ("-2147483648", &XSD_INT, true),
         ("2147483648", &XSD_INT, false),
-        ("3000000000", &XSD_LONG, true),
+        ("3000000000", &XSD_LONG, false),
         ("5", &XSD_LONG, false),
-        ("-2147483649", &XSD_LONG, true),
+        ("-2147483649", &XSD_LONG, false),
         ("9223372036854775808", &XSD_LONG, false),
-        ("99999999999999999999", &XSD_INTEGER, true),
+        ("99999999999999999999", &XSD_INTEGER, false),
         ("5", &XSD_INTEGER, false),
         ("3000000000", &XSD_INTEGER, false),
     ];
