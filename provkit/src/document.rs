@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{Namespaces, QName, Record};
 
+// ANCHOR: document
 /// A named bundle of records. Bundles do not nest.
 ///
 /// Equality ignores the namespace table, record order and duplicate records.
@@ -38,6 +39,7 @@ pub struct Document {
     /// Named bundles, in assertion order.
     pub bundles: Vec<Bundle>,
 }
+// ANCHOR_END: document
 
 impl Document {
     /// An empty document.
@@ -55,6 +57,7 @@ impl Document {
         self.bundles.iter().find(|b| b.id == *id)
     }
 
+    // ANCHOR: merged_bundles
     /// The bundles as document equality and the writers read them: bundles
     /// sharing an identifier become one.
     ///
@@ -84,6 +87,7 @@ impl Document {
         }
         Cow::Owned(merged)
     }
+    // ANCHOR_END: merged_bundles
 
     /// Top-level records carrying `id`, in assertion order. The iterator
     /// borrows the document alone, so the key may be a temporary:
@@ -113,6 +117,7 @@ impl Document {
     }
 }
 
+// ANCHOR: document_eq
 /// Compares as sets, so order and duplicates do not matter.
 fn same_records(a: &[Record], b: &[Record]) -> bool {
     let a: HashSet<&Record> = a.iter().collect();
@@ -146,6 +151,7 @@ impl PartialEq for Document {
 }
 
 impl Eq for Document {}
+// ANCHOR_END: document_eq
 
 #[cfg(test)]
 mod tests {

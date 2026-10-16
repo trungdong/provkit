@@ -21,6 +21,7 @@ use crate::{
     Result, UnificationCause,
 };
 
+// ANCHOR: unified
 impl Document {
     /// A copy of the document in which records sharing an identifier and a
     /// kind are merged.
@@ -85,6 +86,7 @@ impl Document {
         })
     }
 }
+// ANCHOR_END: unified
 
 fn unify_records(records: &[Record]) -> Result<Vec<Record>> {
     // A hand-built record can carry an attribute named after one of its own
@@ -229,6 +231,7 @@ fn check_kinds(id: &QName, kinds: impl Iterator<Item = Kind>) -> Result<()> {
     Ok(())
 }
 
+// ANCHOR: merge
 /// Merge records of one kind and identifier.
 fn merge(kind: Kind, id: &QName, members: &[&Record]) -> Result<Record> {
     let mut formals: Vec<(FormalAttr, Formal)> = Vec::new();
@@ -278,6 +281,7 @@ fn merge(kind: Kind, id: &QName, members: &[&Record]) -> Result<Record> {
     }
     Record::from_parts(kind, Some(id.clone()), formals, attributes)
 }
+// ANCHOR_END: merge
 
 #[cfg(test)]
 mod tests;

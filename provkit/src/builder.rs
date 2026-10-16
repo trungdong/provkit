@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use crate::{Bundle, Document, Error, Namespaces, QName, Record, Result};
 
+// ANCHOR: builder
 /// Where the builder is in the event sequence. `InBundle` holds the open
 /// bundle.
 #[derive(Debug)]
@@ -28,6 +29,7 @@ pub(crate) struct DocumentBuilder {
     bundle_ids: HashSet<QName>,
     state: State,
 }
+// ANCHOR_END: builder
 
 impl DocumentBuilder {
     /// A builder waiting for `start_document`.
@@ -64,6 +66,7 @@ impl DocumentBuilder {
         }
     }
 
+    // ANCHOR: start_bundle
     /// A bundle begins.
     ///
     /// # Errors
@@ -84,6 +87,7 @@ impl DocumentBuilder {
         });
         Ok(())
     }
+    // ANCHOR_END: start_bundle
 
     /// The open bundle ends.
     pub(crate) fn end_bundle(&mut self) {
