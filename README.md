@@ -112,7 +112,7 @@ expressions left out. API documentation: `cargo doc --open -p provkit`.
 
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 lists where provkit departs from the PROV Recommendations, where it differs
-from ProvPy 3.2.2 (with the ProvPy issue number) and from ProvToolbox 2.0.4,
+from ProvPy 3.2.2 (with the ProvPy issue number) and from ProvToolbox 2.2.5,
 and its implementation limits, each with its reason and test.
 [CHANGELOG.md](https://github.com/trungdong/provkit/blob/main/CHANGELOG.md)
 lists the releases.

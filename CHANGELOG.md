@@ -16,7 +16,7 @@ The first release.
   once. The API reference is on [docs.rs](https://docs.rs/provkit/0.1.0);
   [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
   lists where the library departs from the Recommendations, where it differs
-  from ProvPy 3.2.2 and ProvToolbox 2.0.4, and its implementation limits,
+  from ProvPy 3.2.2 and ProvToolbox 2.2.5, and its implementation limits,
   each with its reason and test.
 - `provkit-cli`, the `provkit` command: `convert` between the two formats and
   `compare` two documents, with prebuilt binaries for macOS, Linux and
