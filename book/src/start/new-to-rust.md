@@ -4,7 +4,7 @@ Read the stops in order. Each Rust idiom is named the first time it
 appears, with a link to the Rust book, the reference, the standard
 library or the crate that documents it. The table lists the idioms in
 that order, so you can see what each stop asks of you before you start
-it. Three chapters of the Rust book carry most of the weight, which are
+it. Three chapters of the Rust book cover most of what the stops ask:
 ownership (chapter 4), enums and pattern matching (chapter 6), and
 traits, generics and lifetimes (chapter 10). The generated
 [idiom index](../reference/idioms.md) lists every idiom any commit

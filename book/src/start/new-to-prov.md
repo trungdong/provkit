@@ -47,8 +47,9 @@ A value is a literal, written with an XSD datatype or a language tag
 ([PROV-DM section 5.7.3](https://www.w3.org/TR/2013/REC-prov-dm-20130430/#term-value),
 [PROV-N section 3.7.3](https://www.w3.org/TR/2013/REC-prov-n-20130430/#expression-literal)).
 Equality depends on the datatype. Two `xsd:int` literals `"01"` and `"1"`
-are the same number, and two `dateTime` values are the same instant
-however they are spelled, but the same text under two different
+are the same number. Two `dateTime` values with time zones are equal
+when they name one instant, however each is spelt, and a value with a
+zone never equals one without. The same text under two different
 datatypes is not equal. [Stop 2](../stops/2-values.md) shows the rules.
 
 ## Formal attributes are positions and other attributes are pairs
@@ -82,4 +83,4 @@ tables, blank-node labels and the spelling of a number, boolean or
 and kind, and returns an error when their formal attributes conflict.
 The rules come from [PROV-CONSTRAINTS section 2.4, Unification and Merging](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/#unification-and-merging).
 The crate documentation in `provkit/src/lib.rs` summarises both, and
-[Stop 3](../stops/3-records.md) reads the code.
+[Stop 3](../stops/3-records.md) shows the code.
