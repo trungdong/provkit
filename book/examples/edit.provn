@@ -1,0 +1,8 @@
+document
+  prefix ex <http://example.org/>
+  entity(ex:draft)
+  entity(ex:report, [prov:label="Report"])
+  activity(ex:edit, 2026-10-16T09:00:00, 2026-10-16T10:00:00)
+  used(ex:edit, ex:draft, -)
+  wasGeneratedBy(ex:report, ex:edit, -)
+endDocument

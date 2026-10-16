@@ -1,0 +1,29 @@
+{
+  "prefix": {
+    "ex": "http://example.org/"
+  },
+  "entity": {
+    "ex:draft": {},
+    "ex:report": {
+      "prov:label": "Report"
+    }
+  },
+  "activity": {
+    "ex:edit": {
+      "prov:startTime": "2026-10-16T09:00:00",
+      "prov:endTime": "2026-10-16T10:00:00"
+    }
+  },
+  "wasGeneratedBy": {
+    "_:id2": {
+      "prov:entity": "ex:report",
+      "prov:activity": "ex:edit"
+    }
+  },
+  "used": {
+    "_:id1": {
+      "prov:activity": "ex:edit",
+      "prov:entity": "ex:draft"
+    }
+  }
+}
