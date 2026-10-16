@@ -120,12 +120,15 @@ def title_of(link):
     """A heading for a link: its fragment, else its last path component."""
     tail = link.split("#", 1)[1] if "#" in link else link.rstrip("/").rsplit("/", 1)[-1]
     tail = re.sub(r"\.html$", "", tail)
+    tail = re.sub(r"^ch\d+-\d+-", "", tail)
     return " ".join(part for part in re.split(r"[-_]+", tail) if part) or link
 
 
 def text_of(bullet, link):
     """The bullet without its first link and the connective left dangling."""
-    text = bullet.replace(link, "", 1) if link else bullet
+    text = bullet
+    if link:
+        text = text.replace(f"<{link}>", "", 1) if f"<{link}>" in text else text.replace(link, "", 1)
     text = re.sub(r"\s+", " ", text)
     text = re.sub(r"\b[Ss]ee ?\.", "", text)
     text = re.sub(r"\b([Ss]ee) and ", r"\1 ", text)
@@ -134,18 +137,27 @@ def text_of(bullet, link):
 
 
 CODE = re.compile(r"`[^`]*`")
+AUTOLINK = re.compile(r"<(https?://[^\s<>]+)>")
 
 
 def markdown(text):
     """Escape angle brackets outside code spans and mark bare links as links."""
 
-    def plain(segment):
+    def bare(segment):
         segment = segment.replace("<", "&lt;").replace(">", "&gt;")
         return LINK.sub(
             lambda m: f"<{m.group(0).rstrip('.,;:')}>"
             + m.group(0)[len(m.group(0).rstrip(".,;:")) :],
             segment,
         )
+
+    def plain(segment):
+        out, pos = [], 0
+        for match in AUTOLINK.finditer(segment):
+            out += [bare(segment[pos : match.start()]), match.group(0)]
+            pos = match.end()
+        out.append(bare(segment[pos:]))
+        return "".join(out)
 
     out, pos = [], 0
     for match in CODE.finditer(text):
@@ -226,6 +238,11 @@ SELF_TEST_LOG = (
     "  https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters.\n"
     "  A call that writes x.into() is E0283. See\n"
     f"  https://doc.rust-lang.org/error_codes/E0283.html.\n{FS}\n\nsrc/g.rs\n"
+    f"{RS}baaaaaaa{FS}Angle links{FS}Rust notes:\n"
+    "- `Option::take` leaves `None` behind, see\n"
+    "  <https://doc.rust-lang.org/std/option/enum.Option.html#method.take>\n"
+    "  and <https://doc.rust-lang.org/std/mem/fn.take.html>.\n"
+    f"{FS}\n\nsrc/h.rs\n"
 )
 
 
@@ -234,7 +251,7 @@ def self_test():
     by_sha = defaultdict(list)
     for item in items:
         by_sha[item["sha"]].append(item)
-    assert sorted(by_sha) == ["1aaaaaaa", "3aaaaaaa", "5aaaaaaa", "6aaaaaaa", "9aaaaaaa"], items
+    assert sorted(by_sha) == ["1aaaaaaa", "3aaaaaaa", "5aaaaaaa", "6aaaaaaa", "9aaaaaaa", "baaaaaaa"], items
     first = by_sha["1aaaaaaa"]
     assert first[0]["source"] == "The standard library"
     assert first[0]["link"] == "https://doc.rust-lang.org/std/macro.matches.html"
@@ -255,6 +272,13 @@ def self_test():
         "`impl Trait` in argument position is a generic. A call that writes"
         " x.into() is E0283. See https://doc.rust-lang.org/error_codes/E0283.html."
     )
+    (angled,) = by_sha["baaaaaaa"]
+    assert angled["link"].endswith("#method.take")
+    assert angled["text"] == (
+        "`Option::take` leaves `None` behind, see"
+        " <https://doc.rust-lang.org/std/mem/fn.take.html>."
+    )
+    assert title_of("https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html") == "what is ownership"
     assert title_of("https://doc.rust-lang.org/book/ch19-03-pattern-syntax.html#-bindings") == "bindings"
     assert (
         title_of(
@@ -268,6 +292,7 @@ def self_test():
     assert "### traits as parameters" in page
     assert "- Arc&lt;str&gt; shares one allocation; `Vec<u8>` does not." in page
     assert "See <https://doc.rust-lang.org/error_codes/E0283.html>." in page
+    assert "see <https://doc.rust-lang.org/std/mem/fn.take.html>." in page
     assert "Follow-up" not in page
     assert "1aaaaaa" in page and "2aaaaaa" not in page
     assert "7aaaaaa" not in page and "8aaaaaa" not in page
@@ -275,7 +300,7 @@ def self_test():
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description="Build the Rust idiom index from the Rust notes trailers in the git log.")
     parser.add_argument("--repo", default=".", help="repository root")
     parser.add_argument(
         "--out", default="book/src/reference/idioms.md", help="page to write"
