@@ -3,12 +3,13 @@
 The tests live in three places. Unit tests sit beside each module and
 reach private items. The corpus tests under `provkit/tests` run every
 file of a corpus shared with ProvPy, and every excluded file and known
-difference is listed in a data file with a reason. The end-to-end tests under
-`provkit-cli/tests` run the built binary. The repository's `CLAUDE.md`
-states the layout in two sentences, unit tests in `tests.rs` beside
-each module and corpus tests in `provkit/tests` with every excluded
-file and known difference listed in `provkit/tests/data/*.tsv` with a
-reason. This stop reads the helpers the unit tests share, the report
+difference is listed in a data file with a reason. The end-to-end
+tests under `provkit-cli/tests` run the built binary. The repository's
+`CLAUDE.md` states the layout in two sentences, unit tests beside each
+module in a sibling `tests.rs` or an inline `mod tests`, and corpus
+tests in `provkit/tests` with every excluded file and known difference
+listed in `provkit/tests/data/*.tsv` with a reason. This stop reads
+the helpers the unit tests share, the report
 that collects failures across a corpus, the test that reads every
 PROV-JSON file, the test that checks every probe against its row, the
 three data files, the binary's tests and the manifest lines that
@@ -154,8 +155,9 @@ same name, `provn/probes/` holds the probes and `expected.tsv`, and
 {{#include ../../../provkit/tests/corpus_json.rs:reads_all}}
 ```
 
-`reads_all_398` is the shape of every corpus test. It lists the files of `corpus/json`, counts each, reads it
-through `read_json`, and hands the report `JSON_CORPUS_SIZE`, which is
+`reads_all_398` is the shape of every corpus test. It lists the files
+of `corpus/json`, counts each, reads it through `read_json`, and hands
+the report `JSON_CORPUS_SIZE`, which is
 the number its name carries. `round_trips_all_398` below it reads
 each file and then calls `round_trip` with the two PROV-JSON
 functions. `unification_over_the_corpus` calls
@@ -168,8 +170,9 @@ the same result and that unification never adds a record. The
 constraints test does the same over `corpus/constraints`, with one
 constant list of the files whose failing formal is present on one
 side only and another pairing each other failing file with its cause.
-The last test in the file reads the first Rust block of both READMEs with `include_str!` and
-asserts they are the same text, and its comment says it lives in this
+The last test in the file reads the first Rust block of both READMEs
+with `include_str!` and asserts they are the same text, and its
+comment says it lives in this
 file because the root README is not in the packaged crate. The other
 corpus files follow the same shape. `corpus_provn.rs` reads the
 Recommendation examples under `Profile::Strict` and ProvToolbox's
@@ -266,13 +269,14 @@ arguments and call `assert()`, which runs the command and returns an
 crate, such as `predicate::str::starts_with("document\n")` or
 `contains(..)` joined with `.and(..)`. The path arguments are
 `impl AsRef<OsStr>`, so a test passes a `&str`, a `PathBuf` or a
-reference to one alike. `scratch` makes a fresh directory named after the test
-under `CARGO_TARGET_TMPDIR`, the directory Cargo gives integration
-tests for files, and `write` puts a document in it. `close_stdout_early`
-uses `std::process::Command` with `env!("CARGO_BIN_EXE_provkit")`
-instead, because it closes the child's standard output after eight
-bytes, as its doc says, and then reads standard error and the exit
-code. Several tests pin the help text, among them `help_states_the_precedence_rule` for the order
+reference to one alike. `scratch` makes a fresh directory named after
+the test under `CARGO_TARGET_TMPDIR`, the directory Cargo gives
+integration tests for files, and `write` puts a document in it.
+`close_stdout_early` uses `std::process::Command` with
+`env!("CARGO_BIN_EXE_provkit")` instead, because it closes the child's
+standard output after eight bytes, as its doc says, and then reads
+standard error and the exit code. Several tests pin the help text,
+among them `help_states_the_precedence_rule` for the order
 in which `-f`, `-t` and the extension decide a format and
 `compare_help_names_the_exit_codes` for the three codes stop 6
 described. The rest exercise one behaviour each, the sniffer on
@@ -367,12 +371,13 @@ ships still builds and passes. The comment on the `exclude` line in
 
 ## The Rust here
 
-- **`#[test]`, `assert!` and `assert_eq!`**, first used in
+- **`#[test]` and `assert!` in test code**, first used in
   `provkit/tests/corpus_json.rs` at `reads_all_398`. `#[test]` marks a
   function the test harness runs; `assert!` panics when its condition
   is false and `assert_eq!` when its two sides differ, and both take
   a format message after the operands, as `Report::finish` and
-  `round_trip` in `test_util` do.
+  `round_trip` in `test_util` do, where the doctests of earlier stops
+  called them without one.
   [How to write tests](https://doc.rust-lang.org/book/ch11-01-writing-tests.html)
 - **`env!`**, first used in `provkit/tests/common/mod.rs` at
   `data_path`. It reads an environment variable at compile time and
@@ -504,7 +509,7 @@ the other way, with "twins now read as equal".
 
 ## Idioms first seen here
 
-- `#[test], assert! and assert_eq!`: https://doc.rust-lang.org/book/ch11-01-writing-tests.html
+- `#[test] and assert! in test code`: https://doc.rust-lang.org/book/ch11-01-writing-tests.html
 - `env!`: https://doc.rust-lang.org/std/macro.env.html
 - `impl FnOnce arguments`: https://doc.rust-lang.org/book/ch13-01-closures.html#moving-captured-values-out-of-closures-and-the-fn-traits
 - `a test double implementing std::io::Write`: https://doc.rust-lang.org/std/io/trait.Write.html

@@ -112,7 +112,7 @@ PROV use differently.
 | `HashSet::insert inside a filter` | [Stop 6](../stops/6-cli.md) | [std](https://doc.rust-lang.org/std/collections/struct.HashSet.html#method.insert) |
 | `a lifetime parameter on a function` | [Stop 6](../stops/6-cli.md) | [Rust book](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-annotations-in-function-signatures) |
 | `clone, try, assign back` | [Stop 6](../stops/6-cli.md) | [std](https://doc.rust-lang.org/std/clone/trait.Clone.html) |
-| `#[test], assert! and assert_eq!` | [Stop 7](../stops/7-tests.md) | [Rust book](https://doc.rust-lang.org/book/ch11-01-writing-tests.html) |
+| `#[test] and assert! in test code` | [Stop 7](../stops/7-tests.md) | [Rust book](https://doc.rust-lang.org/book/ch11-01-writing-tests.html) |
 | `env!` | [Stop 7](../stops/7-tests.md) | [std](https://doc.rust-lang.org/std/macro.env.html) |
 | `impl FnOnce arguments` | [Stop 7](../stops/7-tests.md) | [Rust book](https://doc.rust-lang.org/book/ch13-01-closures.html#moving-captured-values-out-of-closures-and-the-fn-traits) |
 | `a test double implementing std::io::Write` | [Stop 7](../stops/7-tests.md) | [std](https://doc.rust-lang.org/std/io/trait.Write.html) |
