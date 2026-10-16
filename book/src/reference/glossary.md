@@ -162,7 +162,7 @@ Code that writes code. Declarative macros (`macro_rules!`) match patterns, and p
 
 ### mention (PROV)
 
-The relation `prov:mentionOf`, which says one entity is a view of another entity inside a named bundle. The [PROV-Links note](https://www.w3.org/TR/2013/NOTE-prov-links-20130430/) defines it, and it parses as an extensibility expression in PROV-N.
+The relation `prov:mentionOf`, which says one entity is a view of another entity inside a named bundle. [PROV-Links section 2](https://www.w3.org/TR/2013/NOTE-prov-links-20130430/#term-mention) defines it, and it parses as an extensibility expression in PROV-N.
 
 ### module (Rust)
 
