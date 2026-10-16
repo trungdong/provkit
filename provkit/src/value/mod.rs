@@ -134,6 +134,7 @@ impl Hash for TypedLiteral {
     }
 }
 
+// ANCHOR: value
 /// The value of a non-formal attribute.
 ///
 /// Values compare and hash by what they denote. Under one datatype, two
@@ -169,6 +170,7 @@ pub enum Value {
     /// Any other typed literal, kept as written. See [`TypedLiteral`].
     Typed(TypedLiteral),
 }
+// ANCHOR_END: value
 
 /// The XSD integer datatypes with their inclusive bounds as decimal digits.
 /// `None` is unbounded on that side. Their literals compare by integer value.
@@ -307,6 +309,7 @@ pub(crate) fn is_qname_datatype(datatype: &QName) -> bool {
     *datatype == *XSD_QNAME || *datatype == *PROV_QUALIFIED_NAME
 }
 
+// ANCHOR: value_equality
 // Written out, not derived, because a derived `PartialEq` would also let
 // other crates match a `const Value` as a pattern. `Hash` is written out to
 // agree with it.
@@ -355,6 +358,7 @@ enum Key<'a> {
     /// lexical form.
     Text(&'a str),
 }
+// ANCHOR_END: value_equality
 
 impl<'a> Key<'a> {
     /// The key of `lexical` under `datatype`. XSD trims the space, tab, CR
@@ -485,6 +489,7 @@ fn is_float_number(text: &str) -> bool {
         && exponent.is_none_or(|digits| !digits.is_empty() && all_digits(digits))
 }
 
+// ANCHOR: value_from
 macro_rules! from_native {
     ($($t:ty => $dt:ident),* $(,)?) => {
         $(
@@ -528,6 +533,7 @@ macro_rules! from_float {
 
 from_native! { i32 => XSD_INT, i64 => XSD_LONG, bool => XSD_BOOLEAN }
 from_float! { f32 => XSD_FLOAT, f64 => XSD_DOUBLE }
+// ANCHOR_END: value_from
 
 impl From<&str> for Value {
     fn from(s: &str) -> Self {

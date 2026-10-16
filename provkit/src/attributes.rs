@@ -7,6 +7,7 @@ use indexmap::{Equivalent, IndexSet};
 
 use crate::{QName, Value};
 
+// ANCHOR: attributes
 /// An ordered set of (name, value) pairs.
 ///
 /// Insertion order is kept for output. A pair already present is not added
@@ -19,6 +20,7 @@ use crate::{QName, Value};
 pub struct Attributes {
     pairs: Arc<IndexSet<(QName, Value)>>,
 }
+// ANCHOR_END: attributes
 
 impl Attributes {
     /// An empty set.
@@ -27,6 +29,7 @@ impl Attributes {
         Self::default()
     }
 
+    // ANCHOR: attributes_insert
     /// Add a pair. Returns `false` if it was already present. The value is
     /// anything that converts into a [`Value`]: a string, a native number
     /// or boolean, a [`QName`], a [`DateTime`](crate::DateTime).
@@ -46,6 +49,7 @@ impl Attributes {
     pub fn insert(&mut self, name: QName, value: impl Into<Value>) -> bool {
         Arc::make_mut(&mut self.pairs).insert((name, value.into()))
     }
+    // ANCHOR_END: attributes_insert
 
     /// Remove a pair, keeping the order of the rest. Returns `false` if it
     /// was not present.
@@ -234,6 +238,7 @@ impl Eq for Attributes {}
 /// two pairs found against fixed keys does not carry over.
 static PAIR_HASHER: LazyLock<RandomState> = LazyLock::new(RandomState::new);
 
+// ANCHOR: attributes_hash
 impl Hash for Attributes {
     // Order-independent: per-pair hashes are sorted before they reach the
     // outer hasher.
@@ -250,6 +255,7 @@ impl Hash for Attributes {
         }
     }
 }
+// ANCHOR_END: attributes_hash
 
 #[cfg(test)]
 mod tests {
