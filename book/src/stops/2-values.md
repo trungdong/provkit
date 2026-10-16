@@ -27,7 +27,7 @@ show that both doors are shut. Then comes the enum.
 {{#include ../../../provkit/src/value/mod.rs:value}}
 ```
 
-The book shows this span and the seven that follow as they stand in the
+The book shows this span and those that follow as they stand in the
 files, and compiles none of them. A
 [`Value`](../api/provkit/enum.Value.html) is one of five variants, and
 each carries its payload. `Str` is an `xsd:string`, `LangStr` and
@@ -157,9 +157,10 @@ give one key, and pairs that with the nanoseconds. Working in `i128`
 means no year `parse` accepts can overflow. `eq` asks whether both are
 zoned or both unzoned and then compares keys, `Hash` feeds the same two
 facts, and `partial_cmp` returns `None` when one is zoned and the other
-not, and the key order otherwise. There is no `Ord`. Hour 24 needs no
-special case here, because a day's seconds plus 24 hours is the next
-day's midnight.
+not, and the key order otherwise. There is no `Ord`. The fourth card
+below sets that rule beside XSD's, which orders some zoned and unzoned
+pairs. Hour 24 needs no special case here, because a day's seconds
+plus 24 hours is the next day's midnight.
 
 ### provkit/src/attributes.rs
 
@@ -189,11 +190,12 @@ and leaves the other owner on the old one. `remove` checks `contains`
 before it reaches for `make_mut`, so removing an absent pair leaves
 the sharing in place, and `Extend` peeks at its iterator for the same
 reason. `extend_from` into an empty set does the reverse and clones the
-`Arc` itself. Below `insert` sit `PairKey`, a borrowed pair that
-`indexmap`'s `Equivalent` trait lets look up an owned pair without
-cloning it, the `Iter` and `IntoIter` wrappers around `indexmap`'s
-iterators, and the `IntoIterator`, `FromIterator` and `Extend` impls
-that let `for`, `collect` and `extend` work on the type.
+`Arc` itself. After the `impl Attributes` block come three groups of
+items. `PairKey` is a borrowed pair, and `indexmap`'s `Equivalent`
+trait lets `remove` look up the owned pair through it without cloning
+either half. `Iter` and `IntoIter` wrap `indexmap`'s iterators. The
+`IntoIterator`, `FromIterator` and `Extend` impls let `for`, `collect`
+and `extend` work on the type.
 
 ```rust,ignore
 {{#include ../../../provkit/src/attributes.rs:attributes_hash}}
