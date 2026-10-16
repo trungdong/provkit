@@ -186,7 +186,7 @@ document's as fallback for a bundle, and `declare_minted` prints a
 after the records of that scope. `statement_line` tries
 [`provn::statement`](../api/provkit/provn/fn.statement.html) against a
 clone of the table and assigns the clone back on success, so a
-prefix minted for a line that fails is not kept. When the failure is
+prefix minted by the failed attempt is discarded. When the failure is
 [`Error::Unwritable`](../api/provkit/enum.Error.html#variant.Unwritable)
 it builds the heading the limit row below describes, the keyword, the
 identifier and the offending name as `<IRI>`, ending in `// not valid
@@ -210,19 +210,20 @@ three codes against ProvToolbox's 6 for a difference and 1 for a read
 failure, and leaves its Note column empty. The commit "Add
 provkit compare" says that `Result<ExitCode>` lets one function
 report success, a difference and an error apart, which is the shape
-of `run`, and the limit row quoted two cards below gives the reason
-for keeping 1 and 2 apart, that a difference is still a difference
-and not a failure. No tracked source says why these three values
-were chosen.
+of `run`. For a record PROV-N cannot write, the limit row quoted two
+cards below says a difference in such a record is still a difference
+and not a failure with exit code 2. No tracked source says why these
+three values were chosen.
 
 ### Why `anyhow` in the binary and `thiserror` in the library?
 
 The library's [`Error`](../api/provkit/enum.Error.html) is an enum
 derived with `thiserror`, as stop 3 showed, and its doc example
 matches a variant by name with `..` for the fields it does not need.
-`located` does the same with three variants, because the binary wants
-the line and column out of a `Syntax` or `At` and the position out of
-a `Json`, and passes every other variant through. Past that one
+`located` destructures `Syntax` and `At` the same way, because the
+binary wants their line and column, binds the `JsonError` inside
+`Json` whole and asks it for its position, and passes every other
+variant through. Past that one
 function the binary never gives an error to a caller, because `main`
 prints it and exits, so the error only has to display well.
 `anyhow::Error` holds any error with a chain of contexts,
@@ -244,10 +245,10 @@ beginning "`provkit compare` prints a one-sided record or bundle that
 PROV-N cannot write" says such a record, one whose namespace IRI
 holds a character `IRI_REF` forbids, is printed as a heading made of
 the keyword, the identifier and the first unwritable name as
-`<full IRI>`, ending in `// not valid PROV-N`, with a name that
-belongs to an attribute inside `[...]`, that a bundle heading reads
-`bundle <IRI>: // not valid PROV-N`, and that the exit code stays 1.
-The reason it gives is that PROV-JSON can hold such an IRI, and a
+`<full IRI>`, ending in `// not valid PROV-N`. A name that belongs to
+an attribute is printed inside `[...]`, and a bundle heading reads
+`bundle <IRI>: // not valid PROV-N`. The exit code stays 1. The
+reason the row gives is that PROV-JSON can hold such an IRI, and a
 difference in such a record is still a difference and not a failure
 with exit code 2. The row also says `provn::statement` still returns
 the error, so the library's contract from stop 5 is unchanged and the
