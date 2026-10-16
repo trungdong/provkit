@@ -1,0 +1,17 @@
+[book]
+title = "provkit, read in order"
+authors = ["Trung Dong Huynh"]
+language = "en"
+src = "src"
+
+[rust]
+edition = "2024"
+
+[output.html]
+git-repository-url = "https://github.com/trungdong/provkit"
+
+[output.html.playground]
+runnable = false
+
+[output.html.search]
+enable = true
