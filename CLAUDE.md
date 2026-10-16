@@ -35,9 +35,10 @@ and compares documents. `corpus/` is a git submodule shared with ProvPy.
   touches a file. The CLI owns files, format detection and exit codes.
 - Features `json` and `provn` are both on by default, and the library
   must build and test with either one alone.
-- Unit tests sit in `tests.rs` beside each module. Corpus tests live in
-  `provkit/tests`, with every excluded file and known difference listed
-  in `provkit/tests/data/*.tsv` with a reason.
+- Unit tests sit beside each module, in a sibling `tests.rs` or an
+  inline `mod tests`. Corpus tests live in `provkit/tests`, with every
+  excluded file and known difference listed in `provkit/tests/data/*.tsv`
+  with a reason.
 - `corpus/` is read-only here. A corpus change goes to trungdong/prov-corpus
   and arrives as a submodule bump.
 
