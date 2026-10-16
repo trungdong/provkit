@@ -91,20 +91,20 @@ with no arguments, so the file above is its whole configuration.
 {{#include ../../../_typos.toml}}
 ```
 
-`typos` reads every file in the repository and compares each word with
-its list of common misspellings. The `[files]` table excludes the
-corpus, and its comment says why. The submodule is shared with ProvPy,
-and its text is not this repository's to spell. Each entry under
-`[default.extend-words]` maps a word to itself, which tells `typos`
-that the spelling is intended, and each carries a comment saying where
-the word occurs and why it is right. The British spellings are the
-first group. The others are an identifier from the PROV-N name grammar
-and the strings the tests need, a value an ill-formed `xsd:int`
-keeps, a fragment of an escaped word in the lexer tests and a
-misspelt keyword that a test expects to be a syntax error. The commit "Ship a testable crate
-and make the typos job pass" says the `typos` job failed on the first
-push on these words and on the corpus, and that the file lists each
-word with its reason.
+`typos` reads every file in the repository that is not ignored and
+compares each word with its list of common misspellings. The `[files]`
+table excludes the corpus, and its comment says why. The submodule is
+shared with ProvPy, and its text is not this repository's to spell.
+Each entry under `[default.extend-words]` maps a word to itself, which
+tells `typos` that the spelling is intended, and a comment above each
+group says where the words occur and why they are right. The British
+spellings are the first group. The others are an identifier from the
+PROV-N name grammar and the strings the tests need, a value an
+ill-formed `xsd:int` keeps, a fragment of an escaped word in the lexer
+tests and a misspelt keyword that a test expects to be a syntax error.
+The commit "Ship a testable crate and make the typos job pass" says
+the `typos` job failed on the first push on these words and on the
+corpus, and that the file lists each word with its reason.
 
 ### about.toml and about.hbs
 
@@ -249,8 +249,7 @@ pinned by commit in the commit "Fix the published manifests and pin
 the workflows", which lists "every action pinned to a commit SHA" and
 "typos pinned to a release" among its changes, and the two actions the
 release commit adds are pinned the same way. Neither commit states a
-reason. A commit pin names one revision of the action, where a tag
-such as `v7.0.1` can be moved by the action's maintainers, and the
+reason. A commit pin names one revision of the action, and the
 trailing comment keeps the tag readable beside the hash.
 
 ### Why test the feature subsets?
@@ -282,15 +281,15 @@ nothing to exclude. The step has been in the workflow since the
 commit "Scaffold the workspace, CI and the corpus submodule", which
 states no reason for it. What the step does is compile the library
 and every dependency its default features pull in for a target with
-no operating system beneath it, so a dependency that needs one does
-not compile there. The target is installed in the
-toolchain step with `targets: wasm32-unknown-unknown`, and the README
-section on tests says this is one of the checks that run in CI only and
-how to add the target locally.
+no operating system beneath it, so a dependency that needs one may
+not compile there. The target is installed in the toolchain step with
+`targets: wasm32-unknown-unknown`, and the README section on tests
+says this is one of the checks that run in CI only and how to add the
+target locally.
 
 ### Why `cargo deny` and `cargo about` both?
 
-The two tools read the same dependency graph for two moments.
+The two tools check the dependencies at two moments.
 `cargo deny check` runs on every push to `main` and every pull
 request, and fails on a crate whose licence is outside `allow`, so a
 dependency under another licence fails CI. `cargo about` runs in each
@@ -399,10 +398,10 @@ wasm32-unknown-unknown` also passes once
 
 `_typos.toml` accepts a misspelt PROV-N keyword that one test needs.
 Write a file under `/tmp` containing that keyword and run `typos` on
-it from `/tmp` with no configuration beside it. Then copy
-`_typos.toml` into the file's directory and run the same command again.
-Which line accepts the word, and why does the second run read the
-copy?
+it with no configuration beside it. Then copy `_typos.toml` into the
+file's directory and run the same command again. The commands below
+run from the repository root, where `_typos.toml` is. Which line
+accepts the word, and why does the second run read the copy?
 
 ```sh
 mkdir -p /tmp/typos-try
