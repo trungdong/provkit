@@ -21,17 +21,22 @@ attestations fail in a private repository on a free personal account.
    packaged build of the same version, and the verify step then fails on stale
    code.
 3. Commit, and fast-forward `main` to the release commit.
-4. Tag with `git tag -a v<version> -m "provkit <version>"`. Push `main` and
+4. Set the Pages source of the repository to "GitHub Actions" (Settings,
+   Pages, Build and deployment). Do this once, after the repository is public
+   and before the first push to `main`. `pages.yml` deploys with
+   `actions/deploy-pages`, which fails otherwise, and the README and
+   CHANGELOG link the site.
+5. Tag with `git tag -a v<version> -m "provkit <version>"`. Push `main` and
    the tag.
-5. Wait for `release.yml` to finish. It checks the tag, creates the GitHub
+6. Wait for `release.yml` to finish. It checks the tag, creates the GitHub
    release with the changelog entry as its body, and builds six archives:
    `provkit-<target>.tar.gz`, or `.zip` on Windows. Each archive holds
    `THIRD-PARTY.md`. Each has a digest file named `provkit-<target>.sha256`,
    and the attestation step in its matrix job covers the archive.
-6. Run `cargo publish -p provkit`. Wait until `cargo info provkit` shows the
+7. Run `cargo publish -p provkit`. Wait until `cargo info provkit` shows the
    version.
-7. Run `cargo publish -p provkit-cli`.
-8. On one machine, run `cargo install --locked provkit-cli` and
+8. Run `cargo publish -p provkit-cli`.
+9. On one machine, run `cargo install --locked provkit-cli` and
    `cargo binstall provkit-cli`. Run `provkit --version` after each.
 
 ## If `release.yml` fails after the tag
