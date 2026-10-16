@@ -120,7 +120,39 @@ def title_of(link):
     """A heading for a link: its fragment, else its last path component."""
     tail = link.split("#", 1)[1] if "#" in link else link.rstrip("/").rsplit("/", 1)[-1]
     tail = re.sub(r"\.html$", "", tail)
-    return tail.replace("-", " ").replace("_", " ") or link
+    return " ".join(part for part in re.split(r"[-_]+", tail) if part) or link
+
+
+def text_of(bullet, link):
+    """The bullet without its first link and the connective left dangling."""
+    text = bullet.replace(link, "", 1) if link else bullet
+    text = re.sub(r"\s+", " ", text)
+    text = re.sub(r"\b[Ss]ee ?\.", "", text)
+    text = re.sub(r"\b([Ss]ee) and ", r"\1 ", text)
+    text = re.sub(r": and ", " and ", text)
+    return re.sub(r"\s+", " ", text).strip(" :,;")
+
+
+CODE = re.compile(r"`[^`]*`")
+
+
+def markdown(text):
+    """Escape angle brackets outside code spans and mark bare links as links."""
+
+    def plain(segment):
+        segment = segment.replace("<", "&lt;").replace(">", "&gt;")
+        return LINK.sub(
+            lambda m: f"<{m.group(0).rstrip('.,;:')}>"
+            + m.group(0)[len(m.group(0).rstrip(".,;:")) :],
+            segment,
+        )
+
+    out, pos = [], 0
+    for match in CODE.finditer(text):
+        out += [plain(text[pos : match.start()]), match.group(0)]
+        pos = match.end()
+    out.append(plain(text[pos:]))
+    return "".join(out)
 
 
 def entries(log_text):
@@ -128,8 +160,7 @@ def entries(log_text):
     for sha, subject, body, files in parse_log(log_text):
         for bullet in notes(body):
             link = link_of(bullet)
-            text = bullet.replace(link, "").strip() if link else bullet
-            text = text.rstrip(" :,;")
+            text = text_of(bullet, link)
             yield {
                 "source": source_of(link),
                 "link": link,
@@ -166,7 +197,7 @@ def render(items):
                 where = f"{item['subject']} ({item['sha'][:7]})"
                 if files:
                     where += f", in {files}"
-                out += [f"- {item['text']}", f"  {where}"]
+                out += [f"- {markdown(item['text'])}", f"  {where}"]
             out.append("")
     return "\n".join(out).rstrip() + "\n"
 
@@ -183,23 +214,63 @@ SELF_TEST_LOG = (
     f"{RS}3aaaaaaa{FS}Escape it{FS}Rust notes: `\\u{{...}}` escapes write code points, see\n"
     f"https://doc.rust-lang.org/reference/tokens.html#unicode-escapes.\n{FS}\n\nsrc/c.rs\n"
     f"{RS}4aaaaaaa{FS}Reword{FS}Rust notes:\n- This commit changes prose only and introduces no idiom.\n{FS}\n\nREADME.md\n"
+    f"{RS}5aaaaaaa{FS}Share it{FS}Rust notes:\n- Arc<str> shares one allocation; `Vec<u8>` does not.\n"
+    f"  https://doc.rust-lang.org/std/sync/struct.Arc.html\n{FS}\n\nsrc/d.rs\n"
+    f"{RS}6aaaaaaa{FS}Stop at the blank line{FS}Rust notes:\n- `?` returns early.\n"
+    f"  https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html\n\n"
+    f"Follow-up: none.\n{FS}\n\nsrc/e.rs\n"
+    f"{RS}7aaaaaaa{FS}Tidy{FS}Rust notes:\n- None new.\n{FS}\n\nsrc/f.rs\n"
+    f"{RS}8aaaaaaa{FS}Tidy again{FS}Rust notes: none new.\n{FS}\n\nsrc/f.rs\n"
+    f"{RS}9aaaaaaa{FS}Link twice{FS}Rust notes:\n"
+    "- `impl Trait` in argument position is a generic. See\n"
+    "  https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters.\n"
+    "  A call that writes x.into() is E0283. See\n"
+    f"  https://doc.rust-lang.org/error_codes/E0283.html.\n{FS}\n\nsrc/g.rs\n"
 )
 
 
 def self_test():
     items = list(entries(SELF_TEST_LOG))
-    assert len(items) == 3, items
-    assert items[0]["source"] == "The standard library"
-    assert items[0]["link"] == "https://doc.rust-lang.org/std/macro.matches.html"
-    assert items[0]["files"] == ["src/a.rs", "src/b.rs"]
-    assert items[1]["source"] == "The Rust book"
-    assert items[1]["text"] == "`insert` accepts any `impl Into<Value>`"
-    assert items[2]["source"] == "The Rust reference"
-    assert items[2]["link"].endswith("#unicode-escapes")
+    by_sha = defaultdict(list)
+    for item in items:
+        by_sha[item["sha"]].append(item)
+    assert sorted(by_sha) == ["1aaaaaaa", "3aaaaaaa", "5aaaaaaa", "6aaaaaaa", "9aaaaaaa"], items
+    first = by_sha["1aaaaaaa"]
+    assert first[0]["source"] == "The standard library"
+    assert first[0]["link"] == "https://doc.rust-lang.org/std/macro.matches.html"
+    assert first[0]["files"] == ["src/a.rs", "src/b.rs"]
+    assert first[1]["source"] == "The Rust book"
+    assert first[1]["text"] == "`insert` accepts any `impl Into<Value>`"
+    (escaped,) = by_sha["3aaaaaaa"]
+    assert escaped["source"] == "The Rust reference"
+    assert escaped["link"].endswith("#unicode-escapes")
+    assert escaped["text"] == "`\\u{...}` escapes write code points"
+    (angles,) = by_sha["5aaaaaaa"]
+    assert angles["text"] == "Arc<str> shares one allocation; `Vec<u8>` does not."
+    (stopped,) = by_sha["6aaaaaaa"]
+    assert stopped["text"] == "`?` returns early."
+    (twice,) = by_sha["9aaaaaaa"]
+    assert twice["link"].endswith("#traits-as-parameters")
+    assert twice["text"] == (
+        "`impl Trait` in argument position is a generic. A call that writes"
+        " x.into() is E0283. See https://doc.rust-lang.org/error_codes/E0283.html."
+    )
+    assert title_of("https://doc.rust-lang.org/book/ch19-03-pattern-syntax.html#-bindings") == "bindings"
+    assert (
+        title_of(
+            "https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html"
+            "#a-shortcut-for-propagating-errors-the--operator"
+        )
+        == "a shortcut for propagating errors the operator"
+    )
     page = render(items)
     assert "## The Rust book" in page
     assert "### traits as parameters" in page
+    assert "- Arc&lt;str&gt; shares one allocation; `Vec<u8>` does not." in page
+    assert "See <https://doc.rust-lang.org/error_codes/E0283.html>." in page
+    assert "Follow-up" not in page
     assert "1aaaaaa" in page and "2aaaaaa" not in page
+    assert "7aaaaaa" not in page and "8aaaaaa" not in page
     print("self-test ok")
 
 
