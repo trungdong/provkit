@@ -4,6 +4,9 @@ authors = ["Trung Dong Huynh"]
 language = "en"
 src = "src"
 
+[build]
+create-missing = false
+
 [rust]
 edition = "2024"
 
