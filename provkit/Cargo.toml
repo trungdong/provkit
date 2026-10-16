@@ -15,6 +15,7 @@ authors.workspace = true
 # declares it and must compile from the tarball.
 exclude = ["tests/corpus_*.rs", "tests/data/"]
 
+# ANCHOR: tests
 [[test]]
 name = "corpus_json"
 required-features = ["json"]
@@ -34,11 +35,14 @@ required-features = ["provn"]
 [[test]]
 name = "provn_round_trip"
 required-features = ["provn"]
+# ANCHOR_END: tests
 
+# ANCHOR: features
 [features]
 default = ["json", "provn"]
 json = ["dep:serde", "dep:serde_json", "indexmap/serde"]
 provn = []
+# ANCHOR_END: features
 
 [dependencies]
 indexmap.workspace = true

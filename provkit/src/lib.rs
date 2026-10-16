@@ -64,6 +64,7 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+// ANCHOR: modules
 mod attributes;
 mod builder;
 mod datetime;
@@ -79,10 +80,12 @@ mod qname;
 mod record;
 mod unify;
 mod value;
+// ANCHOR_END: modules
 
 #[cfg(test)]
 pub(crate) mod test_util;
 
+// ANCHOR: exports
 pub use attributes::{Attributes, IntoIter as AttributesIntoIter, Iter as AttributesIter};
 pub use datetime::DateTime;
 pub use document::{Bundle, Document};
@@ -97,6 +100,7 @@ pub use record::{
     Membership, Mention, Record, Specialization, Start, Usage,
 };
 pub use value::{LangStr, TypedLiteral, Value};
+// ANCHOR_END: exports
 
 /// `text` without one leading byte-order mark.
 pub(crate) fn strip_bom(text: &str) -> &str {
