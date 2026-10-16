@@ -34,14 +34,14 @@ that profile, naming a production or section where the grammar has
 one, and
 the paragraph on `prov:mentionOf` says when a prefixed mention is a
 mention and when it is an extensibility expression. `Default` is the
-grammar plus the six forms in that list, which ProvPy and ProvToolbox
-write. The book shows this span and the ones that follow as they
-stand in the files, and compiles none of them. Below the span,
+grammar plus the forms in that list, which ProvPy and ProvToolbox
+write. Below the span,
 `Relaxation` has one variant per item in the `Strict` list, and
 `Profile::allows` answers `false` for `Strict` and `true` for
 `Default` whatever the relaxation, with a comment saying where a third
-profile would name the ones it reads. The parser asks `allows` at each
-of the six points instead of comparing the profile. Two more types sit
+profile would name the ones it reads. The parser asks `allows` with the
+relaxation in hand wherever one applies, instead of comparing the
+profile. Two more types sit
 below. [`Ignored`](../api/provkit/provn/struct.Ignored.html) is an
 extensibility expression the reader parsed and left out, with its name
 as written and the line and column of the name, and
@@ -82,7 +82,8 @@ the language tag, which only follows a string.
 {{#include ../../../provkit/src/provn/lexer/mod.rs:token_kind}}
 ```
 
-Each variant names its production. A `Name` carries its prefix and
+The doc on each variant names its terminal, with the production
+number where the Recommendation gives one. A `Name` carries its prefix and
 local part with the escapes of the local part already decoded, and an
 empty prefix for a bare name. `Str` is unescaped too. `Int` keeps its text
 as written, because stop 2's `Value` types an integer from its text,
@@ -316,14 +317,15 @@ The departure row of
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 beginning "`Profile::Strict` accepts the whole PROV-N grammar" says
 `Strict` is the reference for the grammar and the MUST statements of
-the prose, and that `Default` adds exactly six extensions, what
-ProvToolbox and ProvPy write, except the two grammar-invalid forms
+the prose, and that `Default` adds what ProvToolbox and ProvPy write,
+the forms the `Relaxation` enum names, except the two grammar-invalid forms
 ProvToolbox 2.2.5 writes and its `provext:` statements. The row
-beginning "`Strict` rejects the four constructs of #519" names the
-four of those six that ProvPy's own strict mode accepts, with
+beginning "`Strict` rejects the four constructs of #519" names those
+among them that ProvPy's own strict mode accepts, with
 productions [1], [24] to [26] and [45] and the MUST in section 3.7.4
 as the grammar behind each refusal. The parser keeps the difference
-to six `allows` calls. Neither row says why `read`
+to `allows` calls, one relaxation per `Relaxation` variant. Neither
+row says why `read`
 uses `Default`. The doc on the variant describes it as the grammar
 plus what the two libraries write, and the test
 `the_default_profile_is_default` pins `Profile::default()` to it.
@@ -340,8 +342,9 @@ and that an identifier on `alternateOf`, `specializationOf`,
 The reason the row gives is one rule for every relation, and that a
 document with missing data still round-trips. The same row records
 the cost. `Strict` rejects that output when a required argument is
-`-` or a bare kind carries an identifier, and `Default` accepts it, as
-the comment above the relation branch of `expression` says.
+`-` or a bare kind carries an identifier, and `Default` accepts it.
+The comment above the relation branch of `expression` says only that
+a kept identifier reads back equal under `Profile::Default`.
 
 ### Why is `mentionOf` written bare?
 
@@ -380,11 +383,12 @@ input fails without exhausting the stack.
 The departure row of
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 beginning "A `\u` or `\U` escape in a string or IRI decodes" says the
-decoded content is not lexed again, so `"""` is the one-character
-string `"`. The reason it gives is that section 6 of
+decoded content is not lexed again, so `"\u0022"` is the one-character
+string `"`, and `"a\u000Ab"` holds a line feed in a short string.
+The reason it gives is that section 6 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#media-type)
 places the escapes in the text of a literal, and decoding them before
-lexing would let `"` end a string. In the code, `string` and
+lexing would let `\u0022` end a string. In the code, `string` and
 `iri` decode an escape as they scan and push the character into the
 token's content, so no second pass sees it. The row beginning "A `\u`
 escape that names a surrogate" says such an escape is a syntax error,
@@ -497,10 +501,11 @@ the rule and gives no further reason.
 cargo test -p provkit strict_is_the_whole_grammar
 ```
 
-This reads documents holding the four constructs of #519, a `default`
-after a `prefix` at document level and inside a bundle, a statement
-after a bundle, an identifier or attributes on the three bare kinds,
-and `prov` and `xsd` declared at their own IRIs, and checks that each
+This reads one document per case, a `default` after a `prefix` at
+document level and inside a bundle, a statement after a bundle, an
+identifier or attributes on `hadMember`, `alternateOf` and
+`specializationOf`, and `prov` and `xsd` declared at their own IRIs,
+and checks that each
 reads under `Default` and fails under `Strict` at the expected line
 and column. The unit-test
 binary reports the one test; the other test binaries report zero.
