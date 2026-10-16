@@ -29,6 +29,7 @@ pub struct CompareArgs {
     unified: bool,
 }
 
+// ANCHOR: compare_run
 /// Exits 0 when the documents are equal, 1 when they differ.
 pub fn run(args: &CompareArgs) -> Result<ExitCode> {
     let stdin = Path::new("-");
@@ -52,7 +53,9 @@ pub fn run(args: &CompareArgs) -> Result<ExitCode> {
     write_stdout(report.as_bytes()).context("<stdout>")?;
     Ok(ExitCode::from(1))
 }
+// ANCHOR_END: compare_run
 
+// ANCHOR: only_in
 /// The records of `mine` that are not in `theirs`, in order, each once.
 fn only_in<'a>(mine: &'a [Record], theirs: &[Record]) -> Vec<&'a Record> {
     let theirs: HashSet<&Record> = theirs.iter().collect();
@@ -61,6 +64,7 @@ fn only_in<'a>(mine: &'a [Record], theirs: &[Record]) -> Vec<&'a Record> {
         .filter(|r| !theirs.contains(r) && seen.insert(*r))
         .collect()
 }
+// ANCHOR_END: only_in
 
 /// Appends the records of `this` that `other` lacks: top-level records first,
 /// then each bundle under its heading. Each scope renders against one table

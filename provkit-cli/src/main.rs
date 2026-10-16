@@ -23,6 +23,7 @@ struct Cli {
     command: Command,
 }
 
+// ANCHOR: command
 #[derive(Subcommand)]
 enum Command {
     /// Convert a document between PROV-JSON and PROV-N.
@@ -45,6 +46,7 @@ enum Command {
     /// when they differ, 2 on any error.
     Compare(CompareArgs),
 }
+// ANCHOR_END: command
 
 #[derive(Args)]
 struct ConvertArgs {
@@ -63,6 +65,7 @@ struct ConvertArgs {
     to: Option<Format>,
 }
 
+// ANCHOR: main
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match cli.command {
@@ -77,6 +80,7 @@ fn main() -> ExitCode {
         }
     }
 }
+// ANCHOR_END: main
 
 /// How the tool names `path` in a message: `<stdin>` for `-`.
 fn shown(path: &Path) -> String {
@@ -119,6 +123,7 @@ fn message_of(e: &provkit::JsonError) -> String {
     text[..end].to_owned()
 }
 
+// ANCHOR: read_document
 /// Reads `path` (or standard input for `-`) and parses it with the resolved
 /// format. Extensibility expressions the PROV-N reader ignores are reported
 /// once on standard error.
@@ -163,6 +168,7 @@ fn read_document(path: &Path, from: Option<Format>) -> Result<Document> {
     };
     Ok(document)
 }
+// ANCHOR_END: read_document
 
 /// Whether the file at `path` begins with a UTF-16 byte-order mark, little
 /// or big endian. Read only after the UTF-8 read has failed.
