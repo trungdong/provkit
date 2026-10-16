@@ -211,11 +211,6 @@ cargo check -p provkit --no-default-features --features provn
 
 This type-checks the library with `json` off. It exits 0 and no line of
 its output names `serde` or `serde_json`, on a cold cache or a warm one.
-With a warm cache it prints only the `Finished` line.
-
-```text
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.53s
-```
 
 ## Try it
 
