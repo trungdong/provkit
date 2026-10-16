@@ -89,7 +89,7 @@ empty prefix for a bare name. `Str` is unescaped too. `Int` keeps its text
 as written, because stop 2's `Value` types an integer from its text,
 and `DateTime` keeps its text for `DateTime::parse`. `Typed` is the `%%` that joins a string to
 its datatype, `Marker` is the `-` that stands for an absent argument,
-and the rest are single characters. Two methods below the span answer
+`QNameLiteral` is the quoted `'prefix:local'` form, `Iri` and `LangTag` carry their text without the angle brackets or the `@`, and `Eof` marks the end of input. The rest are single characters. Two methods below the span answer
 questions the parser asks. `digit_name` returns the digits of an
 unsigned `Int`, because a bare local name made only of digits lexes
 as an integer and the doc comment says the lexer cannot tell the two
