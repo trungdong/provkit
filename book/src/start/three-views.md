@@ -22,7 +22,7 @@ Every statement is a record. `entity`, `activity` and the relations
 `used` and `wasGeneratedBy` are four of the eighteen kinds PROV-DM
 defines. `-` is an absent argument; the writer always writes every
 position, so a reader never has to count. `ex:draft` is a qualified
-name: the prefix `ex` stands for the namespace declared at the top.
+name. The prefix `ex` stands for the namespace declared at the top.
 
 ## PROV-JSON
 
@@ -155,7 +155,7 @@ A `Document` holds a namespace table, a list of records and a list of
 bundles. Each record is one variant of the `Record` enum, wrapping a
 struct with public fields, so a document can be built by hand as above
 or read with `json::read` and `provn::read`. The two `assert!` lines
-pass because `Document` equality is set-based: record order, attribute
+pass because `Document` equality is set-based, so record order, attribute
 order, the namespace table and blank-node labels do not count.
 
 ## Check it
