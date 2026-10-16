@@ -23,8 +23,8 @@ The table is where a reader starts.
 {{#include ../../../provkit/src/record/mod.rs:records_table}}
 ```
 
-The book shows this span and the thirteen that follow as they stand in
-the files, and compiles none of them. A row is the variant's name, its
+The book shows this span and those that follow as they stand in the
+files, and compiles none of them. A row is the variant's name, its
 PROV-N keyword, which is also its PROV-JSON key, `element` or
 `relation`, `bare` on the four relations PROV-DM gives no identifier,
 the argument counts PROV-N allows after the identifier, and the
@@ -94,8 +94,8 @@ form, because the record keeps the value, and `Record::formals` and
 `Record::formal` hand back the borrowed form, because the record still
 holds it. `to_formal` and the `From` impl clone a borrowed value into
 an owned one, which is how `merge` below passes what it read on to
-`from_parts`, and `UnificationCause::Formal` holds the owned form,
-because `Error` carries no lifetime and so cannot hold a `FormalRef`.
+`from_parts`, and `UnificationCause::Formal` holds the owned form.
+`Error` has no lifetime parameter, and a `FormalRef` needs one.
 Below the twins,
 `FormalValue` is a `pub(super)` trait, visible within the `record`
 module and nowhere else, implemented for `QName` and `DateTime`. `Formals::take<T>` is
@@ -382,8 +382,8 @@ Two rows of
 answer the two halves. The departure row beginning "Two bundles with
 one identifier are `Error::DuplicateBundle`" says both readers refuse
 them although the PROV-N grammar accepts them, that in PROV-JSON a
-bundle key given twice counts, and that ProvPy refuses them too. Its
-reason is that a bundle identifier names one bundle. The fields of
+bundle key given twice counts, and that ProvPy rejects them too in
+PROV-N. Its reason is that a bundle identifier names one bundle. The fields of
 `Document` are public, so nothing stops a program from pushing two
 bundles with one identifier, and the limit row beginning "Bundles
 that share an identifier" says what then happens. They count as one.
@@ -431,9 +431,9 @@ reason is that the PROV-N reader knows where each token sits, and a
 PROV-JSON error is more useful with its record. The commit "Give
 errors typed payloads and positions" introduced `At` with one helper
 in the parser that wraps an error from the name, value or record
-layer at its token, so those layers return the cause and nothing
-else, and the commit "Report PROV-JSON shape errors as structure
-errors and name the record" introduced `InRecord` the same way. The
+layer at its token, and the commit "Report PROV-JSON shape errors as
+structure errors and name the record" introduced `InRecord` the same
+way. The
 doc comment on each boxed field says that `Display` prints the inner
 error, so it is not also the `source()`.
 
@@ -482,6 +482,12 @@ error, so it is not also the `source()`.
   stop 2's `impl Into<T>` arguments are the same mechanism on the
   argument side.
   [Generic data types, in function definitions](https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions)
+- **`pub(super)`**, first used in `provkit/src/record/formal.rs` at
+  `FormalValue`. The item is visible in the parent module, `record`,
+  and its children, and nowhere else, which is narrower than the
+  `pub(crate)` stop 0 showed; `Formals` and its methods carry the same
+  marker.
+  [pub(in path), pub(crate), pub(super), and pub(self)](https://doc.rust-lang.org/reference/visibility-and-privacy.html#pubin-path-pubcrate-pubsuper-and-pubself)
 - **`Cow`**, first used in `provkit/src/document.rs` at
   `merged_bundles`. `Cow<'_, [Bundle]>` is either `Borrowed` of the
   document's own slice or `Owned` of a `Vec`, and a caller reads both
@@ -656,6 +662,7 @@ provkit compare --unified /tmp/e.provn /tmp/f.provn; echo $?
 - `associated constants`: https://doc.rust-lang.org/reference/items/associated-items.html#associated-constants
 - `owned and borrowed twins`: https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html
 - `a generic method bounded by a private trait`: https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions
+- `pub(super)`: https://doc.rust-lang.org/reference/visibility-and-privacy.html#pubin-path-pubcrate-pubsuper-and-pubself
 - `Cow`: https://doc.rust-lang.org/std/borrow/enum.Cow.html
 - `HashSet and HashMap with borrowed keys`: https://doc.rust-lang.org/std/collections/struct.HashSet.html
 - `chain and flat_map`: https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.flat_map

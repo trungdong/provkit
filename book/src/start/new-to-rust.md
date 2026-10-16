@@ -62,6 +62,7 @@ PROV use differently.
 | `associated constants` | [Stop 3](../stops/3-records.md) | [Rust reference](https://doc.rust-lang.org/reference/items/associated-items.html#associated-constants) |
 | `owned and borrowed twins` | [Stop 3](../stops/3-records.md) | [Rust book](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html) |
 | `a generic method bounded by a private trait` | [Stop 3](../stops/3-records.md) | [Rust book](https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions) |
+| `pub(super)` | [Stop 3](../stops/3-records.md) | [Rust reference](https://doc.rust-lang.org/reference/visibility-and-privacy.html#pubin-path-pubcrate-pubsuper-and-pubself) |
 | `Cow` | [Stop 3](../stops/3-records.md) | [std](https://doc.rust-lang.org/std/borrow/enum.Cow.html) |
 | `HashSet and HashMap with borrowed keys` | [Stop 3](../stops/3-records.md) | [std](https://doc.rust-lang.org/std/collections/struct.HashSet.html) |
 | `chain and flat_map` | [Stop 3](../stops/3-records.md) | [std](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.flat_map) |
