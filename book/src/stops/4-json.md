@@ -89,8 +89,9 @@ and returns `duplicate field` naming the key. Stop 1 called
 name. `Bundles`, below the span, reads the `bundle` object with a
 `HashSet` instead, because it records a repeated key and stops rather
 than refusing it, so the reader can report the repeat as a duplicate
-bundle in its place among the keys. Under one identifier a section holds one
-record or several.
+bundle in its place among the keys.
+
+Under one identifier a section holds one record or several.
 
 ```rust,ignore
 {{#include ../../../provkit/src/json/wire.rs:one_or_many}}
@@ -127,8 +128,9 @@ it. The doc comment on `Body` says why an invalid value is a variant
 and not an error. An error raised inside the visitor would be placed
 where the outer parser stands, past the whole value, and would not
 name its record, so the value is carried to the reader, which places
-it and wraps it in the record. A key given twice in a record becomes
-an `Invalid` value the same way, placed after its second value. The
+it and wraps it in the record. A key given twice in a record that
+holds no invalid value yet becomes an `Invalid` value the same way,
+placed after its second value. The
 `Serialize` impl at the end of the file writes each variant back, a
 `Number` through `RawValue::from_string` so its text reaches the
 output unchanged.
@@ -155,13 +157,14 @@ that does not resolve and a repeat, each wrapped in an `InRecord`
 whose section is `bundle`, before any bundle body is read. The closure
 `located` captures `key` and is called at each of those points, by
 hand or through `map_err`, so every error under one key is wrapped the
-same way; stop 2's `map_err` calls took a closure written in place. The second loop emits
-each bundle between `start_bundle` and `end_bundle`, and
-`end_document` closes the sequence stop 3 described. `emit_sections`,
-below the span, is where a section's `OneOrMany` is read. `record_id`
-resolves the key, or returns `None` for a `_:` key on a relation and an
-error for one on an element, and `as_slice` on the group gives the one
-body or every body of the array, each passed to `records_from`.
+same way; stop 2's `map_err` calls took a closure written in place.
+The second loop emits each bundle between `start_bundle` and
+`end_bundle`, and `end_document` closes the sequence stop 3 described.
+`emit_sections`, below the span, is where a section's `OneOrMany` is
+read. `record_id` resolves the key, or returns `None` for a `_:` key
+on a relation and an error for one on an element, and `as_slice` on
+the group gives the one body or every body of the array, each passed
+to `records_from`.
 
 ```rust,ignore
 {{#include ../../../provkit/src/json/read/mod.rs:records_from}}
@@ -172,16 +175,15 @@ key resolves in scope, and `formal_named` says whether the name is one
 of the kind's formals. A formal's value goes through `formal_value`,
 which reads a time from a string or an `xsd:dateTime` object and a name
 from a string or an `xsd:QName` or `prov:QUALIFIED_NAME` object, and
-any other value goes
-through `decode_value` into stop 2's `Value`, one attribute per element
-of an array. The `prov:entity` of a `hadMember` is the exception. Its
-elements are gathered as `members`, and when there are any the
-function returns one record per member, each with a clone of the
-identifier, the other formals and the attributes, by mapping the
-members through `from_parts` and collecting the results into one
-`Result`. `number`, the last function in the file, types a raw JSON number
-from its text, an integer by range and anything else as `xsd:double`,
-keeping the text as written.
+any other value goes through `decode_value` into stop 2's `Value`, one
+attribute per element of an array. The `prov:entity` of a `hadMember`
+is the exception. Its elements are gathered as `members`, and when
+there are any the function returns one record per member, each with a
+clone of the identifier, the other formals and the attributes, by
+mapping the members through `from_parts` and collecting the results
+into one `Result`. `number`, the last function in the file, types a
+raw JSON number from its text, an integer by range and anything else
+as `xsd:double`, keeping the text as written.
 
 ### provkit/src/json/write.rs
 
@@ -282,10 +284,10 @@ of a document or bundle, among the records of a section, among the
 attributes of a record and among the members of a value object, and
 says ProvPy keeps the last value at every level, so a repeated key
 drops a namespace, a record, a section, a bundle or a value without a
-message. `serde_json` does the same when it reads into a map, and the
-commit "Refuse a key given twice in a PROV-JSON object" says the reader
-did too, at every level but a repeated `prefix`, before `Unique` and
-`Body` were added and `ContainerVisitor` refused a section seen twice.
+message. The commit "Refuse a key given twice in a PROV-JSON object"
+says the reader kept the last value too, at every level but a repeated
+`prefix`, before `Unique` and `Body` were added and `ContainerVisitor`
+refused a section seen twice.
 The reason the row gives is that RFC 8259 says the names in an
 object SHOULD be unique and I-JSON (RFC 7493) says they MUST be, that
 keeping the last value changes the document unannounced, and that the
