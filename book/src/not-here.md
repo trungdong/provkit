@@ -10,7 +10,7 @@ question comes up.
 
 Today a record is a struct literal with public fields, as in
 [One document, three views](start/three-views.md). A fluent builder is
-planned for 0.3.0. A builder has to check the fields that validation
+arrives in 0.3.0. A builder has to check the fields that validation
 requires, so it waits until validation fixes which fields those are.
 The record types are read in [stop 3](stops/3-records.md).
 
