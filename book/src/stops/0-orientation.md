@@ -26,7 +26,7 @@ compiled.
 
 Eleven modules are private. Two, `json` and `provn`, are public, and
 each sits behind `#[cfg(feature = "...")]` so it exists only when its
-feature is on. A thirteenth module, `test_util`, is declared below
+feature is on. A further module, `test_util`, is declared below
 this list as `pub(crate)` under `#[cfg(test)]`, so it is visible to
 the whole crate and to nothing outside it, and only while tests build.
 
@@ -79,8 +79,8 @@ The library manifest declares the two features.
 
 `json` turns on the optional `serde` and `serde_json` dependencies and
 the `serde` feature of `indexmap`; a build without it has neither crate
-and builds `indexmap` without its `serde` feature. `provn` enables nothing, because the PROV-N parser and writer are
-hand-written and need no crate. Both are on by default.
+and builds `indexmap` without its `serde` feature. `provn` enables nothing, because the PROV-N parser and writer need
+no extra crate. Both are on by default.
 
 Each integration test target names the features it needs.
 
@@ -116,7 +116,8 @@ The version appears twice, once as the package version and once in the
 crate, and `forbid` cannot be overridden by an `allow` further down.
 Clippy's `all` and `pedantic` groups both warn, and CI runs clippy with
 `-D warnings`, so each is an error there. Four pedantic lints are allowed,
-and the manifest's own comment says why they fight the domain. Where one
+and the manifest's own comment says why `module_name_repetitions` and
+the two `missing_*_doc` lints fight the domain. Where one
 lint is wrong for a single item, the code carries `#[allow(clippy::...)]`
 with a comment giving the reason, for example `too_many_arguments` on
 `DateTime::new`, which takes one argument per XSD component.
@@ -150,8 +151,8 @@ The commit that made the modules private, "Give every public item one
 path", states the reason in its subject. With every module private
 except `json`, `provn` and `well_known`, each type has exactly one
 public path and shows once in the API reference, at the root. Its Rust
-note gives the idiom: a private module with a `pub use` re-export gives
-an item a single public path. The file layout inside `src/` is then an
+note gives the idiom, and a private module with a `pub use` re-export
+gives an item a single public path. The file layout inside `src/` is then an
 internal matter, because no caller can name a private module.
 
 ## The Rust here
