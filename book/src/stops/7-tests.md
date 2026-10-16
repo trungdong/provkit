@@ -287,15 +287,16 @@ and the shape of a comparison listing.
 
 Stop 0 read the `[[test]]` targets and their `required-features`,
 so a feature-subset build skips a target rather than failing to
-compile it. The span is repeated here for the lines above it.
+compile it. The lines above those targets decide what the published
+crate carries.
 
 ```toml
-{{#include ../../../provkit/Cargo.toml:tests}}
+{{#include ../../../provkit/Cargo.toml:exclude}}
 ```
 
-Above the span, `exclude = ["tests/corpus_*.rs", "tests/data/"]`
-removes the corpus tests and their data from the published crate, and
-its comment says why. They read the corpus submodule, which the
+`exclude = ["tests/corpus_*.rs", "tests/data/"]` removes the corpus
+tests and their data from the published crate, and its comment says
+why. They read the corpus submodule, which the
 `.crate` archive lacks, and `tests/common/` ships because
 `provn_round_trip` declares it and must compile from the tarball.
 `provkit-cli/Cargo.toml` excludes `tests/cli.rs` with a comment of the
