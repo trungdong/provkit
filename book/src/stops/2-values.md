@@ -1,7 +1,7 @@
 # Stop 2: Values
 
-An attribute value is a string, a language-tagged string, a name, a
-time or a typed literal, and a record carries its values as a set of
+An [attribute](../reference/glossary.md#attribute-prov) value is a string, a language-tagged string, a name, a
+time or a [typed literal](../reference/glossary.md#literal-and-typed-literal-prov), and a [record](../reference/glossary.md#record-prov) carries its values as a set of
 name and value pairs. This stop reads how each kind is stored and when
 two of them are equal, which is the rule every later layer leans on,
 from the deduplication of a record's attribute set to `compare` in the
@@ -37,7 +37,7 @@ each carries its payload. `Str` is an `xsd:string`, `LangStr` and
 one of them. An `xsd:string` folds to `Str`. An `xsd:dateTime` that
 parses becomes `DateTime`, after the space, tab, CR and LF around it
 are trimmed. A qualified-name datatype is `Error::InvalidLiteral`,
-because resolving the text needs a prefix table, and the crate-private
+because resolving the text needs a [prefix](../reference/glossary.md#namespace-and-prefix-prov) table, and the crate-private
 `typed_in`, which takes a `Scope`, is the path both readers use
 instead. Every other datatype, and a `dateTime` that does not parse,
 is `Typed`. The row of
@@ -302,7 +302,7 @@ allocation, and the first write to a clone copies the pairs. The
 commit "Share attribute storage between clones" gives the case. A
 PROV-JSON `hadMember` lists its members in an array and the reader
 fans it out into one record per member, each carrying the same
-attribute set, and a collection with thousands of members and as many
+attribute set, and a [collection](../reference/glossary.md#collection-and-membership-prov) with thousands of members and as many
 attributes used to deep-copy that set into every record. With the
 `Arc` the records share one allocation, and
 `member_fan_out_shares_one_attribute_allocation` in the JSON reader's

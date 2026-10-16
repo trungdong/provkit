@@ -53,7 +53,7 @@ setting beyond the defaults.
 [`Error`](../api/provkit/enum.Error.html) enum of stop 3 is larger than
 clippy's default because the `Unification` variant carries two
 `Option<Formal>` beside the identifier, and the commit "Type the cause
-of a unification failure" records that boxing the variant was judged
+of a [unification](../reference/glossary.md#unification-prov) failure" records that boxing the variant was judged
 worse than the extra bytes on every `Result`, so the threshold moved
 instead.
 

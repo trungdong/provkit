@@ -1,9 +1,9 @@
 # Stop 1: Names
 
-A PROV identifier is a namespace IRI plus a local part. Everything a
-document names, from an entity to an attribute key, is one of these,
+A PROV identifier is a [namespace](../reference/glossary.md#namespace-and-prefix-prov) IRI plus a local part. Everything a
+[document](../reference/glossary.md#document-prov) names, from an [entity](../reference/glossary.md#entity-prov) to an [attribute](../reference/glossary.md#attribute-prov) key, is one of these,
 and the two readers turn every `prefix:local` they meet into one. This
-stop reads the character rules the local part and the prefix obey, the
+stop reads the character rules the local part and the [prefix](../reference/glossary.md#namespace-and-prefix-prov) obey, the
 name type itself, and the prefix tables that both readers resolve
 through. It builds on stop 0 only, for the module list and the
 `pub use` lines that bring `QName`, `Namespaces` and `well_known` to
@@ -141,7 +141,7 @@ rustdoc text.
 ### provkit/src/namespaces/mod.rs
 
 [`Namespaces`](../api/provkit/struct.Namespaces.html) is the prefix
-table a document or a bundle carries.
+table a document or a [bundle](../reference/glossary.md#bundle-prov) carries.
 
 ```rust,ignore
 {{#include ../../../provkit/src/namespaces/mod.rs:namespaces}}
@@ -229,7 +229,7 @@ stored. The row of
 beginning "Name resolution is strict" is the reader side of the same
 rule. Names are equal when their IRIs are equal, however the namespace
 and the local part split the IRI, and ordering and hashing follow the
-IRI; the reason the row gives is that PROV-DM says a qualified name
+IRI; the reason the row gives is that PROV-DM says a [qualified name](../reference/glossary.md#identifier-and-qualified-name-prov)
 denotes an IRI. The commit "Compare, order and hash qualified names by
 their IRI" replaced the derived, field-wise comparison with the
 hand-written impls above, so that `http://example.org/` with
@@ -257,7 +257,7 @@ only that one.
 ### Why is `_` never a prefix?
 
 The CONFORMANCE.md row beginning "The underscore is never a prefix"
-gives the reason. `_:` is the blank-node form, which names no IRI, so
+gives the reason. `_:` is the [blank-node](../reference/glossary.md#blank-node-prov) form, which names no IRI, so
 PROV-JSON keys that start `_:` are blank and PROV-N rejects `_:x`
 because it is not a `QUALIFIED_NAME`. Two checks enforce it, one per
 caller. `PN_PREFIX` starts with a `PN_CHARS_BASE`
@@ -455,7 +455,7 @@ and `entity(xx:e1)` and predict again.
 <details><summary>Answer</summary>
 
 Nothing is printed and the exit status is 0, because both names are
-`http://example.org/e1` and `compare` finds no record on one side
+`http://example.org/e1` and `compare` finds no [record](../reference/glossary.md#record-prov) on one side
 only.
 
 ```sh

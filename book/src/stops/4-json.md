@@ -1,11 +1,11 @@
 # Stop 4: PROV-JSON
 
 PROV-JSON is the W3C member submission of April 2013, a JSON object
-keyed by record kind and then by identifier, with a `prefix` object
-for the namespace table and a `bundle` object for the named bundles.
+keyed by [record](../reference/glossary.md#record-prov) kind and then by identifier, with a `prefix` object
+for the [namespace](../reference/glossary.md#namespace-and-prefix-prov) table and a `bundle` object for the named [bundles](../reference/glossary.md#bundle-prov).
 This stop reads the three layers of the `json` module. serde sees the
 shape and refuses what is not PROV-JSON, `read` turns the shape into
-builder calls, and `write` goes back from a document to text. It
+builder calls, and `write` goes back from a [document](../reference/glossary.md#document-prov) to text. It
 builds on stop 3 for the builder both readers drive and for
 `Record::from_parts`, which checks every record this reader makes, and
 on stop 1 for the scope that resolves each key to a `QName`.
@@ -50,7 +50,7 @@ into and writes from, private to the module, and the model never sees
 them. `JsonDocument` is a `prefix` table, an `IndexMap` from `Kind` to
 a section, the bundles in order, and the first bundle key given twice
 if there is one. A section is an `IndexMap` from identifier to
-`OneOrMany<JsonRecord>`, and a record is an `IndexMap` from attribute
+`OneOrMany<JsonRecord>`, and a record is an `IndexMap` from [attribute](../reference/glossary.md#attribute-prov)
 key to `JsonValue`. The `Deserialize` impls for the document and the
 bundle both call one visitor.
 
@@ -206,7 +206,7 @@ writer for the call, so `out` is still usable for `write_all` on the
 next line. `to_string` writes into a `Vec<u8>` and converts it with
 `String::from_utf8`, and the `expect` states why that cannot fail, as
 the `# Panics` section does. `to_wire`, below the span, starts from a
-working copy of the document's namespace table, so a minted prefix
+working copy of the document's namespace table, so a minted [prefix](../reference/glossary.md#namespace-and-prefix-prov)
 never touches the caller's document, and `bundle_wire` writes each
 bundle against its own table over the document's. The records of each
 scope go through `sections`.
@@ -327,7 +327,7 @@ cover the two halves. The limit row beginning "A PROV-JSON `hadMember`
 with an empty `prov:entity` array" says that a `hadMember` with N
 members reads as N records that share their attributes, and gives the
 reason that the ProvToolbox shared corpus writes the members of a
-collection as an array under `prov:entity`, that ProvPy reads that
+[collection](../reference/glossary.md#collection-and-membership-prov) as an array under `prov:entity`, that ProvPy reads that
 form, that the submission's schema does not define it, and that
 PROV-DM holds one member per relation. Section 3.2.14 of
 [PROV-JSON](https://www.w3.org/Submission/2013/SUBM-prov-json-20130424/#term-membership)
@@ -362,7 +362,7 @@ The limit row of
 beginning "Blank-node labels are not preserved" says the writer mints
 `_:id1`, `_:id2` and so on in document order, continuing through
 bundles, and that a blank key on an element or a bundle is a read
-error. The reason it gives is that blank nodes have no identity beyond
+error. The reason it gives is that [blank nodes](../reference/glossary.md#blank-node-prov) have no identity beyond
 their position, equality ignores labels, and elements and bundles need
 an identifier. Section 2.1 of
 [PROV-JSON](https://www.w3.org/Submission/2013/SUBM-prov-json-20130424/#blank-node-ids)
@@ -459,7 +459,7 @@ key as no identifier, and `sections` writes a fresh one.
 cargo test -p provkit values_decode_per_table
 ```
 
-This reads one entity whose attributes hold every value form, a plain
+This reads one [entity](../reference/glossary.md#entity-prov) whose attributes hold every value form, a plain
 string, raw integers typed by range, a raw double, a boolean, `$`
 objects with and without a `type`, a language-tagged string, names
 under `xsd:QName` and `prov:QUALIFIED_NAME`, a dateTime, a typed

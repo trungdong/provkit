@@ -1,11 +1,11 @@
 # Stop 3: Records and documents
 
-A PROV document is a set of records of eighteen kinds, each a struct
-with an identifier, its formal attributes and the attribute set of
-stop 2, held at the top level or in a named bundle. This stop reads
+A PROV [document](../reference/glossary.md#document-prov) is a set of [records](../reference/glossary.md#record-prov) of eighteen kinds, each a struct
+with an identifier, its [formal attributes](../reference/glossary.md#formal-attribute-prov) and the [attribute](../reference/glossary.md#attribute-prov) set of
+stop 2, held at the top level or in a named [bundle](../reference/glossary.md#bundle-prov). This stop reads
 the table that states the eighteen kinds once, the formal values that
 fill their positions, the document that holds them, the equality both
-`compare` and the tests lean on, the unification that merges records
+`compare` and the tests lean on, the [unification](../reference/glossary.md#unification-prov) that merges records
 sharing an identifier, the builder both readers drive, and the error
 type every layer returns. It builds on stop 1 for `QName`, which is
 every identifier and every name-valued formal, and on stop 2 for
@@ -113,7 +113,7 @@ with public fields.
 {{#include ../../../provkit/src/document.rs:document}}
 ```
 
-A bundle is an identifier, a namespace table and records, and a
+A bundle is an identifier, a [namespace](../reference/glossary.md#namespace-and-prefix-prov) table and records, and a
 document is a namespace table, top-level records and bundles. Every
 reference between records is a `QName`, so a document holds no
 pointer into itself, and the doc comment draws the consequence, that
@@ -135,7 +135,7 @@ there, so a document whose identifiers are all distinct, which is
 every document a reader builds, copies nothing. Otherwise the loop
 keeps one bundle per identifier at the position of its first copy,
 absorbs the later copies' namespace tables with the first binding of
-a prefix winning, and appends their records. After it,
+a [prefix](../reference/glossary.md#namespace-and-prefix-prov) winning, and appends their records. After it,
 `records_with_id` and `all_records` are the two lookups, the second
 chaining the top level onto a `flat_map` over the bundles. Equality
 is the last thing in the file before the tests.
@@ -366,8 +366,8 @@ readers accept has to be an `Option`, and the absent value is what
 The row of
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 beginning "`Document` equality is set-based" states it. Equality
-ignores record order, attribute order, namespace tables, blank-node
-labels and the spelling of a literal, and it keeps identifier
+ignores record order, attribute order, namespace tables, [blank-node](../reference/glossary.md#blank-node-prov)
+labels and the spelling of a [literal](../reference/glossary.md#literal-and-typed-literal-prov), and it keeps identifier
 presence, while `Attributes` and the record lists keep insertion
 order. The reason the row gives is that output follows input order,
 so a written document reads like its source, and the two models
@@ -571,8 +571,8 @@ test result: ok. 1 passed
 cargo test -p provkit merges_formals_and_attributes
 ```
 
-This unifies two generations under one identifier, one with an entity
-and one with an activity, and checks that the merged record holds
+This unifies two generations under one identifier, one with an [entity](../reference/glossary.md#entity-prov)
+and one with an [activity](../reference/glossary.md#activity-prov), and checks that the merged record holds
 both, keeps the first position and carries both labels.
 
 ```text

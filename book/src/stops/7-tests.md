@@ -18,7 +18,7 @@ for the `test_util` module under `#[cfg(test)]` and the `[[test]]`
 targets, on stop 1 for `mod tests;`, on stop 2 for `DateTime::parse`
 and argument-position `impl Trait`, on stop 3 for the equality every
 round trip ends in, on stop 4 for `json::read` and `json::to_string`,
-on stop 5 for `provn::read_with` and the two profiles, and on stop 6
+on stop 5 for `provn::read_with` and the two [profiles](../reference/glossary.md#profile-prov), and on stop 6
 for the binary the end-to-end tests run.
 
 ## What the code does
@@ -33,8 +33,8 @@ and the smaller ones hold `mod tests { ... }` at the end of their own
 file, as stop 1 said of `qname.rs`. Either way the tests are a child
 module of the code they test, so they see its private items. The
 first half of the file is builders. `ex` and `prov` make a name in
-`http://example.org/` or the PROV namespace, `entity`, `agent`,
-`bundle` and `document` build one record, bundle or document under
+`http://example.org/` or the PROV [namespace](../reference/glossary.md#namespace-and-prefix-prov), `entity`, `agent`,
+`bundle` and `document` build one [record](../reference/glossary.md#record-prov), [bundle](../reference/glossary.md#bundle-prov) or [document](../reference/glossary.md#document-prov) under
 `ex`, `dt` is one fixed `dateTime`, and `element` and `relation` go
 through `Record::from_parts`. Each goes through `unwrap` on a
 constructor that cannot fail for the inputs the tests pass, which is
@@ -149,7 +149,7 @@ wrapped in a document, `provn/provtoolbox/` holds ProvToolbox's own
 test documents, `provn/provtoolbox-corpus/` holds the PROV-N that
 ProvToolbox wrote from the JSON corpus, one twin per JSON file of the
 same name, `provn/probes/` holds the probes and `expected.tsv`, and
-`constraints/` holds the PROV-CONSTRAINTS unification cases.
+`constraints/` holds the PROV-CONSTRAINTS [unification](../reference/glossary.md#unification-prov) cases.
 
 ```rust,ignore
 {{#include ../../../provkit/tests/corpus_json.rs:reads_all}}

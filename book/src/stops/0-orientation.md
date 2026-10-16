@@ -40,7 +40,7 @@ The data-model types all come from the root, so `use provkit::{Document,
 Record, QName}` works without knowing which file defines each one. The
 two public modules keep their readers and writers, and `provn` keeps
 `Profile`, so those are spelled `json::read` and `provn::Profile`.
-`well_known` is a module of names in the `prov:` and `xsd:` namespaces
+`well_known` is a module of names in the `prov:` and `xsd:` [namespaces](../reference/glossary.md#namespace-and-prefix-prov)
 that the `pub use` line for `qname` brings to the root beside `QName`. The block below is a
 doctest the book compiles.
 

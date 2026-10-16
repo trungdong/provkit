@@ -9,12 +9,12 @@ reads the clap definitions that turn two structs and an enum into the
 commands and their help, the function both
 commands read their input through, the sniffer that tells PROV-JSON
 from PROV-N by looking at the text, the `main` that turns a `Result`
-into an exit code, and `compare`, which prints what one document has
+into an exit code, and `compare`, which prints what one [document](../reference/glossary.md#document-prov) has
 and the other lacks. It builds on stop 4 for `json::read` and
 `json::write`, on stop 5 for `provn::read_report`, `provn::write`,
 `provn::statement` and `provn::name`, on stop 3 for the set-based
 equality `compare` starts from and for `merged_bundles` and
-`unified`, and on stop 1 for the namespace table each side of a
+`unified`, and on stop 1 for the [namespace](../reference/glossary.md#namespace-and-prefix-prov) table each side of a
 comparison renders against.
 
 ## What the code does
@@ -41,7 +41,7 @@ arguments. The doc comment on a variant is its help. `provkit compare
 compare --help` prints the whole comment. The text on `Convert`
 states the order in which `-f`, `-t`, the extension and the content
 decide a format, and the text on `Compare` says what the listing is,
-how a name with no declared prefix is written, and what the three
+how a name with no declared [prefix](../reference/glossary.md#namespace-and-prefix-prov) is written, and what the three
 exit codes mean. `ConvertArgs`, below the span, derives `Args`. Its
 positional `input` is a `PathBuf`, and `#[arg(short, long)]` makes
 `-o` and `--output` from the field name `output`. The two format
@@ -154,9 +154,9 @@ input can be read once, and reads each side through `read_document`
 with the one `-f`. With `--unified` each document is replaced by its
 [`unified`](../api/provkit/struct.Document.html#method.unified) form
 from stop 3, and `with_context` puts the file name in front of a
-unification failure. Then `a == b` is the set-based equality of stop 3,
+[unification](../reference/glossary.md#unification-prov) failure. Then `a == b` is the set-based equality of stop 3,
 so two documents in different formats, with different namespace
-tables and different record order, compare equal, and the command
+tables and different [record](../reference/glossary.md#record-prov) order, compare equal, and the command
 returns `ExitCode::SUCCESS` with nothing printed. Otherwise it builds
 the whole report in a `String`, one `report_side` call per side with
 the sides swapped, and writes it once, so a failure never leaves half
@@ -173,7 +173,7 @@ that the set lacks. The second test in the `filter` is
 inserted, so a record repeated on one side is listed once. The
 lifetime `'a` ties the returned references to `mine` alone, so
 `theirs` may be a shorter-lived slice. `report_side`, below the span,
-lists the top-level records first and then each bundle under a
+lists the top-level records first and then each [bundle](../reference/glossary.md#bundle-prov) under a
 `bundle <id>:` heading. Bundles that share an identifier are grouped
 through
 [`merged_bundles`](../api/provkit/struct.Document.html#method.merged_bundles),
@@ -246,7 +246,7 @@ PROV-N cannot write" says such a record, one whose namespace IRI
 holds a character `IRI_REF` forbids, is printed as a heading made of
 the keyword, the identifier and the first unwritable name as
 `<full IRI>`, ending in `// not valid PROV-N`. A name that belongs to
-an attribute is printed inside `[...]`, and a bundle heading reads
+an [attribute](../reference/glossary.md#attribute-prov) is printed inside `[...]`, and a bundle heading reads
 `bundle <IRI>: // not valid PROV-N`. The exit code stays 1. The
 reason the row gives is that PROV-JSON can hold such an IRI, and a
 difference in such a record is still a difference and not a failure
@@ -423,7 +423,7 @@ Predict the exit code of each run, and for the third run which fault
 the message names and where it points. The page shows the installed
 name `provkit`; in a checkout, `cargo run -q -p provkit-cli --`
 followed by the same arguments does the same. The two files of the
-second run are twins from the corpus, one entity `ex:e1` in each
+second run are twins from the corpus, one [entity](../reference/glossary.md#entity-prov) `ex:e1` in each
 format, and the third run writes a file with two faults, an
 undeclared prefix and a missing `)`.
 

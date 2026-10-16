@@ -1,16 +1,16 @@
 # Stop 5: PROV-N
 
 PROV-N is the notation of the W3C Recommendation of April 2013, a
-text form with one statement per record, `prefix` and `default`
-declarations for the namespace table and `bundle ... endBundle` for
-the named bundles. Its grammar is the authority for this module, and
+text form with one statement per [record](../reference/glossary.md#record-prov), `prefix` and `default`
+declarations for the [namespace](../reference/glossary.md#namespace-and-prefix-prov) table and `bundle ... endBundle` for
+the named [bundles](../reference/glossary.md#bundle-prov). Its grammar is the authority for this module, and
 this stop follows the grammar from characters to tokens, from tokens
-to statements and from a document back to text. It reads the two
-profiles the reader offers, the lexer, the recursive-descent parser,
-the extensibility expressions the parser accepts and leaves out, and
+to statements and from a [document](../reference/glossary.md#document-prov) back to text. It reads the two
+[profiles](../reference/glossary.md#profile-prov) the reader offers, the lexer, the recursive-descent parser,
+the [extensibility expressions](../reference/glossary.md#extensibility-expression-prov) the parser accepts and leaves out, and
 the writer. It builds on stop 1 for the `PN_PREFIX` and `PN_LOCAL`
 character classes the lexer and writer share and for the scope that
-resolves each name, on stop 2 for the values a literal becomes, and on
+resolves each name, on stop 2 for the values a [literal](../reference/glossary.md#literal-and-typed-literal-prov) becomes, and on
 stop 3 for the builder the parser drives and for `Record::from_parts`,
 which checks every record the parser makes.
 
@@ -83,7 +83,7 @@ the language tag, which only follows a string.
 ```
 
 The doc on each variant names its terminal, with the production
-number where the Recommendation gives one. A `Name` carries its prefix and
+number where the Recommendation gives one. A `Name` carries its [prefix](../reference/glossary.md#namespace-and-prefix-prov) and
 local part with the escapes of the local part already decoded, and an
 empty prefix for a bare name. `Str` is unescaped too. `Int` keeps its text
 as written, because stop 2's `Value` types an integer from its text,
@@ -190,7 +190,7 @@ a `Kind` through `classify`, which reads `mentionOf` bare only when
 the profile allows it, `identifier_and_first_argument` reads an
 element's mandatory identifier or a relation's first argument and the
 `id;` form when `;` follows, `remaining_arguments` loops on `,` until
-the attribute block or `)`, `check_arity` compares the count with the
+the [attribute](../reference/glossary.md#attribute-prov) block or `)`, `check_arity` compares the count with the
 kind's arities, `formals` matches each argument to a formal in table
 order and refuses `-` in a required position under `Strict`, and
 `Record::from_parts` checks the record. The attribute block is read
@@ -299,7 +299,7 @@ reads back as exactly one bare name with the same local part.
 `expression` writes one record. `check_attributes` refuses an
 attribute that spells one of the record's own formals, because the
 reader would refuse it too. An element writes its identifier, then all
-of its formals if it has any, so an activity writes both times or
+of its formals if it has any, so an [activity](../reference/glossary.md#activity-prov) writes both times or
 neither. A relation writes `id;` only when it has an identifier, and
 then every formal in table order, with `formal` giving `-` for an
 absent one. The attribute block follows when there are attributes,
@@ -520,7 +520,7 @@ cargo test -p provkit example_46_reads_in_both_forms
 
 This reads the two `dictExt:hadMembers` forms of example 46 in the
 Recommendation under both profiles, and checks that the document holds
-the one entity beside them and that the report names
+the one [entity](../reference/glossary.md#entity-prov) beside them and that the report names
 `dictExt:hadMembers` at its line and column.
 
 ```text
