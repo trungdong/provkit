@@ -328,7 +328,7 @@ sharing exists for that purpose.
 production or rule of the Recommendation, and that the `rule` column
 holds what decides the row, a production number such as `[53]`, a
 section such as `3.7.4`, or a terminal the grammar leaves to another
-specification. The commit "Test against the shared PROV-N probes"
+specification. The commit "Test against the shared PROV-N probes (prov-corpus v2.1.0)"
 lists an empty `rule` column among the things the test fails on, and
 the span above shows that check in `expected`. The CONFORMANCE.md
 probes paragraph beginning "`expected.tsv` gives the result" says both
