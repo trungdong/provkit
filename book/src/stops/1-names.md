@@ -477,7 +477,8 @@ provkit compare /tmp/a.provn /tmp/b.provn; echo $?
 0
 ```
 
-To see what a difference looks like, change the local part instead,
+To see what a difference looks like, restore `prefix ex
+<http://example.org/>` in `/tmp/b.provn` and change the local part instead,
 to `entity(ex:e2)`. Now the IRIs differ and `compare` lists each
 record under the file it came from, and exits 1.
 
