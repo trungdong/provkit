@@ -54,7 +54,7 @@ Rust has no such term. The nearest Cargo words are crate and package, which grou
 
 ### collection and membership (PROV)
 
-A collection is an entity that has members, and `hadMember` links the collection to each member. [PROV-DM section 5.6](https://www.w3.org/TR/2013/REC-prov-dm-20130430/#section-collections) defines both.
+A collection is an entity that has members, and `hadMember` links the collection to each member. [PROV-DM section 5.6](https://www.w3.org/TR/2013/REC-prov-dm-20130430/#component6) defines both.
 
 ### communication (PROV)
 
@@ -118,7 +118,7 @@ A named, optional part of a crate that a user turns on in `Cargo.toml` or on the
 
 ### formal attribute (PROV)
 
-One of the positional arguments of a PROV-N statement, such as the entity and activity in `used(a, e, t)`, as opposed to the optional attribute list in square brackets. [PROV-N section 2.5](https://www.w3.org/TR/2013/REC-prov-n-20130430/#expression-attribute) describes the layout, and [section 3.1](https://www.w3.org/TR/2013/REC-prov-n-20130430/#component1) gives each statement's arguments.
+One of the positional arguments of a PROV-N statement, such as the entity and activity in `used(a, e, t)`, as opposed to the optional attribute list in square brackets. [PROV-N section 2.5](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prov-n-standard-terms) describes the layout, and [section 3.1](https://www.w3.org/TR/2013/REC-prov-n-20130430/#component1) gives each statement's arguments.
 
 ### generate (PROV)
 
@@ -182,7 +182,7 @@ Each value has one owner, and assigning or passing it to another owner moves it,
 
 ### profile (PROV)
 
-A provkit setting that decides how strictly a reader treats input. `Strict` rejects what the grammar forbids, and `Default` accepts the documented relaxations. [Stop 5](../stops/5-provn.md) shows the code.
+A provkit setting that decides how strictly a reader treats input. `Strict` reads the whole grammar and the MUST statements of its prose, and `Default` adds the extensions ProvPy and ProvToolbox write. [Stop 5](../stops/5-provn.md) shows the code.
 
 ### PROV-CONSTRAINTS (PROV)
 
@@ -222,7 +222,7 @@ The set of values a name can hold and the operations on them, such as `u8`, `Str
 
 ### unification (PROV)
 
-Merging two descriptions that share an identifier into one, provided their attributes do not conflict. [PROV-CONSTRAINTS section 2.4](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/#unification-and-merging) defines it.
+Merging two descriptions that share an identifier into one, provided their attributes do not conflict. [PROV-CONSTRAINTS section 4, Unification and Merging](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/#unification-and-merging) defines it.
 
 ### usage (PROV)
 
