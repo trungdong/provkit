@@ -43,11 +43,11 @@ must_use_candidate = "allow"
 broken_intra_doc_links = "warn"
 # ANCHOR_END: lints
 
-# ANCHOR: profile
+# ANCHOR: release_profile
 # Release binaries: cross-crate optimisation (thin LTO), one codegen unit per
 # crate and no symbols. Debug builds are untouched.
 [profile.release]
 lto = "thin"
 codegen-units = 1
 strip = true
-# ANCHOR_END: profile
+# ANCHOR_END: release_profile

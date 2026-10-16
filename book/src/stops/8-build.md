@@ -20,7 +20,7 @@ packaged-crate and feature-subset steps of CI exercise.
 The root manifest ends with the release profile.
 
 ```toml
-{{#include ../../../Cargo.toml:profile}}
+{{#include ../../../Cargo.toml:release_profile}}
 ```
 
 A Cargo profile is a named set of compiler settings, and `release` is
