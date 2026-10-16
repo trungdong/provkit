@@ -78,6 +78,7 @@ fn expected(report: &mut Report) -> BTreeMap<String, Expected> {
     by_name
 }
 
+// ANCHOR: probes
 #[test]
 fn probes_read_as_the_grammar_requires() {
     let mut report = Report::default();
@@ -113,3 +114,4 @@ fn probes_read_as_the_grammar_requires() {
     }
     report.finish(PROBE_COUNT);
 }
+// ANCHOR_END: probes
