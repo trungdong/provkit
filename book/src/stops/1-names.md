@@ -169,9 +169,13 @@ writers' minting and `with_fallback` reach `bind` directly.
 
 Two refusals come first. A prefix that `is_pn_prefix` rejects is
 `Error::InvalidPrefix`, and that covers `_`, a prefix ending in `.`
-and anything with a space or a colon. `prov` or `xsd` at any IRI but
-its fixed one is `Error::ReservedPrefix`, which carries the prefix,
-the expected IRI and the one found. A declaration of `prov` or `xsd`
+and anything with a space or a colon. The row of
+[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
+beginning "`Namespaces::declare` rejects a prefix" gives the reason
+for that refusal. PROV-N cannot write any other prefix, and a table
+that holds only valid prefixes writes to both formats. `prov` or `xsd`
+at any IRI but its fixed one is `Error::ReservedPrefix`, which carries
+the prefix, the expected IRI and the one found. A declaration of `prov` or `xsd`
 at the right IRI is accepted and changes nothing, so a document that
 restates a predeclared binding still reads. Everything else goes to
 `bind`, which replaces an earlier binding of the same prefix in place
@@ -242,9 +246,7 @@ says a namespace declaration must not declare the prefixes `prov` and
 `xsd`; they are predeclared, and the `RESERVED` static cites that
 section. The CONFORMANCE.md row beginning "`Namespaces::declare`
 rejects a prefix" states the library's rule, `prov` or `xsd` at
-another IRI is `Error::ReservedPrefix`, and gives the reason. PROV-N
-cannot write any other prefix, and a table that holds only valid
-prefixes writes to both formats. The departure row beginning "`xsd` is
+another IRI is `Error::ReservedPrefix`. The departure row beginning "`xsd` is
 `http://www.w3.org/2001/XMLSchema#`" fixes which IRI `xsd` is bound
 to. Table 1 of PROV-N, the prefix table of PROV-DM and the PROV-JSON
 note all print `http://www.w3.org/2000/10/XMLSchema#`, but the 2001
@@ -257,8 +259,8 @@ only that one.
 The CONFORMANCE.md row beginning "The underscore is never a prefix"
 gives the reason. `_:` is the blank-node form, which names no IRI, so
 PROV-JSON keys that start `_:` are blank and PROV-N rejects `_:x`
-because it is not a `QUALIFIED_NAME`. Two lines of code enforce it for
-different callers. `PN_PREFIX` starts with a `PN_CHARS_BASE`
+because it is not a `QUALIFIED_NAME`. Two checks enforce it, one per
+caller. `PN_PREFIX` starts with a `PN_CHARS_BASE`
 character, and `_` only enters at `PN_CHARS_U`, so `is_pn_prefix("_")`
 is false and `declare` refuses it as an invalid prefix; the doc comment
 on `declare` says as much. `Scope::resolve_parts` then checks for the
@@ -334,7 +336,7 @@ prefix adds to it.
   returns the `Err` early.
   [Recoverable errors with Result](https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html)
 - **`then_some` and `is_some_and`**, first used in `provkit/src/pn.rs`
-  at `hex_pair_follows`. `is_some_and` tests the value inside an
+  at `local_char` and `hex_pair_follows`. `is_some_and` tests the value inside an
   `Option` and is false for `None`; `then_some` on a `bool` makes a
   `Some` when true and `None` when false, as `local_char` does for `%`.
   [Option](https://doc.rust-lang.org/std/option/enum.Option.html)
@@ -346,7 +348,7 @@ prefix adds to it.
 - **`macro_rules!` with `$(...)*` repetition**, first used in
   `provkit/src/qname.rs` at `names!`. The matcher captures one row
   per repetition and the body is written out once per row, which is
-  how twenty-seven statics come from one template.
+  how every static in `well_known` comes from one template.
   [Macros](https://doc.rust-lang.org/book/ch20-05-macros.html),
   [Macros by example](https://doc.rust-lang.org/reference/macros-by-example.html)
 - **`#[doc = concat!(...)]`**, first used in `provkit/src/qname.rs` at
@@ -398,7 +400,7 @@ IRIs that differ in Unicode normalisation are two names. The unit-test
 binary reports the one test; the other test binaries report zero.
 
 ```text
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 360 filtered out; finished in 0.00s
+test result: ok. 1 passed
 ```
 
 ```sh
@@ -410,7 +412,7 @@ default namespace, and `prov:type` and `xsd:int` through the
 predeclared bindings of a fresh table.
 
 ```text
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 360 filtered out; finished in 0.00s
+test result: ok. 1 passed
 ```
 
 ```sh
@@ -422,7 +424,7 @@ merges them with `with_fallback`, and resolves a name through each
 prefix.
 
 ```text
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 360 filtered out; finished in 0.00s
+test result: ok. 1 passed
 ```
 
 ## Try it
