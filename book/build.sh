@@ -4,6 +4,8 @@
 set -eu
 cd "$(dirname "$0")/.."
 
+python3 -I book/tools/rust_notes.py --self-test
+python3 -I book/tools/rust_notes.py
 cargo build -p provkit --target-dir book/target
 cargo doc -p provkit --no-deps --target-dir book/target
 mdbook build book
