@@ -222,7 +222,7 @@ The set of values a name can hold and the operations on them, such as `u8`, `Str
 
 ### unification (PROV)
 
-Merging two descriptions that share an identifier into one, provided their attributes do not conflict. [PROV-CONSTRAINTS section 4, Unification and Merging](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/#unification-and-merging) defines it.
+Merging two descriptions that share an identifier into one, provided their attributes do not conflict. [PROV-CONSTRAINTS section 2.4, Unification and Merging](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/#unification-and-merging) defines it.
 
 ### usage (PROV)
 
