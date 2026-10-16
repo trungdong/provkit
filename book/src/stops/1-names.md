@@ -31,7 +31,7 @@ the Unicode ranges SPARQL lists, and no `_` or digit. Later characters
 may be any `PN_CHARS`, or a `.` so long as something follows it, which
 is why `end` only moves on a `PN_CHARS` character and the loop steps
 over a `.` without extending the result. The book shows this span and
-the seven that follow as they stand in the files, and compiles none of
+those that follow as they stand in the files, and compiles none of
 them.
 
 ```rust,ignore
