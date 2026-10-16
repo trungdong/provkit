@@ -1,6 +1,7 @@
 //! Character classes of the PROV-N name grammar (Recommendation section
-//! 3.8, with `PN_PREFIX`, `PN_CHARS_BASE`, `PN_CHARS_U` and `PN_CHARS` from
-//! SPARQL).
+//! 3.7.1, productions [52] to [56], with `PN_PREFIX`, `PN_CHARS_BASE`,
+//! `PN_CHARS_U` and `PN_CHARS` from SPARQL 1.0, productions [95], [96],
+//! [98] and [99]).
 
 /// `PN_CHARS_ESC` [55]: the characters that may follow `\` in a local part,
 /// and that a local part holds only after one.
@@ -35,6 +36,7 @@ fn is_pn_local_other(c: char) -> bool {
     matches!(c, '/' | '@' | '~' | '&' | '+' | '*' | '?' | '#' | '$' | '!')
 }
 
+// ANCHOR: prefix_len
 /// Length of a `PN_PREFIX` at the start of `s`, which cannot end in `.`.
 pub(crate) fn prefix_len(s: &str) -> Option<usize> {
     let mut chars = s.char_indices();
@@ -52,12 +54,14 @@ pub(crate) fn prefix_len(s: &str) -> Option<usize> {
     }
     Some(end)
 }
+// ANCHOR_END: prefix_len
 
 /// Whether all of `s` is one `PN_PREFIX`.
 pub(crate) fn is_pn_prefix(s: &str) -> bool {
     prefix_len(s) == Some(s.len())
 }
 
+// ANCHOR: local_char
 /// How PROV-N writes one character of a local part.
 pub(crate) enum LocalChar {
     /// As it is.
@@ -97,3 +101,4 @@ pub(crate) fn local_char(local: &str, at: usize, c: char) -> Option<LocalChar> {
         None
     }
 }
+// ANCHOR_END: local_char

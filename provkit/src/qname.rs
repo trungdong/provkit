@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use crate::{Error, Result, pn};
 
+// ANCHOR: qname
 /// A PROV identifier: a namespace IRI and a local part.
 ///
 /// A name denotes the IRI its two parts join to. Equality, ordering and
@@ -27,6 +28,7 @@ pub struct QName {
     namespace: Arc<str>,
     local: Box<str>,
 }
+// ANCHOR_END: qname
 
 impl QName {
     /// A name in `namespace` with local part `local`.
@@ -100,6 +102,7 @@ impl QName {
     }
 }
 
+// ANCHOR: qname_identity
 impl PartialEq for QName {
     fn eq(&self, other: &Self) -> bool {
         self.is(&other.namespace, &other.local)
@@ -139,6 +142,7 @@ impl Hash for QName {
         state.write_u8(0xff);
     }
 }
+// ANCHOR_END: qname_identity
 
 impl fmt::Debug for QName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -153,6 +157,7 @@ impl fmt::Display for QName {
     }
 }
 
+// ANCHOR: well_known
 /// Well-known names in the `prov:` and `xsd:` namespaces.
 pub mod well_known {
     use super::QName;
@@ -204,6 +209,7 @@ pub mod well_known {
         XSD_BOOLEAN = "xsd" XSD:"boolean";
     }
 }
+// ANCHOR_END: well_known
 
 #[cfg(test)]
 mod tests {

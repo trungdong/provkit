@@ -15,6 +15,7 @@ pub(crate) const PROV_PREFIX: &str = "prov";
 static RESERVED: LazyLock<[(&str, Arc<str>); 2]> =
     LazyLock::new(|| [(PROV_PREFIX, Arc::from(PROV)), ("xsd", Arc::from(XSD))]);
 
+// ANCHOR: namespaces
 /// A default namespace plus an ordered prefix-to-IRI table.
 ///
 /// `prov` and `xsd` are always present and cannot be moved. The table is a
@@ -31,6 +32,7 @@ pub struct Namespaces {
     /// search starts. Zero before the first mint. Not part of equality.
     next_minted: usize,
 }
+// ANCHOR_END: namespaces
 
 /// Compares the default namespace and the bindings, ignoring their order.
 /// The minting counter takes no part.
@@ -58,6 +60,7 @@ impl Namespaces {
         self.default.as_deref()
     }
 
+    // ANCHOR: declare
     /// Bind `prefix` to `iri`, replacing an earlier binding of the same prefix.
     ///
     /// # Errors
@@ -85,6 +88,7 @@ impl Namespaces {
         self.bind(prefix, Arc::from(iri));
         Ok(())
     }
+    // ANCHOR_END: declare
 
     /// Bind `prefix` to `iri`, replacing an earlier binding of `prefix` and
     /// keeping its place in the declaration order.
@@ -209,6 +213,7 @@ impl Namespaces {
     }
 }
 
+// ANCHOR: scope
 /// A table read through to a parent table, without merging the two. A
 /// bundle's table in front of its document's is the case it serves: the
 /// bundle's bindings and default win, and anything the bundle leaves out
@@ -280,6 +285,7 @@ impl<'a> Scope<'a> {
         QName::in_namespace(ns, local).map_err(|_| Error::InvalidQName(format!("{prefix}:{local}")))
     }
 }
+// ANCHOR_END: scope
 
 /// The writers' side of a scope: names render against `own`, then against
 /// `parent`, and a minted prefix is added to `own`.

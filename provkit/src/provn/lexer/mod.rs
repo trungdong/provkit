@@ -1,4 +1,4 @@
-//! PROV-N tokeniser (Recommendation section 3.8).
+//! PROV-N tokeniser (Recommendation section 3.7, terminal productions [52] to [62]).
 //!
 //! Keywords are not distinguished here: every bare or prefixed name is a
 //! `Name`, and the parser decides whether a name at statement start is a
