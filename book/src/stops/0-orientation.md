@@ -201,8 +201,8 @@ in `provkit/README.md` among them. Two groups report, the tests that run
 and the `compile_fail` tests that must not build.
 
 ```text
-test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+test result: ok. 11 passed
+test result: ok. 4 passed
 ```
 
 ```sh
