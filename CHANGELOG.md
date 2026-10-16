@@ -22,6 +22,10 @@ The first release.
   `compare` two documents, with prebuilt binaries for macOS, Linux and
   Windows on each release. The command reference is in the
   [README](https://github.com/trungdong/provkit#command-line).
+- A contributor guide under `book/`, built with mdBook and published at
+  <https://trungdong.github.io/provkit/>, which reads the source one layer
+  at a time with live snippets, a generated index of Rust idioms and a
+  glossary.
 
 Not in this release: a lenient PROV-N profile, a builder API, an index or
 store, PROV-JSONLD, PROV-XML, PROV-O, and validation of PROV-CONSTRAINTS.
