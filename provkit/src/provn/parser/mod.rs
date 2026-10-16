@@ -84,6 +84,7 @@ pub(super) enum Suffix<'t> {
     Datatype(NameParts<'t>),
 }
 
+// ANCHOR: parser
 pub(super) struct Parser<'t> {
     source: &'t str,
     tokens: &'t [Token],
@@ -95,6 +96,7 @@ pub(super) struct Parser<'t> {
     /// The outermost extensibility expressions, in source order.
     pub(super) ignored: Vec<Ignored>,
 }
+// ANCHOR_END: parser
 
 impl<'t> Parser<'t> {
     /// A parser over `tokens`, which are lexed from `source` and end with
@@ -234,6 +236,7 @@ impl<'t> Parser<'t> {
         }
     }
 
+    // ANCHOR: parse_document
     // document ::= "document" namespaceDeclarations? (expression | bundle)* "endDocument"
 
     pub(super) fn document(&mut self, builder: &mut DocumentBuilder) -> Result<()> {
@@ -265,6 +268,7 @@ impl<'t> Parser<'t> {
         builder.end_document();
         Ok(())
     }
+    // ANCHOR_END: parse_document
 
     // bundle ::= "bundle" identifier namespaceDeclarations? expression* "endBundle"
 
@@ -293,6 +297,7 @@ impl<'t> Parser<'t> {
         Ok(())
     }
 
+    // ANCHOR: parse_statement
     /// One statement: a PROV expression, sent to `builder` as a record, or an
     /// extensibility expression, parsed and recorded in `ignored`. A keyword
     /// with a prefix starts an extensibility expression (section 5), except
@@ -315,6 +320,7 @@ impl<'t> Parser<'t> {
             Ok(())
         }
     }
+    // ANCHOR_END: parse_statement
 
     /// Whether the tokens after the current `prov:mentionOf` have the shape
     /// of a mention (PROV-LINKS): `(`, three names separated by `,`, then

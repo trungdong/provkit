@@ -9,6 +9,7 @@ use crate::provn::Relaxation;
 use crate::{Namespaces, Result};
 
 impl<'t> Parser<'t> {
+    // ANCHOR: namespace_declarations
     // namespaceDeclarations ::= (defaultNamespaceDeclaration | namespaceDeclaration)*
     pub(super) fn namespace_declarations(&mut self) -> Result<Namespaces> {
         let mut ns = Namespaces::new();
@@ -63,6 +64,7 @@ impl<'t> Parser<'t> {
             }
         }
     }
+    // ANCHOR_END: namespace_declarations
 
     /// The prefix in a `prefix` declaration. Production [46] takes a
     /// `PN_PREFIX`, which has no escapes, so the text as written is tested,

@@ -11,6 +11,7 @@ use crate::error::clip;
 use crate::pn::{PN_CHARS_ESC, hex_pair_follows, is_bare_local_char, prefix_len};
 use crate::{Error, Result};
 
+// ANCHOR: token_kind
 /// A token's class and payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum TokenKind {
@@ -53,6 +54,7 @@ pub(crate) enum TokenKind {
     /// End of input.
     Eof,
 }
+// ANCHOR_END: token_kind
 
 impl TokenKind {
     /// The digits of an unsigned `Int`, which is a bare name made of digits
@@ -200,6 +202,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    // ANCHOR: next_token
     fn next_token(&mut self) -> Result<Token> {
         let (line, column, start) = (self.line, self.column(), self.pos);
         let rest = self.rest();
@@ -238,6 +241,7 @@ impl<'a> Lexer<'a> {
             end: self.pos,
         })
     }
+    // ANCHOR_END: next_token
 
     /// A dateTime, integer, name or marker, in that order of preference.
     fn literal_or_name(&mut self) -> Result<TokenKind> {

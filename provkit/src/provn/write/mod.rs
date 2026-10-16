@@ -23,6 +23,7 @@ pub fn write(document: &Document, out: &mut impl io::Write) -> Result<()> {
     Ok(())
 }
 
+// ANCHOR: provn_to_string
 /// Write `document` as a PROV-N string.
 ///
 /// A namespace with no declared prefix gets a minted `ns1`, `ns2`, ... and
@@ -68,6 +69,7 @@ pub fn to_string(document: &Document) -> Result<String> {
     s.push_str("endDocument\n");
     Ok(s)
 }
+// ANCHOR_END: provn_to_string
 
 /// One record as a single PROV-N expression, with no indentation.
 ///
@@ -206,6 +208,7 @@ fn write_bundle(bundle: &Bundle, outer: &Namespaces, s: &mut String) -> Result<(
     Ok(())
 }
 
+// ANCHOR: expression
 fn expression(r: &Record, names: &mut WriteScope<'_>, s: &mut String) -> Result<()> {
     // The reader would reject such an attribute, so the writer does too.
     r.check_attributes()?;
@@ -257,6 +260,7 @@ fn expression(r: &Record, names: &mut WriteScope<'_>, s: &mut String) -> Result<
     s.push(')');
     Ok(())
 }
+// ANCHOR_END: expression
 
 /// The formal `attr` of `record`, or `-` when it is absent.
 fn formal(record: &Record, attr: FormalAttr, names: &mut WriteScope<'_>) -> Result<String> {

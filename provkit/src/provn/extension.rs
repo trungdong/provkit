@@ -12,6 +12,7 @@ use crate::{DateTime, Result};
 const MAX_DEPTH: usize = 64;
 
 impl Parser<'_> {
+    // ANCHOR: extensibility_expression
     /// An outermost extensibility expression, whose name is the current
     /// token. It is recorded in `ignored` once it has parsed.
     pub(super) fn extensibility_expression(&mut self) -> Result<()> {
@@ -24,6 +25,7 @@ impl Parser<'_> {
         });
         Ok(())
     }
+    // ANCHOR_END: extensibility_expression
 
     // extensibilityExpression ::= QUALIFIED_NAME "(" optionalIdentifier extensibilityArgument
     //                             ( "," extensibilityArgument )* optionalAttributeValuePairs ")"
@@ -110,6 +112,7 @@ impl Parser<'_> {
     }
 }
 
+// ANCHOR: enter
 /// Check that a level below `depth` fits, before parsing it at `token`.
 fn enter(depth: usize, token: &Token) -> Result<()> {
     if depth < MAX_DEPTH {
@@ -122,6 +125,7 @@ fn enter(depth: usize, token: &Token) -> Result<()> {
         ))
     }
 }
+// ANCHOR_END: enter
 
 #[cfg(test)]
 mod tests {
