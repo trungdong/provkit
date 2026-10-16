@@ -31,23 +31,31 @@ path holds is therefore the CLI's question. Both are read in
 ## Lenient reading
 
 Both readers refuse rather than guess. A mode that reads what it can and
-reports the rest needs a report type for what it skipped. That type is
-planned for 0.3.0, together with the structural diff. The readers are
-read in [stop 4](stops/4-json.md) and [stop 5](stops/5-provn.md).
+reports the rest needs a report type for what it skipped. That type
+arrives in 0.3.0, together with the structural diff. `provn::read_report`
+is not that mode. It reads under a profile, fails as `provn::read`
+does, and lists the extensibility expressions it left out of the
+document because PROV defines no meaning for them. The readers are
+read in
+[stop 4](stops/4-json.md) and [stop 5](stops/5-provn.md).
 
 ## Source positions on records
 
 Errors carry positions, but records do not, because nothing consumes
-them yet. Positions on records arrive with validation in 0.4.0. The record types are read in [stop 3](stops/3-records.md).
+them yet. Positions on records arrive with validation in 0.4.0. Until
+then `Error::Unification` names the record it concerns by its
+identifier, and `Error::InRecord` by its section and key. The record
+types are read in [stop 3](stops/3-records.md).
 
 ## An atomic `-o` in the CLI
 
 `convert` serialises the whole document in memory and then writes the
 output file in one call. A write to a temporary file followed by a
-rename arrives when the CLI grows a second command that writes. The command is read in [stop 6](stops/6-cli.md).
+rename arrives when the CLI grows a second command that writes. The
+command is read in [stop 6](stops/6-cli.md).
 
 ## A `prefixed` column in the records table
 
-The records table has no `prefixed` column.
-PROV-Dictionary's records need a prefixed keyword. The column arrives with that extension. The table is read in
-[stop 3](stops/3-records.md).
+The records table has no `prefixed` column. PROV-Dictionary's records
+need a prefixed keyword. The column arrives with that extension. The
+table is read in [stop 3](stops/3-records.md).
