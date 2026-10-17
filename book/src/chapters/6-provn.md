@@ -355,12 +355,13 @@ Section 5 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#extensibility)
 says "PROV-N compliant parsers MUST be able to parse expressions
 matching the extensibilityExpression production" and "PROV compliant
-implementations MAY ignore these expressions". That pair of sentences
-is the reason; ProvPy rejects them under `strict` and `default`
+implementations MAY ignore these expressions". The reader does both,
+parsing them under either profile and leaving them out of the document
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Extensibility expressions are parsed under both profiles and left
-out"). Section 3.7.1 requires a prefix to refer to a declared
-namespace, but the reader ignores the whole expression, contents
+out"). ProvPy rejects them under `strict` and `default`, so a document
+that holds one reads in provkit and fails in ProvPy. Section 3.7.1
+requires a prefix to refer to a declared namespace, but the reader ignores the whole expression, contents
 included, and reports it, so `ex:foo(zz:a)` reads with `zz`
 undeclared, while a time is checked because production [44] defines
 its form
@@ -393,16 +394,15 @@ from `char::from_u32`, which returns `None` for a surrogate.
 
 ### Why does every error carry a line and a column?
 
-`Error::Syntax` carries the position of text the grammar rejects and
-`Error::At` wraps the error for a name, literal or record, with the
-column counted in characters, because the PROV-N reader knows where
-each token sits
+Every error from the PROV-N reader carries a line and a column,
+because the lexer stamps every token with its position and the parser
+knows which token it is on. `Error::Syntax` carries the position of
+text the grammar rejects, and `Error::At` wraps the error for a name,
+literal or record, with the column counted in characters
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"Every error from the PROV-N reader carries a line and a column"). The
-lexer stamps
-every token with its line and column and `at` copies them from the
-token onto any error from a lower layer, so both carry a line and
-column a caller can print.
+"Every error from the PROV-N reader carries a line and a column").
+`at` copies the line and column from the token onto any error from a
+lower layer, so both variants carry a position a caller can print.
 
 ### Why does the lexer not know keywords?
 
