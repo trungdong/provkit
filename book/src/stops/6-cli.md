@@ -1,10 +1,9 @@
 # Stop 6: The command line
 
 The `provkit-cli` crate is the binary `provkit`, and it owns everything
-the library refuses to. The repository's `CLAUDE.md`, the short guide
-a contributor reads first, draws the line. The library reads `&str`
-and writes to `impl std::io::Write` and never touches a file, and the
-CLI owns files, format detection and exit codes. This stop
+the library refuses to. The library reads `&str` and writes to
+`impl std::io::Write` and never touches a file, and the CLI owns
+files, format detection and exit codes. This stop
 reads the clap definitions that turn two structs and an enum into the
 commands and their help, the function both
 commands read their input through, the sniffer that tells PROV-JSON
@@ -38,9 +37,9 @@ The derive of `Subcommand` makes `convert` and `compare` from the two
 variants, lower-cased, and each variant carries the struct of its
 arguments. The doc comment on a variant is its help. `provkit compare
 -h` prints the first paragraph, without its full stop, and `provkit
-compare --help` prints the whole comment. The text on `Convert`
-states the order in which `-f`, `-t`, the extension and the content
-decide a format, and the text on `Compare` says what the listing is,
+compare --help` prints the whole comment. The help on `Convert`
+gives the order in which `-f`, `-t`, the extension and the content
+decide a format, and the help on `Compare` says what the listing is,
 how a name with no declared [prefix](../reference/glossary.md#namespace-and-prefix-prov) is written, and what the three
 exit codes mean. `ConvertArgs`, below the span, derives `Args`. Its
 positional `input` is a `PathBuf`, and `#[arg(short, long)]` makes
@@ -87,12 +86,12 @@ first, standard input through `io::read_to_string` or the file through
 naming the input. The message gains a hint when the error's kind is
 `InvalidData` and `starts_with_utf16_mark`, below the span, finds a
 UTF-16 byte order mark; that function opens the file and reads two
-bytes only after the UTF-8 read has failed, as its doc says. The
-format is then resolved in the order the help states. `from` wins,
+bytes only after the UTF-8 read has failed. The format is then
+resolved in a fixed order. `from` wins,
 then `Format::from_path`, then `Format::sniff`, and `or_else` makes
 each step lazy, so the text is sniffed only when the flag and the
 extension decide nothing. `-` has no extension, so standard input goes
-straight to sniffing, as the comment says. When all three give `None`
+straight to sniffing. When all three give `None`
 the error names the flag to use. The read itself goes through
 `json::read` or
 [`provn::read_report`](../api/provkit/provn/fn.read_report.html) under
@@ -105,7 +104,7 @@ format from `-t`, then the extension of `-o`, then PROV-N when the
 output is standard output, and refuses a file with any other
 extension. It reads the document, serialises it into a `Vec<u8>`
 before any file is touched, so a library error never leaves a partial
-file, as its comment says, and then writes the bytes through
+file, and then writes the bytes through
 `write_stdout` or `fs::write`. `write_stdout` locks standard output,
 writes and flushes, and treats a broken pipe as a normal end, so
 `provkit convert big.json | head` exits quietly.
@@ -116,8 +115,8 @@ writes and flushes, and treats a broken pipe as a normal end, so
 is what `value_enum` on the flags needs, and the doc on each variant
 is the text clap prints beside the possible values. `WS` is an
 associated constant holding the grammar's four whitespace characters,
-space, tab, carriage return and line feed, and its doc says no other
-Unicode space separates PROV-N tokens. `from_path` reads the
+space, tab, carriage return and line feed, and no other Unicode space
+separates PROV-N tokens. `from_path` reads the
 extension, in any letter case through `eq_ignore_ascii_case`, and
 returns `None` for any other extension and for `-`.
 
@@ -126,7 +125,7 @@ returns `None` for any other extension and for `-`.
 ```
 
 `sniff` first drops a leading byte order mark, because both readers
-drop one, as the comment says. The loop then skips what the grammar
+drop one. The loop then skips what the grammar
 calls trivia. It trims the four whitespace characters, and when `//`
 follows it moves past the end of the line, when `/*` follows it moves
 past the next `*/`, and otherwise it stops. `split_once` returns
@@ -135,14 +134,13 @@ nothing to look at, so a text that is only a comment sniffs as
 neither format. The decision is made on what is left. `{` is
 PROV-JSON, and `document` is PROV-N when nothing, a whitespace
 character or the start of a comment follows it, so `documentary` and
-`document(` are neither. The second comment names `skip_trivia` in
-the library's lexer from stop 5, which is private to the library, so
-this loop mirrors it rather than calling it.
+`document(` are neither. `skip_trivia` in the library's lexer from
+stop 5 does the same job, but it is private to the library, so this
+loop mirrors it rather than calling it.
 
 ### provkit-cli/src/compare.rs
 
-The module doc says what the command prints. `CompareArgs`, above
-the span, holds the two positional documents, `-f` for the format of
+`CompareArgs`, above the span, holds the two positional documents, `-f` for the format of
 both, and `--unified`, a `bool` flag that is true when present.
 
 ```rust,ignore
@@ -160,7 +158,7 @@ tables and different [record](../reference/glossary.md#record-prov) order, compa
 returns `ExitCode::SUCCESS` with nothing printed. Otherwise it builds
 the whole report in a `String`, one `report_side` call per side with
 the sides swapped, and writes it once, so a failure never leaves half
-of it printed, as the comment says, and returns 1.
+of it printed, and returns 1.
 
 ```rust,ignore
 {{#include ../../../provkit-cli/src/compare.rs:only_in}}
@@ -188,7 +186,7 @@ after the records of that scope. `statement_line` tries
 clone of the table and assigns the clone back on success, so a
 prefix minted by the failed attempt is discarded. When the failure is
 [`Error::Unwritable`](../api/provkit/enum.Error.html#variant.Unwritable)
-it builds the heading the limit row below describes, the keyword, the
+it builds the heading the third card below describes, the keyword, the
 identifier and the offending name as `<IRI>`, ending in `// not valid
 PROV-N`, and any other error is returned.
 
@@ -196,24 +194,18 @@ PROV-N`, and any other error is returned.
 
 ### Why does `compare` exit 0, 1 or 2?
 
-The doc on `Compare` in the first span states the three codes, 0 when
-the documents are equal with nothing printed, 1 when they differ and 2
-on any error, and the README's exit code table says the same with the
-errors spelled out. The test `compare_help_names_the_exit_codes`
-checks that `compare --help` names all three, and
-`compare_read_error_exits_two` checks that a missing file exits 2
-with nothing on standard output and the file's name on standard
-error. The row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "`provconvert -compare` exits 6 on a difference" sets the
-three codes against ProvToolbox's 6 for a difference and 1 for a read
-failure, and leaves its Note column empty. The commit "Add
-provkit compare" says that `Result<ExitCode>` lets one function
-report success, a difference and an error apart, which is the shape
-of `run`. For a record PROV-N cannot write, the limit row quoted two
-cards below says a difference in such a record is still a difference
-and not a failure with exit code 2. No tracked source says why these
-three values were chosen.
+The three codes are 0 when the documents are equal with nothing
+printed, 1 when they differ and 2 on any error. The test
+`compare_help_names_the_exit_codes` checks that `compare --help` names
+all three, and `compare_read_error_exits_two` checks that a missing
+file exits 2 with nothing on standard output and the file's name on
+standard error. ProvToolbox exits 6 for a difference and 1 for a read
+failure
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"`provconvert -compare` exits 6 on a difference"). `Result<ExitCode>`
+lets `run` report success, a difference and an error apart. A
+difference in a record PROV-N cannot write is still a difference,
+exit code 1, and not a failure with exit code 2.
 
 ### Why `anyhow` in the binary and `thiserror` in the library?
 
@@ -229,45 +221,37 @@ prints it and exits, so the error only has to display well.
 `anyhow::Error` holds any error with a chain of contexts,
 `with_context` adds the file name in front of a library error in
 `convert` and `run`, `anyhow!` makes an error from a message, and
-`{:#}` prints the chain on one line. The commit "Add provkit convert
-with pandoc-style format resolution" notes that `Context` wraps an
-error with the file name and that `{e:#}` prints the whole chain, and
-the dependency arrived with the workspace scaffold. Neither commit
-states a reason for using one crate in the library and the other in
-the binary; the code shows the division and the sources describe what
-each crate does.
+`{:#}` prints the chain on one line.
 
 ### Why can `compare` print a record PROV-N cannot write?
 
-The limit row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "`provkit compare` prints a one-sided record or bundle that
-PROV-N cannot write" says such a record, one whose namespace IRI
-holds a character `IRI_REF` forbids, is printed as a heading made of
-the keyword, the identifier and the first unwritable name as
-`<full IRI>`, ending in `// not valid PROV-N`. A name that belongs to
-an [attribute](../reference/glossary.md#attribute-prov) is printed inside `[...]`, and a bundle heading reads
-`bundle <IRI>: // not valid PROV-N`. The exit code stays 1. The
-reason the row gives is that PROV-JSON can hold such an IRI, and a
-difference in such a record is still a difference and not a failure
-with exit code 2. The row also says `provn::statement` still returns
-the error, so the library's contract from stop 5 is unchanged and the
+Such a record, one whose namespace IRI holds a character `IRI_REF`
+forbids, is printed as a heading made of the keyword, the identifier
+and the first unwritable name as `<full IRI>`, ending in `// not valid
+PROV-N`
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"`provkit compare` prints a one-sided record or bundle that PROV-N
+cannot write"). A name that belongs to an
+[attribute](../reference/glossary.md#attribute-prov) is printed inside
+`[...]`, and a bundle heading reads `bundle <IRI>: // not valid
+PROV-N`. The exit code stays 1, because PROV-JSON can hold such an
+IRI, and a difference in such a record is still a difference and not
+a failure with exit code 2. `provn::statement` still returns the
+error, so the library's contract from stop 5 is unchanged and the
 heading is the binary's own rendering, which `statement_line` builds
 from the name inside `Error::Unwritable`. The test
 `compare_marks_records_prov_n_cannot_write` pins each form.
 
 ### Why is the listing not a PROV-N document?
 
-The doc on `Compare` says the listing is not a PROV-N document, and
-that its names resolve with the declarations of the file they came
-from. The commit "Add provkit compare" says every side renders with
-its own document's namespaces, and the commit "Make compare output
-resolvable and fix the CLI messages" says every line of one file, and
-of one bundle, renders against one namespace table, so a minted `nsN`
-prefix means one IRI in its scope, and that a `prefix nsN <IRI>` line
-is printed for each minted prefix after the records of that scope.
-The README adds that such a line applies to the whole scope, the
-records printed before it included. The two sides may bind one prefix
+The listing is not a PROV-N document; its names resolve with the
+declarations of the file they came from. Every side renders with its
+own document's namespaces, and every line of one file, and of one
+bundle, renders against one namespace table, so a minted `nsN` prefix
+means one IRI in its scope. A `prefix nsN <IRI>` line is printed for
+each minted prefix after the records of that scope, and applies to
+the whole scope, the records printed before it included. The two
+sides may bind one prefix
 to two IRIs, and each side is printed as its own file would write it,
 so a reader resolves the lines under one heading with that file's
 declarations and the `prefix` lines beneath them. The tests
@@ -276,103 +260,90 @@ declarations and the `prefix` lines beneath them. The tests
 
 ## The Rust here
 
-- **clap's derive API**, first used in `provkit-cli/src/main.rs` at
-  `Cli`. `#[derive(Parser)]` on the top struct, `Subcommand` on the
-  enum, `Args` on each argument struct and `ValueEnum` on `Format`
-  generate the parser and its help; `#[command]` sets command
-  attributes and `#[arg]` names the flag letters; a doc comment
-  becomes the help text, the first paragraph for `-h` and all of it
-  for `--help`.
+- **clap's derive API**. `#[derive(Parser)]` on the top struct,
+  `Subcommand` on the enum, `Args` on each argument struct and
+  `ValueEnum` on `Format` generate the parser and its help; `#[command]`
+  sets command attributes and `#[arg]` names the flag letters; a doc
+  comment becomes the help text, the first paragraph for `-h` and all of
+  it for `--help`.
   [clap derive reference](https://docs.rs/clap/latest/clap/_derive/index.html),
   [Doc comments](https://docs.rs/clap/latest/clap/_derive/index.html#doc-comments)
-- **`anyhow::Result`, `with_context`, `anyhow!` and `bail!`**, first
-  used in `provkit-cli/src/main.rs` at `read_document`. `Result<T>`
-  here is `Result<T, anyhow::Error>`, a type that holds any error;
-  `with_context` wraps an error with a message built only on failure,
-  `anyhow!` makes an error from a format string, and `bail!` in
+- **`anyhow::Result`, `with_context`, `anyhow!` and `bail!`**.
+  `Result<T>` here is `Result<T, anyhow::Error>`, a type that holds any
+  error; `with_context` wraps an error with a message built only on
+  failure, `anyhow!` makes an error from a format string, and `bail!` in
   `compare::run` returns one at once.
   [anyhow](https://docs.rs/anyhow/latest/anyhow/),
   [Context](https://docs.rs/anyhow/latest/anyhow/trait.Context.html),
   [bail!](https://docs.rs/anyhow/latest/anyhow/macro.bail.html)
-- **`{:#}` on an `anyhow::Error`**, first used in
-  `provkit-cli/src/main.rs` at `main`. The alternate display prints
-  the error and every context around it on one line, joined by `: `,
-  where `{}` prints the outermost context alone.
+- **`{:#}` on an `anyhow::Error`**. The alternate display, which `main`
+  uses, prints the error and every context around it on one line,
+  joined by `: `, where `{}` prints the outermost context alone.
   [Display representations](https://docs.rs/anyhow/latest/anyhow/struct.Error.html#display-representations)
-- **`ExitCode` from `main`**, first used in `provkit-cli/src/main.rs`
-  at `main`. Returning `std::process::ExitCode` sets the status
-  without calling `process::exit`, so destructors run; `SUCCESS` and
-  `from(2)` are the values used here.
+- **`ExitCode` from `main`**. Returning `std::process::ExitCode` sets
+  the status without calling `process::exit`, so destructors run;
+  `SUCCESS` and `from(2)` are the values `main` uses.
   [ExitCode](https://doc.rust-lang.org/std/process/struct.ExitCode.html)
-- **`eprintln!`**, first used in `provkit-cli/src/main.rs` at `main`.
-  It writes to standard error, so a message never mixes with the
-  PROV-N or PROV-JSON on standard output.
+- **`eprintln!`**. It writes to standard error, where `main` prints an
+  error, so a message never mixes with the PROV-N or PROV-JSON on
+  standard output.
   [eprintln!](https://doc.rust-lang.org/std/macro.eprintln.html)
-- **`io::read_to_string`**, first used in `provkit-cli/src/main.rs` at
-  `read_document`. A free function that reads any `Read` to the end
-  into a `String`, so standard input and `fs::read_to_string` give the
-  same type to one `map_err`.
+- **`io::read_to_string`**. A free function that reads any `Read` to the
+  end into a `String`, so standard input and `fs::read_to_string` give
+  the same type to one `map_err` in `read_document`.
   [io::read_to_string](https://doc.rust-lang.org/std/io/fn.read_to_string.html)
-- **`io::ErrorKind`**, first used in `provkit-cli/src/main.rs` at
-  `read_document`. `e.kind()` classifies an I/O error, `InvalidData`
+- **`io::ErrorKind`**. `e.kind()` classifies an I/O error, `InvalidData`
   being the kind `fs::read_to_string` returns for text that is not
   UTF-8; `write_stdout` matches `BrokenPipe` with a `match` guard, as
   stop 5's lexer matched on a condition.
   [ErrorKind](https://doc.rust-lang.org/std/io/enum.ErrorKind.html)
-- **`Result::is_ok_and`**, first used in `provkit-cli/src/main.rs` at
-  `starts_with_utf16_mark`. The `Result` twin of stop 1's
-  `is_some_and`; the closure runs on the `Ok` value and an `Err` is
-  `false`, so an unreadable file is simply not a UTF-16 one. The
-  `use std::io::Read as _` at the top of the file brings `read_exact`
-  into scope without a name, as stop 2's `fmt::Write as _` did.
+- **`Result::is_ok_and`**. The `Result` twin of stop 1's `is_some_and`;
+  the closure runs on the `Ok` value and an `Err` is `false`, so in
+  `starts_with_utf16_mark` an unreadable file is simply not a UTF-16
+  one. The `use std::io::Read as
+  _` at the top of the file brings `read_exact` into scope without a
+  name, as stop 2's `fmt::Write as _` did.
   [Result::is_ok_and](https://doc.rust-lang.org/std/result/enum.Result.html#method.is_ok_and)
-- **`Option::as_deref` and `Option::filter`**, first used in
-  `provkit-cli/src/main.rs` at `convert`. `as_deref` turns
-  `&Option<PathBuf>` into `Option<&Path>`, the `Option` twin of stop
-  5's `Result::as_deref`, and `filter` drops the value when the
-  closure says no, so `-o -` becomes `None` and means standard output.
+- **`Option::as_deref` and `Option::filter`**. `as_deref` turns
+  `&Option<PathBuf>` into `Option<&Path>`, the `Option` twin of stop 5's
+  `Result::as_deref`, and `filter` drops the value when the closure says
+  no, so `-o -` in `convert` becomes `None` and means standard output.
   [Option::as_deref](https://doc.rust-lang.org/std/option/enum.Option.html#method.as_deref),
   [Option::filter](https://doc.rust-lang.org/std/option/enum.Option.html#method.filter)
-- **Destructuring an error variant with `..`**, first used in
-  `provkit-cli/src/main.rs` at `located`. `Error::Syntax { line,
-  column, message, .. }` binds three fields by name and ignores the
-  rest, which a `#[non_exhaustive]` variant from stop 3 requires of
-  code outside its crate.
+- **Destructuring an error variant with `..`**. `Error::Syntax { line,
+  column, message, .. }` in `located` binds three fields by name and
+  ignores the rest, which a `#[non_exhaustive]` variant from stop 3 requires of code
+  outside its crate.
   [Destructuring enums](https://doc.rust-lang.org/book/ch19-03-pattern-syntax.html#destructuring-enums),
   [Ignoring remaining parts with `..`](https://doc.rust-lang.org/book/ch19-03-pattern-syntax.html#ignoring-remaining-parts-of-a-value-with-)
-- **A `[char; N]` array as a string pattern**, first used in
-  `provkit-cli/src/format.rs` at `Format::WS`. An array of `char`
+- **A `[char; N]` array as a string pattern**. An array of `char`
   implements `Pattern`, so `trim_start_matches(Self::WS)` and
-  `starts_with(Self::WS)` match any one of the four; the constant
-  itself is an associated constant as stop 3 introduced them.
+  `starts_with(Self::WS)` match any one of the four; the constant itself
+  is an associated constant as stop 3 introduced them.
   [Pattern](https://doc.rust-lang.org/std/str/pattern/trait.Pattern.html)
 - **`eq_ignore_ascii_case`, `strip_prefix`, `trim_start_matches` and
-  `split_once`**, first used in `provkit-cli/src/format.rs` at
-  `from_path` and `sniff`. `eq_ignore_ascii_case` compares without
-  making a lower-cased copy, `trim_start_matches` drops every leading
-  match, and `strip_prefix` and `split_once` return `None` when the
-  pattern is absent, so the sniffer's fallbacks are `unwrap_or` and
-  `map_or` rather than `?`.
+  `split_once`**. `eq_ignore_ascii_case` compares without making a
+  lower-cased copy, `trim_start_matches` drops every leading match, and
+  `strip_prefix` and `split_once` return `None` when the pattern is
+  absent, so the fallbacks in `from_path` and `sniff` are `unwrap_or`
+  and `map_or` rather than `?`.
   [str methods](https://doc.rust-lang.org/std/primitive.str.html#method.strip_prefix)
-- **`HashSet::insert` inside a `filter`**, first used in
-  `provkit-cli/src/compare.rs` at `only_in`. `insert` returns whether
-  the value was new, so `seen.insert(*r)` both remembers a record and
-  decides whether to keep it, and `collect` gathers the survivors into
-  a `Vec`; the set borrows its records as stop 3's did.
+- **`HashSet::insert` inside a `filter`**. `insert` returns whether the
+  value was new, so `seen.insert(*r)` in `only_in` both remembers a
+  record and decides whether to keep it, and `collect` gathers the survivors into a
+  `Vec`; the set borrows its records as stop 3's did.
   [HashSet::insert](https://doc.rust-lang.org/std/collections/struct.HashSet.html#method.insert),
   [Processing items with iterators](https://doc.rust-lang.org/book/ch13-02-iterators.html)
-- **A lifetime parameter on a function**, first used in
-  `provkit-cli/src/compare.rs` at `only_in`. Stops 1 and 5 put a
-  lifetime on a struct and on a method; `only_in<'a>` names one on a
-  free function so the returned `Vec<&'a Record>` is tied to `mine`
-  and not to `theirs`, which elision could not express with two
-  reference inputs.
+- **A lifetime parameter on a function**. Stops 1 and 5 put a lifetime
+  on a struct and on a method; `only_in<'a>` names one on a free
+  function so the returned `Vec<&'a Record>` is tied to `mine` and not
+  to `theirs`, which elision could not express with two reference
+  inputs.
   [Lifetime annotations in function signatures](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-annotations-in-function-signatures)
-- **Clone, try, assign back**, first used in
-  `provkit-cli/src/compare.rs` at `statement_line`, below the span.
-  The namespace table is cloned, the writer runs against the clone,
-  and `*namespaces = trial` commits it only on success, so a failed
-  line leaves the table as it was.
+- **Clone, try, assign back**. In `statement_line` the namespace table
+  is cloned, the writer runs against the clone, and `*namespaces =
+  trial` commits it only on success, so a failed line leaves the table
+  as it was.
   [Clone](https://doc.rust-lang.org/std/clone/trait.Clone.html)
 
 ## Run this
