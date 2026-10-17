@@ -359,9 +359,11 @@ implementations MAY ignore these expressions". The reader does both,
 parsing them under either profile and leaving them out of the document
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Extensibility expressions are parsed under both profiles and left
-out"). ProvPy rejects them under `strict` and `default`, so a document
-that holds one reads in provkit and fails in ProvPy. Section 3.7.1
-requires a prefix to refer to a declared namespace, but the reader ignores the whole expression, contents
+out"). ProvPy rejects them under `strict` and `default` and skips
+them with a warning under `lenient`, so a document that holds one
+reads in provkit under either profile and in ProvPy only under
+`lenient`. Section 3.7.1 requires a prefix to refer to a declared
+namespace, but the reader ignores the whole expression, contents
 included, and reports it, so `ex:foo(zz:a)` reads with `zz`
 undeclared, while a time is checked because production [44] defines
 its form
