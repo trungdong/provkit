@@ -1,6 +1,6 @@
 # Summary
 
-[provkit, read in order](index.md)
+[The provkit book](index.md)
 
 # Start here
 
