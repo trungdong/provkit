@@ -94,7 +94,7 @@ The top-level PROV-N construct, `document ... endDocument`, which holds namespac
 
 ### edition (Rust)
 
-A named set of language rules, such as 2021, that a crate opts into with `edition` in `Cargo.toml`. Crates on different editions link together ([the Rust edition guide](https://doc.rust-lang.org/edition-guide/)).
+A named set of language rules, such as 2021, that a crate opts into with `edition` in `Cargo.toml` ([the Rust edition guide](https://doc.rust-lang.org/edition-guide/)). Crates on different editions link together.
 
 ### end and start (PROV)
 
@@ -162,7 +162,7 @@ Code that writes code. Declarative macros (`macro_rules!`) match patterns, and p
 
 ### mention (PROV)
 
-The relation `prov:mentionOf`, which says one entity is a view of another entity inside a named bundle. It parses as an extensibility expression in PROV-N ([PROV-Links section 2](https://www.w3.org/TR/2013/NOTE-prov-links-20130430/#term-mention)).
+The relation `prov:mentionOf`, which says one entity is a view of another entity inside a named bundle ([PROV-Links section 2](https://www.w3.org/TR/2013/NOTE-prov-links-20130430/#term-mention)). It parses as an extensibility expression in PROV-N.
 
 ### module (Rust)
 
