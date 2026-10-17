@@ -128,67 +128,62 @@ with a comment giving the reason, for example `too_many_arguments` on
 
 ### Why do readers take `&str` and writers take `impl Write`?
 
-The crate doc states the rule and its consequence in one sentence.
-Readers take `&str` and writers take `&mut impl std::io::Write`, "so
-the library never touches files". Opening a path, sniffing a format from an
-extension and reporting `file:line:column` are the command line's job,
-and the README describes them under the CLI. A library that only sees
-strings and writers runs anywhere a string can be made, and
-`.github/workflows/ci.yml` builds `provkit` for `wasm32-unknown-unknown`,
-a target with no filesystem, with nothing to exclude.
+Readers take `&str` and writers take `&mut impl std::io::Write`, so
+the library never touches files. Opening a path, sniffing a format from
+an extension and reporting `file:line:column` are the command line's
+job. A library that only sees strings and writers runs anywhere a
+string can be made, and `.github/workflows/ci.yml` builds `provkit` for
+`wasm32-unknown-unknown`, a target with no filesystem, with nothing to
+exclude.
 
 ### Why two features?
 
-The `# Features` section of the crate doc lists `json` with `serde` and
-`serde_json`, and `provn` with nothing. The features table above matches
-it. A user who only exchanges PROV-N switches `json` off and pays
-nothing for the serde crates; the `cargo check` under Run this shows
-them absent from the build. The `indexmap/serde` entry was added so that
-a build without `json` depends on neither `serde` nor `serde_core`,
-which an `indexmap` built with its `serde` feature would have pulled in.
+`json` is the only feature with dependencies behind it, `serde` and
+`serde_json`. A user who only exchanges PROV-N switches `json` off and
+pays nothing for the serde crates; the `cargo check` under Run this
+shows them absent from the build. The `indexmap/serde` entry sits in
+the `json` list for the same reason, so a build without `json` depends
+on neither `serde` nor `serde_core`, which an `indexmap` built with its
+`serde` feature would pull in.
 
 ### Why does every type sit at the crate root?
 
-The commit that made the modules private, "Give every public item one
-path", states the reason in its subject. With every module private
-except `json`, `provn` and `well_known`, each type has exactly one
-public path and shows once in the API reference, at the root. Its Rust
-note gives the idiom, and a private module with a `pub use` re-export
-gives an item a single public path. The file layout inside `src/` is then an
-internal matter, because no caller can name a private module.
+With every module private except `json`, `provn` and `well_known`,
+each type has exactly one public path and shows once in the API
+reference, at the root. A private module with a `pub use` re-export is
+what gives an item that single path. The file layout inside `src/` is
+then an internal matter, because no caller can name a private module.
 
 ## The Rust here
 
-- **Modules and visibility**, first used in `provkit/src/lib.rs` at
-  `mod attributes;`. `mod` declares a private module, `pub mod` a public
-  one, and `pub(crate)` makes `test_util` visible to the whole crate and
-  nowhere else.
+- **Modules and visibility**. `mod` declares a private module, `pub mod`
+  a public one, and `pub(crate)` makes `test_util` visible to the whole
+  crate and nowhere else.
   [Defining modules](https://doc.rust-lang.org/book/ch07-02-defining-modules-to-control-scope-and-privacy.html),
   [Paths in the module tree](https://doc.rust-lang.org/book/ch07-03-paths-for-referring-to-an-item-in-the-module-tree.html)
-- **Re-exports with `pub use`**, first used in `provkit/src/lib.rs` at
-  `pub use attributes::...`. Each line brings a private module's items
-  to the crate root under the same name, or a new one with `as`.
+- **Re-exports with `pub use`**. Each `pub use` line in `lib.rs` brings
+  a private module's items to the crate root under the same name, or a
+  new one with `as`.
   [Bringing paths into scope with use](https://doc.rust-lang.org/book/ch07-04-bringing-paths-into-scope-with-the-use-keyword.html)
-- **Conditional compilation**, first used in `provkit/src/lib.rs` at
-  `#![cfg_attr(...)]`. `#[cfg(feature = "json")]` keeps the `json`
-  module out of the build when the feature is off, and `#![cfg_attr(...)]`
-  applies an attribute only when its condition holds.
+- **Conditional compilation**. `#[cfg(feature = "json")]` keeps the
+  `json` module out of the build when the feature is off, and
+  `#![cfg_attr(...)]` applies an attribute only when its condition
+  holds.
   [Conditional compilation](https://doc.rust-lang.org/reference/conditional-compilation.html)
-- **Doc comments and doctests**, first used in `provkit/src/lib.rs` at
-  the crate doc. `//!` documents the enclosing item and `///` the next
-  one; a fenced Rust block in either is compiled and run by `cargo test
-  --doc`, and a line starting `# ` compiles but does not render.
+- **Doc comments and doctests**. `//!` documents the enclosing item and
+  `///` the next one; a fenced Rust block in either is compiled and run
+  by `cargo test --doc`, and a line starting `# ` compiles but does not
+  render.
   [Publishing a crate](https://doc.rust-lang.org/book/ch14-02-publishing-to-crates-io.html),
   [Documentation tests](https://doc.rust-lang.org/rustdoc/write-documentation/documentation-tests.html)
-- **`include_str!`**, first used in `provkit/src/lib.rs` at
-  `ReadmeDoctests`. The macro reads a file at compile time into a
-  `&'static str`; inside `#[doc = ...]` that text becomes the item's
-  documentation, doctests included.
+- **`include_str!`**. The macro reads a file at compile time into a
+  `&'static str`; inside `#[doc = ...]` on `ReadmeDoctests` that text
+  becomes the item's documentation, doctests included.
   [include_str](https://doc.rust-lang.org/std/macro.include_str.html)
-- **Cargo workspaces and features**, first used in `Cargo.toml` at
-  `[workspace.package]`. A workspace builds several crates with one
-  lock file and shared metadata; a feature is a named switch that turns
-  on code and optional dependencies.
+- **Cargo workspaces and features**. A workspace builds several crates
+  with one lock file, and `[workspace.package]` holds the metadata they
+  share; a feature is a named switch that turns on code and optional
+  dependencies.
   [Workspaces](https://doc.rust-lang.org/cargo/reference/workspaces.html),
   [Features](https://doc.rust-lang.org/cargo/reference/features.html)
 
