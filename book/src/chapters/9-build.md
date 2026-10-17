@@ -233,10 +233,10 @@ A user who only exchanges PROV-N switches `json` off and pays nothing
 for the serde crates, as chapter 1's "Why two features?" card says, and
 the subset steps in `ci.yml` build what that user gets. The
 crate-level example builds to an empty `main` when a feature is off,
-so the feature-subset test runs compile, and the `cargo check --tests`
-steps under `RUSTFLAGS=-D warnings` cover no default features, `provn`
-alone and `json` alone. Chapter 1 read the pieces of the library these
-steps exercise, the
+so a crate built with one feature compiles and its tests run. The
+`cargo check --tests` steps under `RUSTFLAGS=-D warnings` cover no
+default features, `provn` alone and `json` alone. Chapter 1 read the
+pieces of the library these steps exercise, the
 `required-features` on each `[[test]]` target, so a corpus test that
 needs a feature is skipped rather than failed, and the crate-level
 `#![cfg_attr(...)]` that allows dead code when a feature is off, so
