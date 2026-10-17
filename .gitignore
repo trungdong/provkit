@@ -3,5 +3,6 @@
 /.superpowers/
 /book/book/
 /book/target/
+/book/src/api/
 /book/src/reference/idioms.md
 /book/tools/__pycache__/

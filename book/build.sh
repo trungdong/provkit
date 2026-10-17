@@ -2,7 +2,10 @@
 # Build the book: the idiom index, the check that the New to Rust table
 # matches the stop pages' idiom lists, the check that the three-views doctest
 # repeats the two example files, the library the doctests link against,
-# the rustdoc under book/book/api, the HTML, and the doctests.
+# the rustdoc, the HTML, and the doctests. The rustdoc is copied into
+# book/src/api before the HTML build, because mdBook copies every
+# non-Markdown file under src into the output and `mdbook serve` rebuilds
+# the output from src alone.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -17,7 +20,7 @@ sys.exit(0 if copies == files else "three-views.md: a raw string differs from it
 EOF
 cargo build -p provkit --target-dir book/target
 cargo doc -p provkit --no-deps --target-dir book/target
+rm -rf book/src/api
+cp -R book/target/doc book/src/api
 mdbook build book
-rm -rf book/book/api
-cp -R book/target/doc book/book/api
 mdbook test book -L book/target/debug/deps
