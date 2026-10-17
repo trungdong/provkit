@@ -329,14 +329,15 @@ is the `Result` every signature in the crate names.
 
 ### Why one macro table for the eighteen kinds?
 
-Without the table, the record module would hold a hand-written copy
-of the per-kind facts in each of the `Kind` variants, the keywords,
-the formals, the structs, the `Record` variants and the arms of every
-`match` over them, and the PROV-N parser another, the argument counts.
-A kind's facts sit on one row, and the enum, the struct, the `Record`
-variant and every generated `match` arm follow from it, so adding a
-kind is adding a row. `Kind` and `Record` are `#[non_exhaustive]`, so
-a row added later does not break a `match` in another crate.
+Without the table, each kind's facts would be written by hand in
+several places. The record module would repeat them in the `Kind`
+variants, the keywords, the formals, the structs, the `Record`
+variants and the arms of every `match` over the kinds. The PROV-N
+parser would hold its own copy of the argument counts. With the
+table, a kind's facts sit on one row, and the enum, the struct, the
+`Record` variant and every generated `match` arm follow from it, so
+adding a kind is adding a row. `Kind` and `Record` are
+`#[non_exhaustive]`, so a row added later does not break a `match` in another crate.
 
 ### Why is every formal an `Option`?
 
@@ -369,18 +370,19 @@ a map and not a list.
 
 ### Why do the readers refuse a repeated bundle identifier while a hand-built document may hold one?
 
-Both readers refuse them although the PROV-N grammar accepts them, a
-PROV-JSON bundle key given twice counts as a repeat, and ProvPy
-rejects them too in PROV-N, because a bundle identifier names one
-bundle ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"Two bundles with one identifier are `Error::DuplicateBundle`"). The
-fields of `Document` are public, so nothing stops a program from
-pushing two bundles with one identifier, and they then count as one
+A bundle identifier names one bundle, so both readers refuse a second
+bundle with the same identifier, although the PROV-N grammar accepts
+one ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Two bundles with one identifier are `Error::DuplicateBundle`"). In
+PROV-JSON a bundle key given twice counts as such a repeat. ProvPy
+rejects them too in PROV-N. The fields of `Document` are public, so
+nothing stops a program from pushing two bundles with one identifier,
+and they then count as one
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"Bundles that share an identifier"). Equality compares the union of their records, both writers merge them
-through `merged_bundles`, and `unified()` merges them first, so
-equality, writing and unification agree on one reading of an
-ill-formed document.
+"Bundles that share an identifier"). Equality compares the union of
+their records, both writers merge them through `merged_bundles`, and
+`unified()` merges them first, so equality, writing and unification
+agree on one reading of an ill-formed document.
 
 ### What does `unified` follow?
 
