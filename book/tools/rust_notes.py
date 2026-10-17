@@ -141,15 +141,19 @@ AUTOLINK = re.compile(r"<(https?://[^\s<>]+)>")
 
 
 def markdown(text):
-    """Escape angle brackets outside code spans and mark bare links as links."""
+    """Escape `&`, `<` and `>` outside code spans and mark bare links as links."""
+
+    def escape(segment):
+        return segment.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     def bare(segment):
-        segment = segment.replace("<", "&lt;").replace(">", "&gt;")
-        return LINK.sub(
-            lambda m: f"<{m.group(0).rstrip('.,;:')}>"
-            + m.group(0)[len(m.group(0).rstrip(".,;:")) :],
-            segment,
-        )
+        out, pos = [], 0
+        for match in LINK.finditer(segment):
+            url = match.group(0).rstrip(".,;:")
+            out += [escape(segment[pos : match.start()]), f"<{url}>", match.group(0)[len(url) :]]
+            pos = match.end()
+        out.append(escape(segment[pos:]))
+        return "".join(out)
 
     def plain(segment):
         out, pos = [], 0
@@ -243,6 +247,10 @@ SELF_TEST_LOG = (
     "  <https://doc.rust-lang.org/std/option/enum.Option.html#method.take>\n"
     "  and <https://doc.rust-lang.org/std/mem/fn.take.html>.\n"
     f"{FS}\n\nsrc/h.rs\n"
+    f"{RS}caaaaaaa{FS}Ampersands{FS}Rust notes:\n"
+    "- `&T` and &mut T differ; a literal &lt; stays text, see\n"
+    "  https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html?a=1&b=2.\n"
+    f"{FS}\n\nsrc/i.rs\n"
 )
 
 
@@ -251,7 +259,9 @@ def self_test():
     by_sha = defaultdict(list)
     for item in items:
         by_sha[item["sha"]].append(item)
-    assert sorted(by_sha) == ["1aaaaaaa", "3aaaaaaa", "5aaaaaaa", "6aaaaaaa", "9aaaaaaa", "baaaaaaa"], items
+    assert sorted(by_sha) == [
+        "1aaaaaaa", "3aaaaaaa", "5aaaaaaa", "6aaaaaaa", "9aaaaaaa", "baaaaaaa", "caaaaaaa"
+    ], items
     first = by_sha["1aaaaaaa"]
     assert first[0]["source"] == "The standard library"
     assert first[0]["link"] == "https://doc.rust-lang.org/std/macro.matches.html"
@@ -293,6 +303,10 @@ def self_test():
     assert "- Arc&lt;str&gt; shares one allocation; `Vec<u8>` does not." in page
     assert "See <https://doc.rust-lang.org/error_codes/E0283.html>." in page
     assert "see <https://doc.rust-lang.org/std/mem/fn.take.html>." in page
+    (amp,) = by_sha["caaaaaaa"]
+    assert amp["link"].endswith("?a=1&b=2")
+    assert "- `&T` and &amp;mut T differ; a literal &amp;lt; stays text" in page
+    assert markdown("x & y, see https://a.b/?c=1&d=2.") == "x &amp; y, see <https://a.b/?c=1&d=2>."
     assert "Follow-up" not in page
     assert "1aaaaaa" in page and "2aaaaaa" not in page
     assert "7aaaaaa" not in page and "8aaaaaa" not in page
