@@ -302,9 +302,8 @@ the end-to-end tests read the corpus too.
 ### Why a corpus shared with ProvPy?
 
 provkit does not deviate from ProvPy without a CONFORMANCE.md row
-giving the reason and the issue number, and the corpus is the set of
-files ProvPy reads, so the no-deviation rule is checked against the
-same inputs on both sides
+giving the reason and the issue number, and the corpus tests read the
+same files ProvPy reads
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "The tests read"). Both profiles must match `expected.tsv` for every
 probe

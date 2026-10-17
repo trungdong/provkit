@@ -250,7 +250,7 @@ as stop 0's first card says, and `ci.yml` builds it for
 `wasm32-unknown-unknown`, a target with no filesystem, with nothing to
 exclude. The step compiles the library and every dependency its
 default features pull in for a target with no operating system
-beneath it, so a dependency that needs one fails to compile there.
+beneath it, so a dependency that needs one may not compile there.
 The target is installed in the toolchain step with `targets:
 wasm32-unknown-unknown`. It is one of the checks that run in CI only,
 and `rustup target add wasm32-unknown-unknown` adds the target

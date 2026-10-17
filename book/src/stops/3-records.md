@@ -419,7 +419,7 @@ the record's key around an error found while building a record
 PROV-N reader knows where each token sits, and a PROV-JSON error is
 more useful with its record. One helper in the parser wraps an error
 from the name, value or record layer in `At` at its token, and the
-PROV-JSON reader wraps in `InRecord` the same way. `Display` prints
+PROV-JSON reader wraps one in `InRecord` the same way. `Display` prints
 the inner error, so it is not also the `source()`.
 
 ## The Rust here
