@@ -78,9 +78,9 @@ name. Neither field is public. `QName::new` takes two `&str`, checks
 the local part with `check_local`, and builds the name; the
 crate-private `in_namespace` takes an `Arc<str>` instead, so a name
 resolved through a prefix table shares the table's allocation rather
-than copying the IRI. The doc comment on `new` lists what the check
-refuses, and it refuses only characters that no `PN_LOCAL` holds
-anywhere, bare or escaped. An empty local part is valid.
+than copying the IRI. The check refuses only characters that no
+`PN_LOCAL` holds anywhere, bare or escaped. An empty local part is
+valid.
 
 Equality, ordering and hashing are written by hand, and all three
 look at the joined IRI rather than at the two fields.
@@ -153,9 +153,9 @@ a writer can print the declarations in the order the document made
 them. `by_iri` is the reverse table the writers read, from an IRI to
 every prefix bound to it, kept in step with `prefixes` by `bind` and
 `unindex`. `next_minted` is where the search for a fresh `nsN` prefix
-starts, which keeps minting many prefixes linear. The doc comment on
-the struct states the rule the rest of the file obeys. The table
-decides how names are written and never takes part in equality.
+starts, which keeps minting many prefixes linear. The table decides
+how names are written and never takes part in equality, and the rest
+of the file obeys that rule.
 
 `prov` and `xsd` are not in the table. They live in the `RESERVED`
 static above the struct, and `lookup` and `resolve` consult that
@@ -169,11 +169,10 @@ writers' minting and `with_fallback` reach `bind` directly.
 
 Two refusals come first. A prefix that `is_pn_prefix` rejects is
 `Error::InvalidPrefix`, and that covers `_`, a prefix ending in `.`
-and anything with a space or a colon. The row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "`Namespaces::declare` rejects a prefix" gives the reason
-for that refusal. PROV-N cannot write any other prefix, and a table
-that holds only valid prefixes writes to both formats. `prov` or `xsd`
+and anything with a space or a colon. PROV-N cannot write any other
+prefix, and a table that holds only valid prefixes writes to both
+formats ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"`Namespaces::declare` rejects a prefix"). `prov` or `xsd`
 at any IRI but its fixed one is `Error::ReservedPrefix`, which carries
 the prefix, the expected IRI and the one found. A declaration of `prov` or `xsd`
 at the right IRI is accepted and changes nothing, so a document that
@@ -206,34 +205,29 @@ file, which clones the bundle's table and absorbs the document's.
 
 ### Why is the namespace an `Arc<str>` and the local part a `Box<str>`?
 
-The commit that added `QName`, "Add Error, QName and Namespaces with
-strict resolution", gives the namespace's reason in its Rust note. An
-`Arc<str>` is a reference-counted, immutable string, so cloning one
+An `Arc<str>` is a reference-counted, immutable string, so cloning one
 bumps a counter instead of copying text and many names share one
 namespace allocation. The code makes the sharing concrete. A prefix
 table stores each IRI as an `Arc<str>`, and `Scope::resolve_parts`
 clones that `Arc` into every name it resolves through
-`QName::in_namespace`, whose doc comment says it builds "a name that
-shares `namespace` with the other names built from the same table".
-The local part is a `Box<str>`, one owned allocation per name with no
+`QName::in_namespace`, so the name shares its namespace with the other
+names built from the same table. The local part is a `Box<str>`, one owned allocation per name with no
 count to maintain, and `in_namespace` builds it fresh from the `&str`
 it is given. A document read through one table holds each namespace IRI once,
 however many names use it.
 
 ### Why is equality on the IRI and not the prefix?
 
-The doc comment on `QName` says a name denotes the IRI its two parts
-join to, and that the prefix a document used to spell the name is not
-stored. The row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "Name resolution is strict" is the reader side of the same
-rule. Names are equal when their IRIs are equal, however the namespace
-and the local part split the IRI, and ordering and hashing follow the
-IRI; the reason the row gives is that PROV-DM says a [qualified name](../reference/glossary.md#identifier-and-qualified-name-prov)
-denotes an IRI. The commit "Compare, order and hash qualified names by
-their IRI" replaced the derived, field-wise comparison with the
-hand-written impls above, so that `http://example.org/` with
-`foo/bar` equals `http://example.org/foo/` with `bar`. A prefix is
+A name denotes the IRI its two parts join to, and the prefix a
+document used to spell the name is not stored. Names are equal when
+their IRIs are equal, however the namespace and the local part split
+the IRI, and ordering and hashing follow the IRI, because PROV-DM says
+a [qualified name](../reference/glossary.md#identifier-and-qualified-name-prov)
+denotes an IRI. Strict name resolution in the readers is the other
+side of the same rule ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Name resolution is strict"). The hand-written impls above, rather than
+derived field-wise ones, are what make `http://example.org/` with
+`foo/bar` equal `http://example.org/foo/` with `bar`. A prefix is
 therefore notation. `ex:e1` under `prefix ex`, `e1` under a default
 namespace with the same IRI and `xx:e1` under another prefix are one
 name, and the Try it below shows `compare` treating them as one.
@@ -243,27 +237,26 @@ name, and the Try it below shows `compare` treating them as one.
 Section 3.7.4 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prod-namespaceDeclaration)
 says a namespace declaration must not declare the prefixes `prov` and
-`xsd`; they are predeclared, and the `RESERVED` static cites that
-section. The CONFORMANCE.md row beginning "`Namespaces::declare`
-rejects a prefix" states the library's rule, `prov` or `xsd` at
-another IRI is `Error::ReservedPrefix`. The departure row beginning "`xsd` is
-`http://www.w3.org/2001/XMLSchema#`" fixes which IRI `xsd` is bound
-to. Table 1 of PROV-N, the prefix table of PROV-DM and the PROV-JSON
-note all print `http://www.w3.org/2000/10/XMLSchema#`, but the 2001
-IRI is the XML Schema namespace and ProvPy uses it, so
-`well_known::XSD` holds the 2001 IRI and `declare("xsd", ...)` accepts
-only that one.
+`xsd`; they are predeclared. `prov` or `xsd` at another IRI is
+therefore `Error::ReservedPrefix`. Table 1 of PROV-N, the prefix table
+of PROV-DM and the PROV-JSON note all print
+`http://www.w3.org/2000/10/XMLSchema#`, but the 2001 IRI is the XML
+Schema namespace and ProvPy uses it, so `well_known::XSD` holds the
+2001 IRI and `declare("xsd", ...)` accepts only that one
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"`xsd` is `http://www.w3.org/2001/XMLSchema#`").
 
 ### Why is `_` never a prefix?
 
-The CONFORMANCE.md row beginning "The underscore is never a prefix"
-gives the reason. `_:` is the [blank-node](../reference/glossary.md#blank-node-prov) form, which names no IRI, so
-PROV-JSON keys that start `_:` are blank and PROV-N rejects `_:x`
-because it is not a `QUALIFIED_NAME`. Two checks enforce it, one per
+`_:` is the [blank-node](../reference/glossary.md#blank-node-prov)
+form, which names no IRI, so PROV-JSON keys that start `_:` are blank
+and PROV-N rejects `_:x` because it is not a `QUALIFIED_NAME`
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"The underscore is never a prefix"). Two checks enforce it, one per
 caller. `PN_PREFIX` starts with a `PN_CHARS_BASE`
 character, and `_` only enters at `PN_CHARS_U`, so `is_pn_prefix("_")`
-is false and `declare` refuses it as an invalid prefix; the doc comment
-on `declare` says as much. `Scope::resolve_parts` then checks for the
+is false and `declare` refuses it as an invalid prefix.
+`Scope::resolve_parts` then checks for the
 `_` prefix before it looks anything up, so a reader that hands it `_:x`
 gets `Error::InvalidQName` naming the whole text rather than an
 undeclared-prefix error that a declaration could seem to fix.
@@ -272,13 +265,13 @@ undeclared-prefix error that a declaration could seem to fix.
 
 Section 3.7.4 of PROV-N scopes a prefix declaration made in a bundle
 to that bundle, and lets a bundle re-declare a prefix the surrounding
-document declared. The CONFORMANCE.md row beginning "A bundle
-identifier resolves in the bundle's own scope first" applies that to
-both readers and to the writers, which print a bundle's names with its
-own table in front of the document's. The doc comment on `Scope` names
-the design. It reads through to a parent "without merging the two",
-the bundle's bindings and default win, and anything the bundle leaves
-out falls back to the document. A `Scope` is `Copy` and holds two
+document declared. Both readers follow that rule, and so do the
+writers, which print a bundle's names with its own table in front of
+the document's ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"A bundle identifier resolves in the bundle's own scope first"). A
+`Scope` reads through to a parent without merging the two; the
+bundle's bindings and default win, and anything the bundle leaves out
+falls back to the document. A `Scope` is `Copy` and holds two
 references, so a reader builds one per bundle at no cost and neither
 table moves or changes. `WriteScope`, further down the file, is the
 same pair for the writers, with a mutable own table because minting a
@@ -286,106 +279,94 @@ prefix adds to it.
 
 ## The Rust here
 
-- **Ownership and borrowing**, first used in `provkit/src/pn.rs` at
-  `prefix_len`. Every function at this stop takes `&str`, a borrowed
-  view of text someone else owns, and returns a length or a new
-  value; `QName::new` is where a borrowed `&str` is copied into an
+- **Ownership and borrowing**. Every function at this stop takes `&str`,
+  a borrowed view of text someone else owns, and returns a length or a
+  new value; `QName::new` is where a borrowed `&str` is copied into an
   owned string the name keeps.
   [What is ownership?](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html),
   [References and borrowing](https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html)
-- **`Arc<str>`**, first used in `provkit/src/qname.rs` at `QName`. A
-  reference-counted pointer to an immutable string; cloning it bumps
-  the count, and the text is freed when the last clone drops.
+- **`Arc<str>`**. A reference-counted pointer to an immutable string,
+  which is what `QName` holds as its namespace; cloning it bumps the
+  count, and the text is freed when the last clone drops.
   [Arc](https://doc.rust-lang.org/std/sync/struct.Arc.html)
-- **`Box<str>`**, first used in `provkit/src/qname.rs` at `QName`. An
-  owned string on the heap with no capacity field and no count; the
-  local part and the `prefixes` keys, which never change once built,
-  use it instead of `String`.
+- **`Box<str>`**. An owned string on the heap with no capacity field and
+  no count; the local part and the `prefixes` keys, which never change
+  once built, use it instead of `String`.
   [Box](https://doc.rust-lang.org/std/boxed/struct.Box.html)
-- **`#[derive(Clone)]`**, first used in `provkit/src/qname.rs` at
-  `QName`. The derive writes a `clone` that clones each field, so a
-  `QName` clone bumps the namespace count and copies the local part.
+- **`#[derive(Clone)]`**. The derive writes a `clone` that clones each
+  field, so a `QName` clone bumps the namespace count and copies the
+  local part.
   [Derivable traits](https://doc.rust-lang.org/book/appendix-03-derivable-traits.html)
-- **Hand-written `PartialEq`, `Eq`, `Ord`, `PartialOrd` and `Hash`**,
-  first used in `provkit/src/qname.rs` at `impl PartialEq for QName`.
-  The impls replace the derived field-wise versions with ones over the
-  IRI; `hash<H: Hasher>` is generic so any hasher can be fed, and
+- **Hand-written `PartialEq`, `Eq`, `Ord`, `PartialOrd` and `Hash`**.
+  The impls on `QName` replace the derived field-wise versions with
+  ones over the IRI; `hash<H: Hasher>` is generic so any hasher can be fed, and
   `PartialOrd` delegates to `Ord` with `Some(self.cmp(other))`.
   [PartialEq](https://doc.rust-lang.org/std/cmp/trait.PartialEq.html),
   [Hash](https://doc.rust-lang.org/std/hash/trait.Hash.html)
-- **`impl Iterator<Item = u8> + '_` and lifetime elision**, first used
-  in `provkit/src/qname.rs` at `iri_bytes`. The return type names a
-  trait, not a concrete iterator, and `'_` says the iterator borrows
-  from `self` for as long as the elided input lifetime.
+- **`impl Iterator<Item = u8> + '_` and lifetime elision**. The return
+  type of `iri_bytes` names a trait, not a concrete iterator, and `'_`
+  says the iterator borrows from `self` for as long as the elided input
+  lifetime.
   [Validating references with lifetimes](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html),
   [Lifetime elision](https://doc.rust-lang.org/reference/lifetime-elision.html)
-- **Iterator adaptors `all`, `eq` and `cmp`**, first used in
-  `provkit/src/pn.rs` at `hex_pair_follows`. `all` asks whether every
-  item passes a test; `eq` and `cmp`, in `QName::is` and `Ord::cmp`,
-  compare two iterators item by item, which gives byte order without
-  a `String`.
+- **Iterator adaptors `all`, `eq` and `cmp`**. `all` in
+  `hex_pair_follows` asks whether every item passes a test; `eq` and
+  `cmp`, in `QName::is` and `Ord::cmp`,
+  compare two iterators item by item, which gives byte order without a
+  `String`.
   [Iterator](https://doc.rust-lang.org/std/iter/trait.Iterator.html)
-- **`matches!`**, first used in `provkit/src/pn.rs` at
-  `is_pn_chars_base`. The macro tests a value against a pattern and
-  returns a `bool`, so a character class is one pattern of ranges
-  joined by `|`.
+- **`matches!`**. The macro tests a value against a pattern and returns
+  a `bool`, so a character class such as `is_pn_chars_base` is one
+  pattern of ranges joined by `|`.
   [matches](https://doc.rust-lang.org/std/macro.matches.html)
-- **`?` on `Option` and `Result`**, first used in `provkit/src/pn.rs`
-  at `prefix_len`. `chars.next()?` returns `None` from the function
-  when the string is empty; in `QName::in_namespace`, `check_local(local)?`
-  returns the `Err` early.
+- **`?` on `Option` and `Result`**. `chars.next()?` in `prefix_len`
+  returns `None` from the function when the string is empty; in
+  `QName::in_namespace`,
+  `check_local(local)?` returns the `Err` early.
   [Recoverable errors with Result](https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html)
-- **`then_some` and `is_some_and`**, first used in `provkit/src/pn.rs`
-  at `local_char` and `hex_pair_follows`. `is_some_and` tests the value inside an
-  `Option` and is false for `None`; `then_some` on a `bool` makes a
-  `Some` when true and `None` when false, as `local_char` does for `%`.
+- **`then_some` and `is_some_and`**. `is_some_and` tests the value
+  inside an `Option` and is false for `None`; `then_some` on a `bool`
+  makes a `Some` when true and `None` when false, as `local_char` does
+  for `%`.
   [Option](https://doc.rust-lang.org/std/option/enum.Option.html)
-- **`LazyLock`**, first used in `provkit/src/qname.rs` at
-  `well_known`. A `static` whose value is built by a closure on first
+- **`LazyLock`**. A `static` whose value is built by a closure on first
   access and shared after, which lets a `QName`, with an `Arc` inside,
-  be a static at all.
+  be a static in `well_known` at all.
   [LazyLock](https://doc.rust-lang.org/std/sync/struct.LazyLock.html)
-- **`macro_rules!` with `$(...)*` repetition**, first used in
-  `provkit/src/qname.rs` at `names!`. The matcher captures one row
-  per repetition and the body is written out once per row, which is
-  how every static in `well_known` comes from one template.
+- **`macro_rules!` with `$(...)*` repetition**. The matcher of `names!`
+  captures one row per repetition and the body is written out once per
+  row, which is how every static in `well_known` comes from one
+  template.
   [Macros](https://doc.rust-lang.org/book/ch20-05-macros.html),
   [Macros by example](https://doc.rust-lang.org/reference/macros-by-example.html)
-- **`#[doc = concat!(...)]`**, first used in `provkit/src/qname.rs` at
-  `names!`. A doc attribute takes a string literal or a macro call that
-  expands to one, so the macro builds each static's rustdoc text from
-  its prefix and local part with `concat!`.
+- **`#[doc = concat!(...)]`**. A doc attribute takes a string literal or
+  a macro call that expands to one, so `names!` builds each static's
+  rustdoc text from its prefix and local part with `concat!`.
   [The #[doc] attribute](https://doc.rust-lang.org/rustdoc/write-documentation/the-doc-attribute.html)
-- **`IndexMap`**, first used in `provkit/src/namespaces/mod.rs` at
-  `Namespaces`. A hash map from the `indexmap` crate that keeps
-  insertion order, so iteration and `get_index_of` follow declaration
-  order.
+- **`IndexMap`**. A hash map from the `indexmap` crate that keeps
+  insertion order, so iteration and `get_index_of` over `prefixes`
+  follow declaration order.
   [indexmap](https://docs.rs/indexmap)
-- **`let ... else`**, first used in `provkit/src/namespaces/mod.rs` at
-  `unindex`. The pattern must match or the `else` block must diverge, by a
-  `return` as in `unindex`, a `break`, a `continue` or a panic; the
-  value is then bound without a nested `if let`.
+- **`let ... else`**. The pattern must match or the `else` block must
+  diverge, by a `return` as in `unindex`, a `break`, a `continue` or a
+  panic; the value is then bound without a nested `if let`.
   [let statements](https://doc.rust-lang.org/reference/statements.html#let-statements)
-- **`entry().or_default()` and `partition_point`**, first used in
-  `provkit/src/namespaces/mod.rs` at `bind`. `entry` gives one place
-  to insert or update a map value, and `partition_point` finds where a
-  new prefix goes in a sorted `Vec` by binary search.
+- **`entry().or_default()` and `partition_point`**. In `bind`, `entry`
+  gives one place to insert or update a map value, and `partition_point`
+  finds where a new prefix goes in a sorted `Vec` by binary search.
   [HashMap::entry](https://doc.rust-lang.org/std/collections/hash_map/struct.HashMap.html#method.entry),
   [slice::partition_point](https://doc.rust-lang.org/std/primitive.slice.html#method.partition_point)
-- **`#[must_use]`**, first used in `provkit/src/namespaces/mod.rs` at
-  `with_fallback`. The compiler warns when a caller drops the result,
-  which matters for a method that returns a new table and leaves
-  `self` unchanged.
+- **`#[must_use]`**. The compiler warns when a caller drops the result,
+  which matters for `with_fallback`, a method that returns a new table
+  and leaves `self` unchanged.
   [The must_use attribute](https://doc.rust-lang.org/reference/attributes/diagnostics.html#the-must_use-attribute)
-- **A `Copy` struct with a lifetime**, first used in
-  `provkit/src/namespaces/mod.rs` at `Scope`. `Scope<'a>` holds two
-  references that live for `'a`, so it cannot outlive the tables, and
-  deriving `Copy` means passing it by value costs two pointers.
+- **A `Copy` struct with a lifetime**. `Scope<'a>` holds two references
+  that live for `'a`, so it cannot outlive the tables, and deriving
+  `Copy` means passing it by value costs two pointers.
   [Validating references with lifetimes](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html)
-- **`mod tests;` in a sibling file**, first used in
-  `provkit/src/namespaces/mod.rs` at `mod tests;`. A `mod` line with
-  no body loads `namespaces/tests.rs`, so the tests sit beside the
-  code but out of the file; `qname.rs` keeps its tests inline instead.
+- **`mod tests;` in a sibling file**. A `mod` line with no body loads
+  `namespaces/tests.rs`, so the tests sit beside the code but out of the
+  file; `qname.rs` keeps its tests inline instead.
   [Test organization](https://doc.rust-lang.org/book/ch11-03-test-organization.html)
 
 ## Run this
