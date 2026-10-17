@@ -28,18 +28,17 @@ defines the reader's public types and entry points.
 
 [`Profile`](../api/provkit/provn/enum.Profile.html) is `Copy`, so a
 caller passes it by value, and `#[non_exhaustive]`, so a later profile
-does not break a `match` outside the crate. The doc on `Strict` is the
-list of what the grammar does not allow and the reader refuses under
-that profile, naming a production or section where the grammar has
-one, and
-the paragraph on `prov:mentionOf` says when a prefixed mention is a
-mention and when it is an extensibility expression. `Default` is the
-grammar plus the forms in that list, which ProvPy and ProvToolbox
-write. Below the span,
+does not break a `match` outside the crate. `Strict` refuses every
+form the grammar does not allow, each listed on the
+[variant](../api/provkit/provn/enum.Profile.html#variant.Strict) with
+its production or section, among them a prefixed `prov:mentionOf`
+that is an extensibility expression rather than a mention unless three
+names follow it. `Default` is the grammar plus the forms
+in that list, which ProvPy and ProvToolbox write. Below the span,
 `Relaxation` has one variant per item in the `Strict` list, and
 `Profile::allows` answers `false` for `Strict` and `true` for
-`Default` whatever the relaxation, with a comment saying where a third
-profile would name the ones it reads. The parser asks `allows` with the
+`Default` whatever the relaxation; a third profile would name the ones
+it reads there. The parser asks `allows` with the
 relaxation in hand wherever one applies, instead of comparing the
 profile. Two more types sit
 below. [`Ignored`](../api/provkit/provn/struct.Ignored.html) is an
@@ -62,18 +61,17 @@ and the report is `builder.finish()` beside the parser's `ignored`
 list. [`read_with`](../api/provkit/provn/fn.read_with.html), above the
 span, calls `read_report` and keeps the document, and
 [`read`](../api/provkit/provn/fn.read.html) calls `read_with` with
-`Profile::Default`, so the three entry points agree by construction.
-The `# Errors` section of `read` is the contract for all three. Text
-the grammar rejects is [`Error::Syntax`](../api/provkit/enum.Error.html)
+`Profile::Default`, so the three entry points agree by construction
+and report errors alike. Text the grammar rejects is [`Error::Syntax`](../api/provkit/enum.Error.html)
 with a line, a column and a message, and a name, literal or record
 that parses but that PROV does not allow is `Error::At`, holding the
 line and column and the error from the lower layer.
 
 ### provkit/src/provn/lexer/mod.rs
 
-The module doc cites section 3.7 of the Recommendation and its
-terminal productions [52] to [62], and states the one rule that shapes
-the file. Keywords are not distinguished here. Every bare or prefixed
+The lexer covers section 3.7 of the Recommendation and its terminal
+productions [52] to [62]. One rule shapes the file. Keywords are not
+distinguished here. Every bare or prefixed
 name is a `Name` token, and the parser decides whether a name at the
 start of a statement is a keyword. The one context-sensitive rule is
 the language tag, which only follows a string.
@@ -82,8 +80,7 @@ the language tag, which only follows a string.
 {{#include ../../../provkit/src/provn/lexer/mod.rs:token_kind}}
 ```
 
-The doc on each variant names its terminal, with the production
-number where the Recommendation gives one. A `Name` carries its [prefix](../reference/glossary.md#namespace-and-prefix-prov) and
+Each variant is one terminal. A `Name` carries its [prefix](../reference/glossary.md#namespace-and-prefix-prov) and
 local part with the escapes of the local part already decoded, and an
 empty prefix for a bare name. `Str` is unescaped too. `Int` keeps its text
 as written, because stop 2's `Value` types an integer from its text,
@@ -92,8 +89,8 @@ its datatype, `Marker` is the `-` that stands for an absent argument,
 `QNameLiteral` is the quoted `'prefix:local'` form, `Iri` and `LangTag` carry their text without the angle brackets or the `@`, and `Eof` marks the end of input. The rest are single characters. Two methods below the span answer
 questions the parser asks. `digit_name` returns the digits of an
 unsigned `Int`, because a bare local name made only of digits lexes
-as an integer and the doc comment says the lexer cannot tell the two
-apart, so the parser asks in identifier positions.
+as an integer, the lexer cannot tell the two apart, and the parser
+asks in identifier positions.
 `is_identifier_or_marker` says whether a token can fill an
 `identifierOrMarker` position. Below those, `Token` is a kind, a
 1-based line, a 1-based column in characters, and the byte span the
@@ -114,8 +111,8 @@ first character chooses the recogniser. The punctuation arms are
 single characters that `emit` consumes. `<` starts an IRI, `"` a string, and
 `'` a qualified-name literal, each read by a method named for it. The
 two arms with guards are the lookahead the grammar needs. `@` starts a
-language tag only when the previous token was a string, which is the
-rule the module doc names, and `%%` is two characters, so its arm
+language tag only when the previous token was a string, and `%%` is
+two characters, so its arm
 tests the rest of the input rather than `c`. Everything else goes to
 `literal_or_name`, below the span, which tries a dateTime first, then
 measures an integer and a name and takes the longer, so `2011` is an
@@ -129,7 +126,7 @@ decoding and error positions added.
 
 ### provkit/src/provn/parser/mod.rs
 
-The module doc says one method per production. Names resolve through
+There is one method per production. Names resolve through
 `Namespaces`, records are built by `Record::from_parts`, and every
 event goes to a `DocumentBuilder`. A grammar error is `Error::Syntax`,
 and an error from the name, value or record layer is wrapped by `at`,
@@ -223,8 +220,8 @@ because production [46] takes a `PN_PREFIX`, which has no escapes.
 
 ### provkit/src/provn/extension.rs
 
-The module doc says what the file does with section 5 of the
-Recommendation. Each extensibility expression is parsed in full and
+The file handles section 5 of the Recommendation. Each extensibility
+expression is parsed in full and
 left out of the document. Names are not resolved, literals are not
 built, a time is checked, and the outermost expression is recorded as
 an `Ignored`. The file is a third `impl` block for `Parser`.
@@ -270,14 +267,14 @@ name against a table the caller holds.
 {{#include ../../../provkit/src/provn/write/mod.rs:provn_to_string}}
 ```
 
-The doc comment states the three rules. A namespace with no declared
+Three rules hold. A namespace with no declared
 prefix gets a minted `ns1`, `ns2` and so on, and the document is left
 unchanged, because the function works on a clone of the table. A
 record without an identifier is written without one. Bundles that
 share an identifier are written as one, through `merged_bundles` from
-stop 3. The body is rendered before the declarations are printed, and
-the comment says why. Every prefix minted while rendering a name lands
-in `names`, so `declarations` sees it. The block around the top-level
+stop 3. The body is rendered before the declarations are printed,
+because every prefix minted while rendering a name lands in `names`,
+and `declarations` then sees it. The block around the top-level
 loop ends the mutable borrow that `WriteScope::of` takes on `names`,
 so the bundle loop and `declarations` can borrow it again.
 `write_bundle`, below the span, does the same for a bundle against its
@@ -313,45 +310,41 @@ back as `xsd:int` bare, and every other typed value as a string with `%%` and it
 
 ### Why two profiles, and why is `Default` the default?
 
-The departure row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "`Profile::Strict` accepts the whole PROV-N grammar" says
 `Strict` is the reference for the grammar and the MUST statements of
-the prose, and that `Default` adds what ProvToolbox and ProvPy write,
-the forms the `Relaxation` enum names, except the two grammar-invalid forms
-ProvToolbox 2.2.5 writes and its `provext:` statements. The row
-beginning "`Strict` rejects the four constructs of #519" names those
-among them that ProvPy's own strict mode accepts, with
-productions [1], [24] to [26] and [45] and the MUST in section 3.7.4
-as the grammar behind each refusal. The parser keeps the difference
-to `allows` calls, one relaxation per `Relaxation` variant. Neither
-row says why `read`
-uses `Default`. The doc on the variant describes it as the grammar
-plus what the two libraries write, and the test
-`the_default_profile_is_default` pins `Profile::default()` to it.
+the prose, and `Default` adds what ProvToolbox and ProvPy write, the
+forms the `Relaxation` enum names, except the two grammar-invalid
+forms ProvToolbox 2.2.5 writes and its `provext:` statements
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"`Profile::Strict` accepts the whole PROV-N grammar"). Four of those
+forms ProvPy's own strict mode accepts, and productions [1], [24] to
+[26] and [45] and the MUST in section 3.7.4 are the grammar behind
+each refusal
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"`Strict` rejects the four constructs of #519"). The parser keeps the
+difference to `allows` calls, one relaxation per `Relaxation` variant.
+`read` uses `Default`, the grammar plus what the two libraries write,
+and the test `the_default_profile_is_default` pins `Profile::default()`
+to it.
 
 ### Why does the writer write every argument?
 
-The departure row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "The PROV-N writer writes every relation at full arity"
-says every relation is written with `-` for an absent argument, a
-mandatory one included, that `activity` writes both times or neither,
-and that an identifier on `alternateOf`, `specializationOf`,
-`hadMember` or `mentionOf` is written as `id;` before the arguments.
-The reason the row gives is one rule for every relation, and that a
-document with missing data still round-trips. The same row records
-the cost. `Strict` rejects that output when a required argument is
-`-` or a bare kind carries an identifier, and `Default` accepts it.
-The comment above the relation branch of `expression` says only that
-a kept identifier reads back equal under `Profile::Default`.
+Every relation is written with `-` for an absent argument, a
+mandatory one included, `activity` writes both times or neither, and
+an identifier on `alternateOf`, `specializationOf`, `hadMember` or
+`mentionOf` is written as `id;` before the arguments
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"The PROV-N writer writes every relation at full arity"). One rule
+serves every relation, and a document with missing data still
+round-trips. The cost is that `Strict` rejects that output when a
+required argument is `-` or a bare kind carries an identifier, while
+`Default` accepts it, so a kept identifier reads back equal under
+`Profile::Default`.
 
 ### Why is `mentionOf` written bare?
 
-The departure row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "The PROV-N writer writes `mentionOf` bare" gives the reason
-that ProvToolbox's PROV-N grammar has this form. `Strict` accepts only
+ProvToolbox's PROV-N grammar has this form
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"The PROV-N writer writes `mentionOf` bare"). `Strict` accepts only
 `prov:mentionOf`, so the writer's output reads back under `Default`
 and not under `Strict`, which `classify` enforces by taking the bare
 keyword only when `Relaxation::BareMentionOf` is allowed.
@@ -362,137 +355,125 @@ Section 5 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#extensibility)
 says "PROV-N compliant parsers MUST be able to parse expressions
 matching the extensibilityExpression production" and "PROV compliant
-implementations MAY ignore these expressions". The row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "Extensibility expressions are parsed under both profiles
-and left out" (#520) gives that pair of sentences as the reason, and
-says ProvPy rejects them under `strict` and `default`. The departure
-row beginning "Names inside an extensibility expression are not
-resolved" says section 3.7.1 requires a prefix to refer to a declared
-namespace, and that the reader ignores the whole expression, contents
+implementations MAY ignore these expressions". That pair of sentences
+is the reason; ProvPy rejects them under `strict` and `default`
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Extensibility expressions are parsed under both profiles and left
+out"). Section 3.7.1 requires a prefix to refer to a declared
+namespace, but the reader ignores the whole expression, contents
 included, and reports it, so `ex:foo(zz:a)` reads with `zz`
 undeclared, while a time is checked because production [44] defines
-its form. The limit row beginning "Extensibility expressions nest to
-64 levels" gives the reason that the limit bounds the recursion on
-hostile input, and the commit "Parse extensibility expressions and
-report them" says the check runs before recursing, so a deeply nested
-input fails without exhausting the stack.
+its form
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Names inside an extensibility expression are not resolved"). The
+depth limit bounds the recursion on hostile input, and the check runs
+before recursing, so a deeply nested input fails without exhausting
+the stack
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Extensibility expressions nest to 64 levels").
 
 ### Why do `\u` escapes decode once?
 
-The departure row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "A `\u` or `\U` escape in a string or IRI decodes" says the
-decoded content is not lexed again, so `"\u0022"` is the one-character
-string `"`, and `"a\u000Ab"` holds a line feed in a short string.
-The reason it gives is that section 6 of
+The decoded content is not lexed again, so `"\u0022"` is the
+one-character string `"`, and `"a\u000Ab"` holds a line feed in a
+short string, because section 6 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#media-type)
 places the escapes in the text of a literal, and decoding them before
-lexing would let `\u0022` end a string. In the code, `string` and
+lexing would let `\u0022` end a string
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"A `\u` or `\U` escape in a string or IRI decodes"). In the code,
+`string` and
 `iri` decode an escape as they scan and push the character into the
-token's content, so no second pass sees it. The row beginning "A `\u`
-escape that names a surrogate" says such an escape is a syntax error,
-although section 6 lets `\u` cover U+0 to U+FFFF, because a string of
-Unicode scalar values cannot hold one. `decode_code_point` gets that
+token's content, so no second pass sees it. An escape that names a
+surrogate is a syntax error, although section 6 lets `\u` cover U+0
+to U+FFFF, because a string of Unicode scalar values cannot hold one
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"A `\u` escape that names a surrogate"). `decode_code_point` gets that
 from `char::from_u32`, which returns `None` for a surrogate.
 
 ### Why does every error carry a line and a column?
 
-The limit row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "Every error from the PROV-N reader carries a line and a
-column" states the contract, `Error::Syntax` for text the grammar
-rejects and `Error::At` around the error for a name, literal or
-record, with the column counted in characters. The reason it gives is
-that the PROV-N reader knows where each token sits. The lexer stamps
+`Error::Syntax` carries the position of text the grammar rejects and
+`Error::At` wraps the error for a name, literal or record, with the
+column counted in characters, because the PROV-N reader knows where
+each token sits
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Every error from the PROV-N reader carries a line and a column"). The
+lexer stamps
 every token with its line and column and `at` copies them from the
 token onto any error from a lower layer, so both carry a line and
 column a caller can print.
 
 ### Why does the lexer not know keywords?
 
-The module doc of the lexer states the rule, and the grammar is what
-makes it possible. Production [53] `PN_LOCAL` in section 3.7.1 of
+The grammar is what makes it possible. Production [53] `PN_LOCAL` in section 3.7.1 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prod-PN_LOCAL)
 admits the characters of `entity`, so that text is a `QUALIFIED_NAME`
 under production [52] wherever one may stand, in an attribute name or
 as a bare identifier under the default namespace. The lexer makes a
 `Name` of it, and `is_keyword` and `classify` in the parser test the
 token where a keyword may stand, at the start of a statement or a
-declaration. The
-doc on `digit_name` gives the same pattern a stated reason in its own
-case. The lexer cannot tell a local name made of digits from an
-`INT_LITERAL`, so the parser asks in identifier positions. Section
+declaration. `digit_name` follows the same pattern. The lexer cannot
+tell a local name made of digits from an `INT_LITERAL`, so the parser
+asks in identifier positions. Section
 3.7.1 also notes that `QUALIFIED_NAME` and `PN_PREFIX` conflict for a
 tokeniser and that in a `namespaceDeclaration` a tokeniser should
 prefer `PN_PREFIX`, which `prefix_name` does by testing the written
-text with `is_pn_prefix`. The commit "Add the PROV-N lexer" describes
-the rule and gives no further reason.
+text with `is_pn_prefix`.
 
 ## The Rust here
 
-- **`#[default]` on an enum variant**, first used in
-  `provkit/src/provn/mod.rs` at `Profile`. `#[derive(Default)]` on an
-  enum needs one variant marked `#[default]`, and `Profile::default()`
+- **`#[default]` on an enum variant**. `#[derive(Default)]` on an enum
+  needs one variant marked `#[default]`, and `Profile::default()`
   returns it.
   [Derive](https://doc.rust-lang.org/reference/attributes/derive.html),
   [Default for enums](https://doc.rust-lang.org/std/default/trait.Default.html#enums)
-- **References tied to the input, not to `&self`**, first used in
-  `provkit/src/provn/lexer/mod.rs` at `Lexer::rest`. Stop 1 gave a
-  struct a lifetime; here `rest(&self) -> &'a str` returns a slice
-  with the input's lifetime `'a` rather than the borrow of `self`, so
-  the slice stays usable across `self.advance()`, and `Parser::peek`
-  does the same with `&'t Token`.
+- **References tied to the input, not to `&self`**. Stop 1 gave a struct
+  a lifetime; here `Lexer::rest(&self) -> &'a str` returns a slice with the
+  input's lifetime `'a` rather than the borrow of `self`, so the slice
+  stays usable across `self.advance()`, and `Parser::peek` does the same
+  with `&'t Token`.
   [Lifetime syntax](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html)
-- **Recursive descent, one method per production**, first used in
-  `provkit/src/provn/parser/mod.rs` at `document`. Each method
-  consumes the tokens of its production, calls the methods for the
-  productions inside it, and returns a value or an error; stop 1's `?`
-  ends the whole parse at the first error.
+- **Recursive descent, one method per production**. Each method of
+  `Parser`, from `document` down, consumes the tokens of its production, calls the methods for the productions
+  inside it, and returns a value or an error; stop 1's `?` ends the
+  whole parse at the first error.
   [Recoverable errors with `?`](https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html)
-- **`match` guards**, first used in `provkit/src/provn/lexer/mod.rs`
-  at `next_token`. `'@' if self.after_string` takes the arm only when
-  the condition holds, and `_ if rest.starts_with("%%")` tests
-  something other than the matched value.
+- **`match` guards**. In `next_token`, `'@' if self.after_string` takes
+  the arm only when the condition holds, and `_ if rest.starts_with("%%")` tests something
+  other than the matched value.
   [Extra conditionals with match guards](https://doc.rust-lang.org/book/ch19-03-pattern-syntax.html#extra-conditionals-with-match-guards)
-- **A closure taking `&mut Self`**, first used in
-  `provkit/src/provn/parser/mod.rs` at `attribute_block`. The method
-  holds `&mut self`, so a closure cannot also capture the parser;
-  instead the parser is passed to the closure as a parameter on every
-  call, and `impl FnMut` lets the closure mutate what it captured,
-  such as `attributes`.
+- **A closure taking `&mut Self`**. `attribute_block` holds `&mut
+  self`, so a closure cannot also capture the parser; instead the parser is passed
+  to the closure as a parameter on every call, and `impl FnMut` lets the
+  closure mutate what it captured, such as `attributes`.
   [Closures](https://doc.rust-lang.org/book/ch13-01-closures.html)
-- **A `const` depth limit on recursion**, first used in
-  `provkit/src/provn/extension.rs` at `enter`. Each nested call passes
-  `depth + 1`, and `enter` refuses before the call that would exceed
+- **A `const` depth limit on recursion**. Each nested call passes `depth
+  + 1`, and `enter` refuses before the call that would exceed
   `MAX_DEPTH`, so the stack depth is bounded by a constant.
   [Constant items](https://doc.rust-lang.org/reference/items/constant-items.html)
-- **`.map(drop)`**, first used in `provkit/src/provn/extension.rs` at
-  `extensibility_body`. `literal_parts` returns a `Result` holding
-  tokens the caller does not want; `map(drop)` turns the `Ok` payload
-  into `()` and keeps the `Err`.
+- **`.map(drop)`**. `literal_parts` returns a `Result` holding tokens
+  `extensibility_body` does not want; `map(drop)` turns the `Ok` payload into `()`
+  and keeps the `Err`.
   [drop](https://doc.rust-lang.org/std/mem/fn.drop.html)
-- **Let chains**, first used in `provkit/src/provn/write/mod.rs` at
-  `declarations`, below the span on this page. `if let Some(default)
-  = ... && inherited... != Some(default)` binds and tests in one
-  condition, which edition 2024 allows.
+- **Let chains**. `if let Some(default) = ... && inherited... !=
+  Some(default)` in `declarations` binds and tests in one condition,
+  which edition 2024 allows.
   [Chains of conditions](https://doc.rust-lang.org/reference/expressions/if-expr.html#chains-of-conditions)
-- **`let _ = writeln!(..)`**, first used in
-  `provkit/src/provn/write/mod.rs` at `declarations`. Writing into a
-  `String` cannot fail, and `let _` discards the `Result` that the
-  `must_use` on it would otherwise warn about.
+- **`let _ = writeln!(..)`**. Writing into a `String` cannot fail, and
+  `let _` in `declarations` discards the `Result` that the `must_use` on it would
+  otherwise warn about.
   [writeln!](https://doc.rust-lang.org/std/macro.writeln.html)
-- **`Result::as_deref` with a slice pattern**, first used in
-  `provkit/src/provn/write/mod.rs` at `lexes_as_bare_name`. `as_deref`
-  turns `&Result<Vec<Token>, Error>` into `Result<&[Token], &Error>`,
-  and the pattern `Ok([first, second])` matches a slice of exactly two
-  elements, so one `matches!` tests the count and both kinds.
+- **`Result::as_deref` with a slice pattern**. `as_deref` turns
+  `&Result<Vec<Token>, Error>` into `Result<&[Token], &Error>`, and the
+  pattern `Ok([first, second])` matches a slice of exactly two elements,
+  so one `matches!` in `lexes_as_bare_name` tests the count and both
+  kinds.
   [Result::as_deref](https://doc.rust-lang.org/std/result/enum.Result.html#method.as_deref),
   [Slice patterns](https://doc.rust-lang.org/reference/patterns.html#slice-patterns)
-- **A scoped block to end a borrow**, first used in
-  `provkit/src/provn/write/mod.rs` at `to_string`. `WriteScope::of`
-  holds `&mut names` until the block closes, after which `&names` can
-  be lent to `write_bundle` and `declarations`.
+- **A scoped block to end a borrow**. In `to_string`, `WriteScope::of`
+  holds `&mut names` until the block closes, after which `&names` can be lent to
+  `write_bundle` and `declarations`.
   [References and borrowing](https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html)
 
 ## Run this
