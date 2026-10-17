@@ -116,10 +116,9 @@ with public fields.
 A bundle is an identifier, a [namespace](../reference/glossary.md#namespace-and-prefix-prov) table and records, and a
 document is a namespace table, top-level records and bundles. Every
 reference between records is a `QName`, so a document holds no
-pointer into itself, and the doc comment draws the consequence, that
-it can be cloned, compared and sent between threads freely. Neither type derives
-`PartialEq`; the impls at the end of the file are written out, and the
-doc comment on `Document` states the rule they follow. `bundle` finds
+pointer into itself and can be cloned, compared and sent between
+threads freely. Neither type derives `PartialEq`; the impls at the end
+of the file are written out and read below. `bundle` finds
 the first bundle with an identifier, and the next method reads the
 bundles as equality and the writers do.
 
@@ -151,22 +150,19 @@ set is keyed by `Record`'s derived `Hash` and `Eq`, which reach stop
 to the set of records of every bundle carrying it. A `Bundle` is equal
 to another when their identifiers and record sets are, and a
 `Document` when the top-level sets and the bundle maps are. Namespace
-tables take no part in either. The comment on `impl PartialEq for
-Document` gives the reason for grouping by identifier, that `==` stays
+tables take no part in either. Grouping by identifier keeps `==`
 reflexive for a hand-built document which repeats one, and
 `repeated_bundle_identifiers_merge` in the tests checks that it does.
 
 ### provkit/src/unify/mod.rs
 
-The module doc names the constraints the merge follows, and the one
-public item is a method on `Document`, written in this module rather
-than in `document.rs`.
+The one public item is a method on `Document`, written in this module
+rather than in `document.rs`.
 
 ```rust,ignore
 {{#include ../../../provkit/src/unify/mod.rs:unified}}
 ```
 
-The doc comment states the rules, and
 [`unified`](../api/provkit/struct.Document.html#method.unified) itself
 is short. It walks `merged_bundles`, so two bundles sharing an
 identifier are one before anything merges, runs `unify_records` on
@@ -272,8 +268,8 @@ the set, and that is `Error::DuplicateBundle`. The PROV-N reader
 reaches this line for every bundle it opens, so a second `bundle
 ex:b` is refused here. The PROV-JSON reader resolves every bundle key
 and refuses a repeat with the same error before it reads any bundle
-body, and then drives `start_bundle` for each bundle, where the
-comment in that reader says the check runs again. Both readers
+body, and then drives `start_bundle` for each bundle, so the check
+runs again there. Both readers
 report one error for a repeated identifier, and `duplicate_bundle` in
 the tests pins the builder's half. The identifier set is why
 `many_bundles_check_duplicates_by_lookup` can start thousands of
@@ -333,28 +329,25 @@ is the `Result` every signature in the crate names.
 
 ### Why one macro table for the eighteen kinds?
 
-The doc comment on `records!` says what the macro generates, and the
-commit "State the eighteen kinds once" says why it exists. Before it,
-the record module held six hand-written copies of the per-kind table,
-the `Kind` variants, the keywords, the formals, the structs, the
-`Record` variants and the arms of every `match` over them, and the
-PROV-N parser held a seventh, the argument counts. A kind's facts now
-sit on one row, and the enum, the struct, the `Record` variant and
-every generated `match` arm follow from it, so adding a kind is adding
-a row. The same commit made `Kind` and `Record` `#[non_exhaustive]`,
-so a row added later does not break a `match` in another crate.
+Without the table, the record module would hold a hand-written copy
+of the per-kind facts in each of the `Kind` variants, the keywords,
+the formals, the structs, the `Record` variants and the arms of every
+`match` over them, and the PROV-N parser another, the argument counts.
+A kind's facts sit on one row, and the enum, the struct, the `Record`
+variant and every generated `match` arm follow from it, so adding a
+kind is adding a row. `Kind` and `Record` are `#[non_exhaustive]`, so
+a row added later does not break a `match` in another crate.
 
 ### Why is every formal an `Option`?
 
-The row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "Every formal attribute is an `Option`" states the rule. The
-PROV-JSON reader does not check that a mandatory formal is present,
-and `Strict` rejects `-` in a required argument of a relation because
-the grammar does, so a document with missing arguments reads,
-and `Default` reads such a PROV-N document. Section 2.4 of
+The PROV-JSON reader does not check that a mandatory formal is
+present, and `Strict` rejects `-` in a required argument of a relation
+because the grammar does, so a document with missing arguments reads,
+and `Default` reads such a PROV-N document
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Every formal attribute is an `Option`"). Section 2.4 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prov-n-optionals)
-is where the marker comes from. When only some optional terms are
+defines the marker. When only some optional terms are
 omitted, position matters, so "an additional marker must be used to
 indicate that a particular term is not available", and "the symbol
 '-' is used for this purpose". A field that can be absent in what the
@@ -363,50 +356,47 @@ readers accept has to be an `Option`, and the absent value is what
 
 ### Why is `Document` equality set-based?
 
-The row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "`Document` equality is set-based" states it. Equality
-ignores record order, attribute order, namespace tables, [blank-node](../reference/glossary.md#blank-node-prov)
-labels and the spelling of a [literal](../reference/glossary.md#literal-and-typed-literal-prov), and it keeps identifier
-presence, while `Attributes` and the record lists keep insertion
-order. The reason the row gives is that output follows input order,
-so a written document reads like its source, and the two models
-compare the same. The crate doc on `lib.rs` repeats the rule for `==`,
-and the doc comment on `Document` adds that bundles are matched by
-identifier, which is why `bundle_sets` is a map and not a list.
+Equality ignores record order, attribute order, namespace tables,
+[blank-node](../reference/glossary.md#blank-node-prov) labels and the
+spelling of a
+[literal](../reference/glossary.md#literal-and-typed-literal-prov),
+and it keeps identifier presence, while `Attributes` and the record
+lists keep insertion order ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"`Document` equality is set-based"). Output follows input order, so a
+written document reads like its source, and the two models compare the
+same. Bundles are matched by identifier, which is why `bundle_sets` is
+a map and not a list.
 
 ### Why do the readers refuse a repeated bundle identifier while a hand-built document may hold one?
 
-Two rows of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-answer the two halves. The departure row beginning "Two bundles with
-one identifier are `Error::DuplicateBundle`" says both readers refuse
-them although the PROV-N grammar accepts them, that in PROV-JSON a
-bundle key given twice counts, and that ProvPy rejects them too in
-PROV-N. Its reason is that a bundle identifier names one bundle. The fields of
-`Document` are public, so nothing stops a program from pushing two
-bundles with one identifier, and the limit row beginning "Bundles
-that share an identifier" says what then happens. They count as one.
-Equality compares the union of their records, both writers merge them
+Both readers refuse them although the PROV-N grammar accepts them, a
+PROV-JSON bundle key given twice counts as a repeat, and ProvPy
+rejects them too in PROV-N, because a bundle identifier names one
+bundle ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Two bundles with one identifier are `Error::DuplicateBundle`"). The
+fields of `Document` are public, so nothing stops a program from
+pushing two bundles with one identifier, and they then count as one
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Bundles that share an identifier"). Equality compares the union of their records, both writers merge them
 through `merged_bundles`, and `unified()` merges them first, so
 equality, writing and unification agree on one reading of an
 ill-formed document.
 
 ### What does `unified` follow?
 
-Three rows of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-fix it. The row beginning "`Document::unified()` follows Constraints
-53 to 55" lists the kinds that cannot share an identifier and says
-that records sharing an identifier and a kind merge, with
+Records sharing an identifier and a kind merge, with
 `Error::Unification` for conflicting formals, because a merge that
-silently picks a side hides a data error. The row beginning "An absent
-formal unifies with a present one" names the four positions where
-PROV-CONSTRAINTS reads `-` as the constant "none", and the row
-beginning "`unified()` never merges the four identifier-less kinds"
-says that those kinds and records with no identifier never merge,
-while an exact repeat of any record is kept once. The constraints are
-in [PROV-CONSTRAINTS](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/).
+silently picks a side hides a data error. An absent formal unifies
+with a present one, except in the four positions where
+PROV-CONSTRAINTS reads `-` as the constant "none". The four
+identifier-less kinds and records with no identifier never merge,
+while an exact repeat of any record is kept once
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md), the rows
+beginning "`Document::unified()` follows Constraints 53 to 55", "An
+absent formal unifies with a present one" and "`unified()` never
+merges the four identifier-less kinds"). The constraints themselves
+are in
+[PROV-CONSTRAINTS](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/).
 Constraints 22 and 23 in section 6.1 make the identifier a key for
 each statement, so the statements about one identifier must merge
 into one. Definition 4 and Table 3 in section 5.1 say which
@@ -420,123 +410,106 @@ applies.
 
 ### Why `At` and `InRecord` rather than a position on every variant?
 
-The limit row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "Every error from the PROV-N reader carries a line and a
-column" states what each reader reports, `Error::Syntax` for text the
-grammar rejects and `Error::At` around the error for a name, literal
-or record, and in PROV-JSON `Error::InRecord` naming the section and
-the record's key around an error found while building a record. Its
-reason is that the PROV-N reader knows where each token sits, and a
-PROV-JSON error is more useful with its record. The commit "Give
-errors typed payloads and positions" introduced `At` with one helper
-in the parser that wraps an error from the name, value or record
-layer at its token, and the commit "Report PROV-JSON shape errors as
-structure errors and name the record" introduced `InRecord` the same
-way. The
-doc comment on each boxed field says that `Display` prints the inner
-error, so it is not also the `source()`.
+The PROV-N reader reports `Error::Syntax` for text the grammar rejects
+and `Error::At` around the error for a name, literal or record, and
+the PROV-JSON reader reports `Error::InRecord` naming the section and
+the record's key around an error found while building a record
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Every error from the PROV-N reader carries a line and a column"). The
+PROV-N reader knows where each token sits, and a PROV-JSON error is
+more useful with its record. One helper in the parser wraps an error
+from the name, value or record layer in `At` at its token, and the
+PROV-JSON reader wraps in `InRecord` the same way. `Display` prints
+the inner error, so it is not also the `source()`.
 
 ## The Rust here
 
-- **Internal `@rule` arms and nested repetition in `macro_rules!`**,
-  first used in `provkit/src/record/mod.rs` at `records!`. A rule
-  whose pattern starts with a marker is called by the macro itself to
-  pick a piece of code by a row's shape, as `records!(@id_type $shape)`
-  does, and the `$($field: $attr,)*` inside each row is a repetition
-  nested in the one over rows; stop 1's `names!` used a single level.
+- **Internal `@rule` arms and nested repetition in `macro_rules!`**. A
+  rule whose pattern starts with a marker is called by the macro itself
+  to pick a piece of code by a row's shape, as `records!(@id_type
+  $shape)` does, and the `$($field: $attr,)*` inside each row is a
+  repetition nested in the one over rows; stop 1's `names!` used a
+  single level.
   [Repetitions](https://doc.rust-lang.org/reference/macros-by-example.html#repetitions),
   [Internal rules](https://veykril.github.io/tlborm/decl-macros/patterns/internal-rules.html)
-- **A macro that defines macros**, first used in
-  `provkit/src/record/formal.rs` at `formals!`. The template writes
+- **A macro that defines macros**. The template of `formals!` writes
   `macro_rules! formal_type` with one rule per row, so the table of
   formals is the one place a formal's type is stated.
   [Macros by example](https://doc.rust-lang.org/reference/macros-by-example.html)
-- **`#[macro_use]` and textual macro scope**, first used in
-  `provkit/src/record/mod.rs` at `mod formal;`. A `macro_rules!` macro
-  is in scope from its definition to the end of the enclosing module,
-  and `#[macro_use]` on a `mod` carries its macros out to the text
-  after the declaration, which is why `mod formal;` is the first item.
+- **`#[macro_use]` and textual macro scope**. A `macro_rules!` macro is
+  in scope from its definition to the end of the enclosing module, and
+  `#[macro_use]` on a `mod` carries its macros out to the text after the
+  declaration, which is why `mod formal;` is the first item.
   [The macro_use attribute](https://doc.rust-lang.org/reference/macros-by-example.html#the-macro_use-attribute)
-- **`#[non_exhaustive]`**, first used in `provkit/src/record/mod.rs` at
-  `Kind`. A `match` on the enum in another crate must have a wildcard
-  arm, so a variant added later is not a breaking change; `Error` puts
-  it on its struct variants too, so a pattern there ends in `..`.
+- **`#[non_exhaustive]`**. A `match` on `Kind` or `Record` in another
+  crate must have a wildcard arm, so a variant added later is not a breaking
+  change; `Error` puts it on its struct variants too, so a pattern there
+  ends in `..`.
   [The non_exhaustive attribute](https://doc.rust-lang.org/reference/attributes/type_system.html#the-non_exhaustive-attribute)
-- **Associated constants**, first used in `provkit/src/record/mod.rs`
-  at `Kind::ALL`. A `const` inside an `impl` is reached through the
-  type, and a slice as its type leaves the length out of the type, so
-  the list can grow with the table.
+- **Associated constants**. `Kind::ALL` is a `const` inside an `impl`,
+  reached through the type, and a slice as its type leaves the length
+  out of the type, so the list can grow with the table.
   [Associated constants](https://doc.rust-lang.org/reference/items/associated-items.html#associated-constants)
-- **Owned and borrowed twins**, first used in
-  `provkit/src/record/formal.rs` at `Formal` and `FormalRef`. One enum
-  holds values and the other holds references with a lifetime, with
-  `From<FormalRef<'_>> for Formal` as the one-way bridge; stop 1's
-  `QName` borrowed with `&str`, and here the borrowed form is a type
-  of its own.
+- **Owned and borrowed twins**. `Formal` holds values and `FormalRef`
+  holds references with a lifetime, with `From<FormalRef<'_>> for
+  Formal` as the one-way bridge; stop 1's `QName` borrowed with `&str`,
+  and here the borrowed form is a type of its own.
   [Validating references with lifetimes](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html)
-- **A generic method bounded by a private trait**, first used in
-  `provkit/src/record/formal.rs` at `Formals::take`. `fn take<T:
+- **A generic method bounded by a private trait**. `Formals::take<T:
   FormalValue>` is one function for `QName` and `DateTime`, and the
   caller never names `T`, because the field being assigned fixes it;
   stop 2's `impl Into<T>` arguments are the same mechanism on the
   argument side.
   [Generic data types, in function definitions](https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions)
-- **`pub(super)`**, first used in `provkit/src/record/formal.rs` at
-  `FormalValue`. The item is visible in the parent module, `record`,
-  and its children, and nowhere else, which is narrower than the
+- **`pub(super)`**. `FormalValue` is visible in the parent module,
+  `record`, and its children, and nowhere else, which is narrower than the
   `pub(crate)` stop 0 showed; `Formals` and its methods carry the same
   marker.
   [pub(in path), pub(crate), pub(super), and pub(self)](https://doc.rust-lang.org/reference/visibility-and-privacy.html#pubin-path-pubcrate-pubsuper-and-pubself)
-- **`Cow`**, first used in `provkit/src/document.rs` at
-  `merged_bundles`. `Cow<'_, [Bundle]>` is either `Borrowed` of the
-  document's own slice or `Owned` of a `Vec`, and a caller reads both
-  as a slice, so the common case allocates nothing; `clip` returns a
-  `Cow<str>` for the same reason.
+- **`Cow`**. `Cow<'_, [Bundle]>` is either `Borrowed` of the document's
+  own slice or `Owned` of a `Vec`, and a caller reads both as a slice,
+  so the common case allocates nothing; `clip` returns a `Cow<str>` for
+  the same reason.
   [Cow](https://doc.rust-lang.org/std/borrow/enum.Cow.html)
-- **`HashSet` and `HashMap` with borrowed keys**, first used in
-  `provkit/src/document.rs` at `merged_bundles`. A `HashSet<&QName>`
-  or `HashSet<&Record>` holds references into the document, so
-  building one clones nothing, and the set lives no longer than the
-  borrow; stop 1's maps owned their keys.
+- **`HashSet` and `HashMap` with borrowed keys**. A `HashSet<&QName>` in
+  `merged_bundles` or a `HashSet<&Record>` in `same_records` holds
+  references into the document, so building one clones nothing, and
+  the set lives no longer than the borrow; stop 1's
+  maps owned their keys.
   [HashSet](https://doc.rust-lang.org/std/collections/struct.HashSet.html),
   [Storing keys with associated values in hash maps](https://doc.rust-lang.org/book/ch08-03-hash-maps.html)
-- **`chain` and `flat_map`**, first used in `provkit/src/document.rs`
-  at `all_records`. `chain` runs a second iterator after the first,
-  and `flat_map` turns each bundle into an iterator over its records
-  and flattens them, so one expression walks every record.
+- **`chain` and `flat_map`**. `chain` runs a second iterator after the
+  first, and `flat_map` turns each bundle into an iterator over its
+  records and flattens them, so one expression in `all_records` walks
+  every record.
   [Iterator::flat_map](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.flat_map)
-- **An `impl` block in another module**, first used in
-  `provkit/src/unify/mod.rs` at `impl Document`. Inherent methods may
-  be written in any module of the defining crate, so `unified` lives
-  beside the merging code it calls and still appears on `Document`.
+- **An `impl` block in another module**. Inherent methods may be written
+  in any module of the defining crate, so `unified` lives beside the
+  merging code it calls and still appears on `Document`.
   [Inherent implementations](https://doc.rust-lang.org/reference/items/implementations.html#inherent-implementations)
-- **An enum as a state machine and `std::mem::replace`**, first used
-  in `provkit/src/builder.rs` at `State`. The variant is the state and
-  `InBundle` carries the data that exists only in that state;
-  `mem::replace` swaps a new state in and hands the old one back, so
-  the bundle moves out without a clone.
+- **An enum as a state machine and `std::mem::replace`**. The variant
+  of `State` is the state and `InBundle` carries the data that exists
+  only in that state; `mem::replace` swaps a new state in and hands the old one back,
+  so the bundle moves out without a clone.
   [mem::replace](https://doc.rust-lang.org/std/mem/fn.replace.html)
-- **`debug_assert!`**, first used in `provkit/src/builder.rs` at
-  `DocumentBuilder::finish`. It checks an invariant in debug builds
-  and compiles to nothing in release builds, which fits a check on
-  callers inside the crate.
+- **`debug_assert!`**. It checks an invariant in debug builds and
+  compiles to nothing in release builds, which fits the builder's
+  checks on callers inside the crate.
   [debug_assert](https://doc.rust-lang.org/std/macro.debug_assert.html)
-- **`thiserror` derives**, first used in `provkit/src/error.rs` at
-  `Error`. `#[derive(thiserror::Error)]` with `#[error("...")]` on each
-  variant writes `Display` and `std::error::Error`, `#[from]` writes
-  the `From` impl that `?` uses, `#[source]` names the cause, and
-  `#[error(transparent)]` forwards both to the payload.
+- **`thiserror` derives**. `#[derive(thiserror::Error)]` on `Error`
+  with `#[error("...")]` on each variant writes `Display` and
+  `std::error::Error`, `#[from]` writes the `From` impl that `?` uses,
+  `#[source]` names the cause, and `#[error(transparent)]` forwards both
+  to the payload.
   [thiserror](https://docs.rs/thiserror/latest/thiserror/)
-- **A recursive type through `Box`**, first used in
-  `provkit/src/error.rs` at `Error::At`. An enum cannot contain itself
-  by value, because its size would have no bound, so the inner error
-  lives on the heap behind a `Box<Error>`; stop 1's `Box<str>` was
-  the same pointer holding text.
+- **A recursive type through `Box`**. An enum cannot contain itself by
+  value, because its size would have no bound, so the inner error of
+  `At` lives on the heap behind a `Box<Error>`; stop 1's `Box<str>` was the same
+  pointer holding text.
   [Enabling recursive types with boxes](https://doc.rust-lang.org/book/ch15-01-box.html#enabling-recursive-types-with-boxes)
-- **A `Result` type alias**, first used in `provkit/src/error.rs` at
-  `Result`. `type Result<T> = std::result::Result<T, Error>` fixes the
-  error type once, so every signature in the crate writes `Result<T>`.
+- **A `Result` type alias**. `type Result<T> = std::result::Result<T,
+  Error>` fixes the error type once, so every signature in the crate
+  writes `Result<T>`.
   [Type aliases](https://doc.rust-lang.org/reference/items/type-aliases.html)
 
 ## Run this
