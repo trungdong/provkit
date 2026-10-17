@@ -14,9 +14,9 @@ on stop 1 for the scope that resolves each key to a `QName`.
 
 ### provkit/src/json/mod.rs
 
-The module doc fixes one rule for every position in an error from this
-module, a 1-based line and a 1-based column counted in characters. The
-file declares three private modules, re-exports `write` and
+Every position in an error from this module is a 1-based line and a
+1-based column counted in characters. The file declares three private
+modules, re-exports `write` and
 `to_string`, and defines the public reader.
 
 ```rust,ignore
@@ -27,8 +27,7 @@ The body of [`read`](../api/provkit/json/fn.read.html) is the three
 layers, one call each. `strip_bom` drops one leading byte order mark,
 `serde_json::from_str` reads the text into the wire type
 `JsonDocument`, and `read::emit` drives the builder with what the wire
-type holds. The `# Errors` section is the contract. Text that is not
-JSON is [`Error::Json`](../api/provkit/enum.Error.html) holding a
+type holds. Text that is not JSON is [`Error::Json`](../api/provkit/enum.Error.html) holding a
 [`JsonError`](../api/provkit/struct.JsonError.html) with the line and
 column where parsing stopped. Valid JSON that is not a PROV document is
 `Error::JsonStructure`, and `shape_error`, below the span, tells the
@@ -45,9 +44,8 @@ counts bytes and the PROV-N reader counts characters.
 
 ### provkit/src/json/wire.rs
 
-The module doc says it in one line. These are the types serde reads
-into and writes from, private to the module, and the model never sees
-them. `JsonDocument` is a `prefix` table, an `IndexMap` from `Kind` to
+These are the types serde reads into and writes from, private to the
+module, and the model never sees them. `JsonDocument` is a `prefix` table, an `IndexMap` from `Kind` to
 a section, the bundles in order, and the first bundle key given twice
 if there is one. A section is an `IndexMap` from identifier to
 `OneOrMany<JsonRecord>`, and a record is an `IndexMap` from [attribute](../reference/glossary.md#attribute-prov)
@@ -70,9 +68,8 @@ name, and falls through to the code below the `match`. That code
 first reads the refused key's value into `IgnoredAny`, which parses
 and discards it, so text that is not JSON is reported as that, and
 then returns the refusal, placed where the parser now stands, at the
-end of the value. The doc comment on the struct, above the span, gives
-that order as the reason. The namespace table and each section are
-read through a newtype.
+end of the value. The namespace table and each section are read
+through a newtype.
 
 ```rust,ignore
 {{#include ../../../provkit/src/json/wire.rs:unique}}
@@ -105,9 +102,9 @@ and the visitor answers in `visit_map` for an object and in
 `visit_seq` for an array. Both read a record body through `Body`, a
 unit struct that implements `DeserializeSeed`, so
 `next_element_seed(Body)` reads each array element with the visitor a
-single object gets. The doc comment gives the reason for not deriving
-this half. An untagged enum tries each variant in turn and reports
-that none matched, and dispatching on the shape keeps the inner error.
+single object gets. This half is not derived, because an untagged enum
+tries each variant in turn and reports that none matched, while
+dispatching on the shape keeps the inner error.
 `Body::visit_map`, below the span, reads every attribute value as
 `&RawValue`, which borrows the value's text from the input without
 parsing it, and `from_raw` turns that text into the enum the reader
@@ -124,11 +121,11 @@ element is never itself an array, because `ValueVisitor::visit_seq`
 refuses a nested one before parsing it. `Invalid` is a value the wire
 layer could not read, holding the message and a `Place`, which is
 either a position inside the fragment or the address of the byte after
-it. The doc comment on `Body` says why an invalid value is a variant
-and not an error. An error raised inside the visitor would be placed
-where the outer parser stands, past the whole value, and would not
-name its record, so the value is carried to the reader, which places
-it and wraps it in the record. A key given twice in a record that
+it. An invalid value is a variant rather than an error, because an
+error raised inside the visitor would be placed where the outer parser
+stands, past the whole value, and would not name its record. The value
+is carried to the reader instead, which places it and wraps it in the
+record. A key given twice in a record that
 holds no invalid value yet becomes an `Invalid` value the same way,
 placed after its second value. The
 `Serialize` impl at the end of the file writes each variant back, a
@@ -137,15 +134,14 @@ output unchanged.
 
 ### provkit/src/json/read/mod.rs
 
-The module doc is "Wire structs to document-builder events". `emit` is
-the entry point, called once by `read`.
+`emit` turns the wire structs into document-builder events, and is the
+entry point `read` calls once.
 
 ```rust,ignore
 {{#include ../../../provkit/src/json/read/mod.rs:emit}}
 ```
 
-The doc comment lists the order in which faults are reported, and the
-body follows it. `refuse_invalid` walks the document's sections for the
+Faults are reported in a fixed order. `refuse_invalid` walks the document's sections for the
 first `JsonValue::Invalid` and returns it as `Error::InRecord`, with
 `invalid_value`, above the span, turning its `Place` into a line and
 column in the input. Then `namespaces` builds the document's table from
@@ -204,8 +200,8 @@ When the writer failed, `io_error_kind` is `Some` and the error becomes
 `Error::Io`; otherwise it is `Error::Json`. `&mut *out` reborrows the
 writer for the call, so `out` is still usable for `write_all` on the
 next line. `to_string` writes into a `Vec<u8>` and converts it with
-`String::from_utf8`, and the `expect` states why that cannot fail, as
-the `# Panics` section does. `to_wire`, below the span, starts from a
+`String::from_utf8`, whose `expect` never fires because `serde_json`
+writes UTF-8. `to_wire`, below the span, starts from a
 working copy of the document's namespace table, so a minted [prefix](../reference/glossary.md#namespace-and-prefix-prov)
 never touches the caller's document, and `bundle_wire` writes each
 bundle against its own table over the document's. The records of each
@@ -257,114 +253,98 @@ fn main() -> Result<(), provkit::Error> {
 
 ### Why capture values as raw JSON text?
 
-The limit row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "A JSON number keeps its text" states the rule. `1.50` and
-`1e400` read as `xsd:double` with that text and compare by value, and
-the writers never emit raw numbers. The reason the row gives is that
-the value is typed from its token, so no digit is lost. The commit
-"Type a PROV-JSON number from its text" says what went wrong before.
-The serde visitor hands a number over as `i64`, `u64` or `f64`, so `-0`
-and any integer beyond `u64` became an `xsd:double` with re-rendered
-text, `1e400` was refused as out of range, `1.50` lost its trailing
-zero, and the PROV-N reader, which already typed a bare integer by its
-text, disagreed with the PROV-JSON reader on the same number. A
-dependant that enabled the `arbitrary_precision` feature of
-`serde_json` changed how numbers arrive and made every number fail to
-read, and the raw text is the same under both feature sets. The doc
-comment on `Body` repeats the first point.
+`1.50` and `1e400` read as `xsd:double` with that text and compare by
+value, and the writers never emit raw numbers, so the value is typed
+from its token and no digit is lost ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"A JSON number keeps its text"). The serde visitor hands a number over
+as `i64`, `u64` or `f64`, so a reader built on those turns `-0` and
+any integer beyond `u64` into an `xsd:double` with re-rendered text,
+refuses `1e400` as out of range, drops the trailing zero of `1.50`,
+and disagrees with the PROV-N reader, which types a bare integer by
+its text, on the same number. A dependant that enables the
+`arbitrary_precision` feature of `serde_json` changes how numbers
+arrive, and the raw text is the same under both feature sets.
 
 ### Why refuse a repeated key?
 
-The row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "A key given twice in one PROV-JSON object is an error"
-lists where the rule applies, in a namespace table, among the sections
-of a document or bundle, among the records of a section, among the
-attributes of a record and among the members of a value object, and
-says ProvPy keeps the last value at every level, so a repeated key
-drops a namespace, a record, a section, a bundle or a value without a
-message. The commit "Refuse a key given twice in a PROV-JSON object"
-says the reader kept the last value too, at every level but a repeated
-`prefix`, before `Unique` and `Body` were added and `ContainerVisitor`
-refused a section seen twice.
-The reason the row gives is that RFC 8259 says the names in an
-object SHOULD be unique and I-JSON (RFC 7493) says they MUST be, that
-keeping the last value changes the document unannounced, and that the
-PROV-N readers of both libraries already reject a repeated prefix and
-a repeated bundle.
+The rule applies in a namespace table, among the sections of a
+document or bundle, among the records of a section, among the
+attributes of a record and among the members of a value object
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"A key given twice in one PROV-JSON object is an error"). ProvPy keeps
+the last value at every level, so a repeated key drops a namespace, a
+record, a section, a bundle or a value without a message. RFC 8259
+says the names in an object SHOULD be unique and I-JSON (RFC 7493)
+says they MUST be, keeping the last value changes the document
+unannounced, and the PROV-N readers of both libraries already reject a
+repeated prefix and a repeated bundle.
 
 ### Why do positions match `serde_json`'s?
 
-The `# Errors` section of `read` states the rule for each case, and
-the limit row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "Every error from the PROV-N reader carries a line and a
-column" gives the same contract for both readers and says both count
-the column in characters. The reader raises some errors itself, a value
-it could not decode or a key given twice in a record, after
-`serde_json` has accepted the text, and the doc comment on
-`invalid_value` says each is placed where `serde_json` gives the same
-error when it reads the document in one pass, so an error from either
-source reads the same way. For a value that is the line and column of
+Both readers carry a line and a column on every error and count the
+column in characters ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Every error from the PROV-N reader carries a line and a column"). The
+reader raises some errors itself, a value it could not decode or a key
+given twice in a record, after `serde_json` has accepted the text, and
+each is placed where `serde_json` gives the same error when it reads
+the document in one pass, so an error from either source reads the
+same way. For a value that is the line and column of
 its token. For a refused key it is past the value, past the white
 space after it and past a closing brace that follows, because that is
 where `serde_json` stands when a map visitor returns an error after
 `next_value`. The column is counted again in characters by
 `char_column`, because `serde_json` counts bytes and the PROV-N reader
-counts characters. The row beginning "`json::read`, `provn::read`,
-`provn::read_with` and `provn::read_report` ignore one leading UTF-8
-byte-order mark" covers the first character. `strip_bom` runs before
-the parse, so the mark is counted in no column, and the reason the row
-gives is that a byte-order mark is an encoding signature, not content,
-while U+FEFF is otherwise a name character.
+counts characters. `strip_bom` runs before the parse, so a leading
+byte-order mark is counted in no column, because it is an encoding
+signature, not content, while U+FEFF is otherwise a name character
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"`json::read`, `provn::read`, `provn::read_with` and
+`provn::read_report` ignore one leading UTF-8 byte-order mark").
 
 ### Why fan a `hadMember` with several members into several records?
 
-Two rows of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-cover the two halves. The limit row beginning "A PROV-JSON `hadMember`
-with an empty `prov:entity` array" says that a `hadMember` with N
-members reads as N records that share their attributes, and gives the
-reason that the ProvToolbox shared corpus writes the members of a
-[collection](../reference/glossary.md#collection-and-membership-prov) as an array under `prov:entity`, that ProvPy reads that
-form, that the submission's schema does not define it, and that
-PROV-DM holds one member per relation. Section 3.2.14 of
+A `hadMember` with N members reads as N records that share their
+attributes, because the ProvToolbox shared corpus writes the members
+of a
+[collection](../reference/glossary.md#collection-and-membership-prov)
+as an array under `prov:entity`, ProvPy reads that form, the
+submission's schema does not define it, and PROV-DM holds one member
+per relation ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"A PROV-JSON `hadMember` with an empty `prov:entity` array"). Section
+3.2.14 of
 [PROV-JSON](https://www.w3.org/Submission/2013/SUBM-prov-json-20130424/#term-membership)
 writes three memberships on one collection as three objects under
 `hadMember`, each with one `prov:entity`, which is the model the
-fan-out produces, one membership per member. The row beginning "A `hadMember` with several
-members gives every record the identifier and the attributes" says
-ProvPy gives them to the first record only, and gives the reason that
-the records are alike except for the member, and which member comes
-first should not decide which record carries the identifier.
+fan-out produces, one membership per member. Every record gets the
+identifier and the attributes, where ProvPy gives them to the first
+record only, because the records are alike except for the member, and
+which member comes first should not decide which record carries the
+identifier ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"A `hadMember` with several members gives every record the identifier
+and the attributes").
 
 ### Why accept an array of objects under one identifier?
 
-The departure row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "The PROV-JSON reader and writer take an array of record
-objects under one identifier" says the submission's schema does not
-define the form and that ProvPy reads and writes it. The reason the
-row gives is that two records of one kind can share an identifier, and
-a JSON object holds a key once. Section 2 of
+The submission's schema does not define the form, and ProvPy reads
+and writes it. Two records of one kind can share an identifier, and a
+JSON object holds a key once ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"The PROV-JSON reader and writer take an array of record objects under
+one identifier"). Section 2 of
 [PROV-JSON](https://www.w3.org/Submission/2013/SUBM-prov-json-20130424/#PROV-JSON-overview)
 makes each section a map of records indexed by identifier, so without
 the array a second `entity` under the identifier of the first has
 nowhere to go, while `Document` equality, which stop 3 showed is a set
-over records, keeps both. The ProvToolbox row of the same file records
-that its reader refuses the form.
+over records, keeps both. ProvToolbox's reader refuses the form.
 
 ### Why are blank-node labels not preserved?
 
-The limit row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "Blank-node labels are not preserved" says the writer mints
-`_:id1`, `_:id2` and so on in document order, continuing through
-bundles, and that a blank key on an element or a bundle is a read
-error. The reason it gives is that [blank nodes](../reference/glossary.md#blank-node-prov) have no identity beyond
-their position, equality ignores labels, and elements and bundles need
-an identifier. Section 2.1 of
+The writer mints `_:id1`, `_:id2` and so on in document order,
+continuing through bundles, and a blank key on an element or a bundle
+is a read error, because
+[blank nodes](../reference/glossary.md#blank-node-prov) have no
+identity beyond their position, equality ignores labels, and elements
+and bundles need an identifier ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Blank-node labels are not preserved"). Section 2.1 of
 [PROV-JSON](https://www.w3.org/Submission/2013/SUBM-prov-json-20130424/#blank-node-ids)
 says the same of the format. Identifiers of relations are optional in
 PROV but required in PROV-JSON because they are keys, so a blank node
@@ -375,81 +355,68 @@ key as no identifier, and `sections` writes a fresh one.
 
 ## The Rust here
 
-- **serde's `Deserialize` and `Visitor`**, first used in
-  `provkit/src/json/wire.rs` at `ContainerVisitor`.
-  `Deserialize::deserialize` hands the deserializer a visitor, and the
-  deserializer calls the `visit_*` method for the shape it finds;
-  `visit_map` gets a `MapAccess` whose `next_key` and `next_value` read
-  the object one entry at a time, so the visitor decides each key
-  before its value is read.
+- **serde's `Deserialize` and `Visitor`**. `Deserialize::deserialize`
+  hands the deserializer a visitor, and the deserializer calls the
+  `visit_*` method for the shape it finds; `visit_map` gets a
+  `MapAccess` whose `next_key` and `next_value` read the object one
+  entry at a time, so `ContainerVisitor` decides each key before its
+  value is read.
   [Visitor](https://docs.rs/serde/latest/serde/de/trait.Visitor.html),
   [MapAccess](https://docs.rs/serde/latest/serde/de/trait.MapAccess.html),
   [Implementing Deserialize](https://serde.rs/impl-deserialize.html)
-- **`DeserializeSeed`**, first used in `provkit/src/json/wire.rs` at
-  `Body`. A seed is a value that drives a read, where `Deserialize` is
-  a type; `next_element_seed(Body)` reads each array element through
-  `Body`'s visitor, the one a single object gets.
+- **`DeserializeSeed`**. A seed is a value that drives a read, where
+  `Deserialize` is a type; `next_element_seed(Body)` reads each array
+  element through `Body`'s visitor, the one a single object gets.
   [DeserializeSeed](https://docs.rs/serde/latest/serde/de/trait.DeserializeSeed.html)
-- **`IgnoredAny`**, first used in `provkit/src/json/wire.rs` at
-  `ContainerVisitor::visit_map`. Reading a value into it parses and
-  discards it, so a refused key's value is checked as JSON and the
-  parser moves past it.
+- **`IgnoredAny`**. Reading a value into it parses and discards it, so
+  a key `ContainerVisitor` refuses has its value checked as JSON and
+  the parser moves past it.
   [IgnoredAny](https://docs.rs/serde/latest/serde/de/struct.IgnoredAny.html)
-- **`serde_json::value::RawValue`**, first used in
-  `provkit/src/json/wire.rs` at `Body::visit_map`.
-  `next_value::<&RawValue>()` borrows one value's text from the input
-  without parsing it, and `get` returns it as `&str`; it needs the
-  `raw_value` feature of `serde_json`.
+- **`serde_json::value::RawValue`**. `next_value::<&RawValue>()` in
+  `Body::visit_map` borrows one value's text from the input without
+  parsing it, and `get` returns it as `&str`; it needs the `raw_value` feature of `serde_json`.
   [RawValue](https://docs.rs/serde_json/latest/serde_json/value/struct.RawValue.html)
-- **`#[serde(untagged)]`**, first used in `provkit/src/json/wire.rs`
-  at `OneOrMany`. The derived `Serialize` writes a variant's payload
-  with nothing naming the variant, so `One` is the object and `Many`
-  the array.
+- **`#[serde(untagged)]`**. The derived `Serialize` writes a variant's
+  payload with nothing naming the variant, so `One` is the object and
+  `Many` the array.
   [Enum representations](https://serde.rs/enum-representations.html)
-- **Manual `Serialize`**, first used in `provkit/src/json/wire.rs` at
-  `serialize_container`. `serialize_map` opens an object,
-  `serialize_entry` writes each pair and `end` closes it, which is how
-  `prefix` comes first and `bundle` last whatever the map order.
+- **Manual `Serialize`**. In `serialize_container`, `serialize_map`
+  opens an object, `serialize_entry` writes each pair and `end` closes
+  it, which is how `prefix` comes first and `bundle` last whatever the
+  map order.
   [Implementing Serialize](https://serde.rs/impl-serialize.html)
-- **`PhantomData`**, first used in `provkit/src/json/wire.rs` at
-  `Unique`. A zero-sized field that names a type parameter the struct
-  does not store, so `Visit<V>` can implement `Visitor` with
+- **`PhantomData`**. A zero-sized field that names a type parameter the
+  struct does not store, so `Visit<V>` can implement `Visitor` with
   `Value = Unique<V>`.
   [PhantomData](https://doc.rust-lang.org/std/marker/struct.PhantomData.html)
-- **Generic newtypes**, first used in `provkit/src/json/wire.rs` at
-  `Unique`. A tuple struct around one field gives the field a second
-  `Deserialize`, here one that refuses a repeated key, and `.0` reaches
-  the map inside.
+- **Generic newtypes**. `Unique<V>` is a tuple struct around one field,
+  which gives the field a second `Deserialize`, here one that refuses a
+  repeated key, and `.0` reaches the map inside.
   [Using the newtype pattern](https://doc.rust-lang.org/book/ch20-02-advanced-traits.html#using-the-newtype-pattern-to-implement-external-traits-on-external-types)
-- **`IndexMap` `Entry` matched by variant**, first used in
-  `provkit/src/json/wire.rs` at `Unique`. `entry(key)` is `Vacant` or
-  `Occupied`, and matching the two is what makes a repeat visible;
-  stop 1's `or_default` chose for the caller.
+- **`IndexMap` `Entry` matched by variant**. `entry(key)` in `Unique`'s
+  visitor is `Vacant` or `Occupied`, and matching the two is what makes
+  a repeat visible; stop
+  1's `or_default` chose for the caller.
   [Entry](https://docs.rs/indexmap/latest/indexmap/map/enum.Entry.html)
-- **`Vec::with_capacity`**, first used in
-  `provkit/src/json/read/mod.rs` at `emit`. The vector is allocated
-  once for the number of bundles, which is known, so no push grows it.
+- **`Vec::with_capacity`**. In `emit` the vector is allocated once for
+  the number of bundles, which is known, so no push grows it.
   [Vec::with_capacity](https://doc.rust-lang.org/std/vec/struct.Vec.html#method.with_capacity)
-- **`collect` into `Result<Vec<_>, _>`**, first used in
-  `provkit/src/json/read/mod.rs` at `records_from`. `Result`
-  implements `FromIterator`, so collecting an iterator of results gives
-  the first `Err` or a `Vec` of every `Ok`.
+- **`collect` into `Result<Vec<_>, _>`**. `Result` implements
+  `FromIterator`, so collecting an iterator of results in
+  `records_from` gives the first `Err` or a `Vec` of every `Ok`.
   [FromIterator for Result](https://doc.rust-lang.org/std/iter/trait.FromIterator.html#impl-FromIterator%3CResult%3CA,+E%3E%3E-for-Result%3CV,+E%3E)
-- **`&mut *out` reborrowing**, first used in
-  `provkit/src/json/write.rs` at `write`. Dereferencing a `&mut` and
-  borrowing it again lends the writer for one call without moving the
-  reference, so the next line can use `out`.
+- **`&mut *out` reborrowing**. Dereferencing a `&mut` and borrowing it
+  again lends the writer for one call without moving the reference, so
+  the next line of `write` can use `out`.
   [Borrow operators](https://doc.rust-lang.org/reference/expressions/operator-expr.html#borrow-operators)
-- **`String::from_utf8(..).expect(..)` with a reason**, first used in
-  `provkit/src/json/write.rs` at `to_string`. `from_utf8` returns a
-  `Result` because not every byte sequence is text; `expect` panics
-  with the message when it is `Err`, and the message says why it never
-  is.
+- **`String::from_utf8(..).expect(..)` with a reason**. `from_utf8`
+  returns a `Result` because not every byte sequence is text; `expect`
+  panics with the message when it is `Err`, which `to_string` never
+  meets, because `serde_json` writes UTF-8.
   [String::from_utf8](https://doc.rust-lang.org/std/string/struct.String.html#method.from_utf8),
   [Result::expect](https://doc.rust-lang.org/std/result/enum.Result.html#method.expect)
-- **`Result<&QName, String>` as either-or**, first used in
-  `provkit/src/json/write.rs` at `sections`. `ok_or_else` builds a
-  `Result` whose `Err` is not a failure but the other case, a blank
+- **`Result<&QName, String>` as either-or**. `ok_or_else` in `sections`
+  builds a `Result` whose `Err` is not a failure but the other case, a blank
   label, and the `match` on it later reads both sides as data.
   [Result](https://doc.rust-lang.org/std/result/enum.Result.html)
 
@@ -526,8 +493,7 @@ provkit: /tmp/dup.json: PROV-JSON: duplicate field `ex:e` at line 1 column 76
 2
 ```
 
-The message names the key and the position, and the position follows
-the rule in the `# Errors` section of `read`. The second value is the
+The message names the key and the position. The second value is the
 `{}` after the repeated key, and the brace that follows it closes the
 `entity` object, so the error sits past that brace, at column 76, the
 count of characters on the line up to and including it.
@@ -540,9 +506,8 @@ python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])))' /tmp/dup.js
 {'prefix': {'ex': 'http://example.org/'}, 'entity': {'ex:e': {}}}
 ```
 
-Python keeps one `ex:e` and says nothing, which is what the row
-beginning "A key given twice in one PROV-JSON object is an error"
-describes as changing the document unannounced.
+Python keeps one `ex:e` and says nothing, so the document changes
+unannounced.
 
 </details>
 
