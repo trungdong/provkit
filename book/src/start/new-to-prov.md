@@ -81,6 +81,5 @@ resolves names in a bundle's scope, [Stop 4](../stops/4-json.md) reads the
 tables, blank-node labels and the spelling of a number, boolean or
 `dateTime`. `Document::unified` merges records that share an identifier
 and kind, and returns an error when their formal attributes conflict.
-The rules come from [PROV-CONSTRAINTS section 2.4, Unification and Merging](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/#unification-and-merging).
-The crate documentation in `provkit/src/lib.rs` summarises both, and
-[Stop 3](../stops/3-records.md) shows the code.
+The rules come from [PROV-CONSTRAINTS section 2.4, Unification and Merging](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/#unification-and-merging),
+and [Stop 3](../stops/3-records.md) shows the code.
