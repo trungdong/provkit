@@ -115,12 +115,14 @@ The version appears twice, once as the package version and once in the
 `unsafe_code = "forbid"` means no `unsafe` block anywhere in either
 crate, and `forbid` cannot be overridden by an `allow` further down.
 Clippy's `all` and `pedantic` groups both warn, and CI runs clippy with
-`-D warnings`, so each is an error there. The pedantic lints the
-manifest allows fight the domain. PROV names repeat their module, as
-`json::JsonValue` does, so `module_name_repetitions` is off, and every
-fallible function documents its `Error` in one place, so the two
-`missing_*_doc` lints are off too. Where one
-lint is wrong for a single item, the code carries `#[allow(clippy::...)]`
+`-D warnings`, so each is an error there. The manifest allows four
+pedantic lints, and its comment gives the reason for three, which
+fight the domain. PROV names repeat their module, as `json::JsonValue`
+does, so `module_name_repetitions` is off, and every fallible function
+documents its `Error` in one place, so `missing_errors_doc` and
+`missing_panics_doc` are off too. `must_use_candidate` is allowed with
+no comment. Where one lint is wrong for a single item, the code
+carries `#[allow(clippy::...)]`
 with a comment giving the reason, for example `too_many_arguments` on
 `DateTime::new`, which takes one argument per XSD component.
 
