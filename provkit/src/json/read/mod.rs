@@ -118,6 +118,7 @@ fn refuse_invalid(sections: &IndexMap<Kind, JsonSection>, input: &str) -> Result
     Ok(())
 }
 
+// ANCHOR: emit
 /// Builds the document `wire` holds. `input` is the text `wire` was read
 /// from. A fault the JSON parser refuses has already stopped the read, in
 /// the order of the text, so this sees only the faults the wire layer
@@ -185,6 +186,7 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
     builder.end_document();
     Ok(())
 }
+// ANCHOR_END: emit
 
 fn emit_sections(
     sections: &IndexMap<Kind, JsonSection>,
@@ -221,6 +223,7 @@ fn needs_identifier(section: &str, key: &str) -> Error {
     structure(format!("{section} `{}` needs a real identifier", clip(key)))
 }
 
+// ANCHOR: records_from
 /// One record, or several for `hadMember` with an array of members.
 fn records_from(
     kind: Kind,
@@ -265,6 +268,7 @@ fn records_from(
         attributes,
     )?])
 }
+// ANCHOR_END: records_from
 
 /// The value of the formal under `key`, a time when `time` and a name
 /// otherwise. A plain string is the text: a time parses after the space,

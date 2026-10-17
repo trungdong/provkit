@@ -2,6 +2,7 @@
 resolver = "3"
 members = ["provkit", "provkit-cli"]
 
+# ANCHOR: workspace
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
@@ -20,7 +21,9 @@ clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 assert_cmd = "2"
 predicates = "3"
+# ANCHOR_END: workspace
 
+# ANCHOR: lints
 [workspace.lints.rust]
 missing_docs = "warn"
 unsafe_code = "forbid"
@@ -38,10 +41,13 @@ must_use_candidate = "allow"
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "warn"
+# ANCHOR_END: lints
 
+# ANCHOR: release_profile
 # Release binaries: cross-crate optimisation (thin LTO), one codegen unit per
 # crate and no symbols. Debug builds are untouched.
 [profile.release]
 lto = "thin"
 codegen-units = 1
 strip = true
+# ANCHOR_END: release_profile

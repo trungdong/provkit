@@ -13,6 +13,7 @@ use crate::builder::DocumentBuilder;
 use crate::error::QUOTED;
 use crate::{Document, Error, JsonError, Result, strip_bom};
 
+// ANCHOR: json_read
 /// Read a PROV-JSON document.
 ///
 /// # Errors
@@ -58,6 +59,7 @@ pub fn read(text: &str) -> Result<Document> {
     read::emit(&wire, text, &mut builder)?;
     Ok(builder.finish())
 }
+// ANCHOR_END: json_read
 
 /// `serde_json` reports JSON of the wrong shape as a data error. That is
 /// valid JSON which is not PROV-JSON, so it is a structure error here. Any

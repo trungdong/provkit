@@ -83,6 +83,7 @@ pub(crate) fn document(records: Vec<Record>) -> Document {
     d
 }
 
+// ANCHOR: broken
 /// A writer whose every write fails.
 pub(crate) struct Broken;
 
@@ -95,6 +96,7 @@ impl std::io::Write for Broken {
         Ok(())
     }
 }
+// ANCHOR_END: broken
 
 /// The position and message of an [`Error::Syntax`].
 pub(crate) fn syntax(e: Error) -> ((usize, usize), String) {
@@ -128,6 +130,7 @@ pub(crate) fn written(d: &Document) -> (String, serde_json::Value) {
     (text, value)
 }
 
+// ANCHOR: round_trip
 /// As [`written`], after checking that the text reads back equal to `d`.
 #[cfg(feature = "json")]
 pub(crate) fn round_trip(d: &Document) -> (String, serde_json::Value) {
@@ -135,3 +138,4 @@ pub(crate) fn round_trip(d: &Document) -> (String, serde_json::Value) {
     assert_eq!(crate::json::read(&text).unwrap(), *d, "{text}");
     (text, value)
 }
+// ANCHOR_END: round_trip

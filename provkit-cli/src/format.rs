@@ -30,6 +30,7 @@ impl Format {
         }
     }
 
+    // ANCHOR: sniff
     /// From the text itself: `{` is PROV-JSON and `document` as a whole
     /// word is PROV-N, after leading whitespace and PROV-N comments. A comment
     /// may follow `document` directly.
@@ -61,6 +62,7 @@ impl Format {
             None
         }
     }
+    // ANCHOR_END: sniff
 }
 
 #[cfg(test)]

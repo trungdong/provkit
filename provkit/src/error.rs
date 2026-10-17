@@ -8,6 +8,7 @@ use crate::{Formal, FormalAttr, Kind, QName};
 /// The most characters of rejected input that a message quotes.
 pub(crate) const QUOTED: usize = 80;
 
+// ANCHOR: clip
 /// `text` as a message quotes it: whole when short, otherwise its first
 /// characters and its length. The error's payload keeps the whole text.
 pub(crate) fn clip(text: &str) -> Cow<'_, str> {
@@ -20,6 +21,7 @@ pub(crate) fn clip(text: &str) -> Cow<'_, str> {
         )),
     }
 }
+// ANCHOR_END: clip
 
 /// Every failure the crate can report.
 ///
@@ -65,6 +67,7 @@ pub enum Error {
         /// What the reader expected and what it found.
         message: String,
     },
+    // ANCHOR: error_at
     /// An error at a position in PROV-N text: a name, literal or record the
     /// reader could parse but not accept.
     #[error("line {line}, column {column}: {error}")]
@@ -78,6 +81,7 @@ pub enum Error {
         /// also the `source()` of this error.
         error: Box<Error>,
     },
+    // ANCHOR_END: error_at
     /// PROV-JSON that is valid JSON but not a PROV document.
     #[error("PROV-JSON: {message}")]
     #[non_exhaustive]
@@ -86,6 +90,7 @@ pub enum Error {
         /// position; the column is in characters.
         message: String,
     },
+    // ANCHOR: error_in_record
     /// An error in one record of a PROV-JSON document, or in a bundle's key.
     /// Inside a bundle, the record's error sits in a second `InRecord`
     /// naming the bundle.
@@ -100,6 +105,7 @@ pub enum Error {
         /// the `source()` of this error.
         error: Box<Error>,
     },
+    // ANCHOR_END: error_in_record
     /// Parts that do not make a record of their kind.
     #[error("{}: {message}", .kind.name())]
     #[non_exhaustive]

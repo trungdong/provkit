@@ -63,6 +63,7 @@ type Container = (
     Bundles,
 );
 
+// ANCHOR: container_visitor
 impl<'de> Visitor<'de> for ContainerVisitor {
     type Value = Container;
 
@@ -104,6 +105,7 @@ impl<'de> Visitor<'de> for ContainerVisitor {
         ))
     }
 }
+// ANCHOR_END: container_visitor
 
 impl<'de> Deserialize<'de> for JsonDocument {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
@@ -160,6 +162,7 @@ impl Serialize for BundlesOut<'_> {
     }
 }
 
+// ANCHOR: unique
 /// An object read into a map that keeps key order and refuses a key given
 /// twice.
 struct Unique<V>(IndexMap<String, V>);
@@ -191,6 +194,7 @@ impl<'de, V: Deserialize<'de>> Deserialize<'de> for Unique<V> {
         d.deserialize_map(Visit(PhantomData))
     }
 }
+// ANCHOR_END: unique
 
 /// The `bundle` object of a document, every entry kept in order up to the
 /// first key given twice. That key's value and the rest of the object are
@@ -247,6 +251,7 @@ impl Serialize for JsonBundle {
     }
 }
 
+// ANCHOR: one_or_many
 /// PROV-JSON lists several records under one identifier as an array.
 #[derive(Serialize)]
 #[serde(untagged)]
@@ -279,6 +284,7 @@ impl<'de> Deserialize<'de> for OneOrMany<JsonRecord> {
         d.deserialize_any(V)
     }
 }
+// ANCHOR_END: one_or_many
 
 /// Reads a record object into its attributes.
 ///
@@ -347,6 +353,7 @@ impl<T> OneOrMany<T> {
     }
 }
 
+// ANCHOR: json_value
 /// A JSON attribute value, one of the schema's `attributeValues` forms.
 pub(super) enum JsonValue {
     Str(String),
@@ -364,6 +371,7 @@ pub(super) enum JsonValue {
     /// its position in the document and the record it belongs to.
     Invalid(InvalidValue),
 }
+// ANCHOR_END: json_value
 
 /// Why a value could not be read, and where.
 pub(super) struct InvalidValue {

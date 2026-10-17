@@ -131,6 +131,7 @@ macro_rules! records {
             }
         }
 
+        // ANCHOR: record_struct_rule
         $(
             $(#[$doc])*
             #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -142,6 +143,7 @@ macro_rules! records {
                 pub attributes: Attributes,
             }
         )*
+        // ANCHOR_END: record_struct_rule
 
         /// A PROV record of any of the eighteen PROV-DM types.
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -211,6 +213,7 @@ macro_rules! records {
     };
 }
 
+// ANCHOR: records_table
 records! {
     /// An entity.
     Entity "entity" element [0] {}
@@ -327,6 +330,7 @@ records! {
         entity: Entity,
     }
 }
+// ANCHOR_END: records_table
 
 impl Kind {
     /// An error if `attributes` holds a name that spells one of this kind's

@@ -52,6 +52,7 @@ macro_rules! formals {
     };
 }
 
+// ANCHOR: formals_table
 formals! {
     Entity: QName "entity",
     Activity: QName "activity",
@@ -80,6 +81,7 @@ formals! {
     StartTime: DateTime "startTime",
     EndTime: DateTime "endTime",
 }
+// ANCHOR_END: formals_table
 
 impl FormalAttr {
     /// The formal for a `prov:` local name.
@@ -98,6 +100,7 @@ impl std::fmt::Display for FormalAttr {
     }
 }
 
+// ANCHOR: formal_twins
 /// An owned formal attribute value, for [`Record::from_parts`](super::Record::from_parts).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -117,6 +120,7 @@ pub enum FormalRef<'a> {
     /// A time-valued formal.
     Time(&'a DateTime),
 }
+// ANCHOR_END: formal_twins
 
 impl FormalRef<'_> {
     /// An owned [`Formal`] with a copy of the value.

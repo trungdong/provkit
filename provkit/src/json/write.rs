@@ -15,6 +15,7 @@ use crate::{
     Bundle, Document, Error, FormalRef, JsonError, Kind, Namespaces, QName, Record, Result, Value,
 };
 
+// ANCHOR: json_write
 /// Write `document` as PROV-JSON, pretty-printed with two-space indentation.
 ///
 /// Records without an identifier get `_:id1`, `_:id2`, ... in document order.
@@ -54,6 +55,7 @@ pub fn to_string(document: &Document) -> Result<String> {
     write(document, &mut buf)?;
     Ok(String::from_utf8(buf).expect("serde_json writes UTF-8"))
 }
+// ANCHOR_END: json_write
 
 fn to_wire(document: &Document) -> Result<JsonDocument> {
     // A copy of the document's table, so minting a prefix never touches the
@@ -151,6 +153,7 @@ fn prefix_table(
     out
 }
 
+// ANCHOR: sections
 /// Records grouped by kind in `Kind::ALL` order, then by identifier. Blank
 /// labels follow record order, whatever the grouping.
 fn sections(
@@ -199,6 +202,7 @@ fn sections(
     }
     Ok(out)
 }
+// ANCHOR_END: sections
 
 /// A record's body. An attribute spelling one of the record's own formals
 /// would overwrite or pose as that formal, so it is an error.

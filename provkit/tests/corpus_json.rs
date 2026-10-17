@@ -4,6 +4,7 @@ mod common;
 
 use common::{JSON_CORPUS_SIZE, Report, corpus_dir, files, only};
 
+// ANCHOR: reads_all
 #[test]
 fn reads_all_398() {
     let mut report = Report::default();
@@ -13,6 +14,7 @@ fn reads_all_398() {
     }
     report.finish(JSON_CORPUS_SIZE);
 }
+// ANCHOR_END: reads_all
 
 #[test]
 fn round_trips_all_398() {

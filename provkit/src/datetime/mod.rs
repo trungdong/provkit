@@ -8,6 +8,7 @@ use std::str::FromStr;
 use crate::well_known::XSD_DATETIME;
 use crate::{Error, Result};
 
+// ANCHOR: datetime
 /// An `xsd:dateTime` value.
 ///
 /// The value space follows XML Schema: a time with an offset denotes an
@@ -37,6 +38,7 @@ pub struct DateTime {
     offset: Option<i32>,
     source: Option<Box<str>>,
 }
+// ANCHOR_END: datetime
 
 impl DateTime {
     /// Build from components. `hour` may be 24 only with zero minutes and
@@ -262,6 +264,7 @@ impl DateTime {
     }
 }
 
+// ANCHOR: datetime_order
 impl PartialEq for DateTime {
     fn eq(&self, other: &Self) -> bool {
         self.is_zoned() == other.is_zoned() && self.key() == other.key()
@@ -282,6 +285,7 @@ impl PartialOrd for DateTime {
         (self.is_zoned() == other.is_zoned()).then(|| self.key().cmp(&other.key()))
     }
 }
+// ANCHOR_END: datetime_order
 
 impl fmt::Display for DateTime {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

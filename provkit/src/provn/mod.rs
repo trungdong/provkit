@@ -11,6 +11,7 @@ use crate::{Document, Result, strip_bom};
 
 pub use write::{name, statement, to_string, write};
 
+// ANCHOR: profile
 /// How closely the reader follows the Recommendation's grammar.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
@@ -46,6 +47,7 @@ pub enum Profile {
     #[default]
     Default,
 }
+// ANCHOR_END: profile
 
 /// What a profile reads beyond the grammar. One variant per bullet in
 /// [`Profile::Strict`]'s list.
@@ -129,6 +131,7 @@ pub fn read_with(text: &str, profile: Profile) -> Result<Document> {
     read_report(text, profile).map(|report| report.document)
 }
 
+// ANCHOR: read_report
 /// Read a PROV-N document under `profile`, and list the extensibility
 /// expressions it holds. PROV defines no meaning for them, so they are
 /// not in the document.
@@ -149,6 +152,7 @@ pub fn read_report(text: &str, profile: Profile) -> Result<ReadReport> {
         ignored: parser.ignored,
     })
 }
+// ANCHOR_END: read_report
 
 #[cfg(test)]
 mod tests {

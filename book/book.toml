@@ -1,0 +1,20 @@
+[book]
+title = "The provkit book"
+authors = ["Trung Dong Huynh"]
+language = "en"
+src = "src"
+
+[build]
+create-missing = false
+
+[rust]
+edition = "2024"
+
+[output.html]
+git-repository-url = "https://github.com/trungdong/provkit"
+
+[output.html.playground]
+runnable = false
+
+[output.html.search]
+enable = true

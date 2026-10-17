@@ -117,6 +117,7 @@ pub fn require_a_match(any_selected: bool) {
     }
 }
 
+// ANCHOR: report
 /// Collects per-file failures so one run reports them all.
 #[derive(Default)]
 pub struct Report {
@@ -175,3 +176,4 @@ impl Report {
         );
     }
 }
+// ANCHOR_END: report
