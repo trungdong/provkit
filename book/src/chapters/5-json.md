@@ -275,9 +275,11 @@ attributes of a record and among the members of a value object
 the last value at every level, so a repeated key drops a namespace, a
 record, a section, a bundle or a value without a message. RFC 8259
 says the names in an object SHOULD be unique and I-JSON (RFC 7493)
-says they MUST be, keeping the last value changes the document
-unannounced, and the PROV-N readers of both libraries already reject a
-repeated prefix and a repeated bundle.
+says they MUST be, so a document with a repeated key is malformed by
+the standards' own terms. Keeping the last value would hide that fault
+from the reader. The PROV-N readers of both libraries already reject a
+repeated prefix and a repeated bundle, so refusing a repeated key gives
+PROV-JSON the same rule.
 
 ### Why do positions match `serde_json`'s?
 
