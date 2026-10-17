@@ -1,5 +1,6 @@
 #!/bin/sh
-# Build the book: the idiom index, the check that the three-views doctest
+# Build the book: the idiom index, the check that the New to Rust table
+# matches the stop pages' idiom lists, the check that the three-views doctest
 # repeats the two example files, the library the doctests link against,
 # the rustdoc under book/book/api, the HTML, and the doctests.
 set -eu
@@ -7,6 +8,7 @@ cd "$(dirname "$0")/.."
 
 python3 -I book/tools/rust_notes.py --self-test
 python3 -I book/tools/rust_notes.py
+python3 -I book/tools/check_new_to_rust.py
 python3 -I - book/src/start/three-views.md book/examples/edit.provn book/examples/edit.json <<'EOF'
 import re, sys
 copies = re.findall(r'r#"(.*?)"#', open(sys.argv[1], encoding="utf-8").read(), re.S)
