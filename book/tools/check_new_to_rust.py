@@ -48,8 +48,10 @@ def from_table():
     start = lines.index(TABLE_HEADER) + 2
     triples = []
     for number, line in enumerate(lines[start:], start + 1):
-        if not line.startswith("|"):
+        if not line.strip():
             break
+        if not line.startswith("|"):
+            sys.exit(f"{path}:{number}: table row does not start with '|': {line!r}")
         match = TABLE_ROW.match(line)
         if not match:
             sys.exit(f"{path}:{number}: table row has an unexpected shape: {line!r}")
