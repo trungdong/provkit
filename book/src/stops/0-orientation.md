@@ -24,9 +24,9 @@ compiled.
 {{#include ../../../provkit/src/lib.rs:modules}}
 ```
 
-Eleven modules are private. Two, `json` and `provn`, are public, and
-each sits behind `#[cfg(feature = "...")]` so it exists only when its
-feature is on. A further module, `test_util`, is declared below
+Every module in the span above is private except two. `json` and
+`provn` are public, and each sits behind `#[cfg(feature = "...")]` so
+it exists only when its feature is on. A further module, `test_util`, is declared below
 this list as `pub(crate)` under `#[cfg(test)]`, so it is visible to
 the whole crate and to nothing outside it, and only while tests build.
 
@@ -115,9 +115,11 @@ The version appears twice, once as the package version and once in the
 `unsafe_code = "forbid"` means no `unsafe` block anywhere in either
 crate, and `forbid` cannot be overridden by an `allow` further down.
 Clippy's `all` and `pedantic` groups both warn, and CI runs clippy with
-`-D warnings`, so each is an error there. Four pedantic lints are allowed,
-and the manifest's own comment says why `module_name_repetitions` and
-the two `missing_*_doc` lints fight the domain. Where one
+`-D warnings`, so each is an error there. The pedantic lints the
+manifest allows fight the domain. PROV names repeat their module, as
+`json::JsonValue` does, so `module_name_repetitions` is off, and every
+fallible function documents its `Error` in one place, so the two
+`missing_*_doc` lints are off too. Where one
 lint is wrong for a single item, the code carries `#[allow(clippy::...)]`
 with a comment giving the reason, for example `too_many_arguments` on
 `DateTime::new`, which takes one argument per XSD component.
