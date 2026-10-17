@@ -40,11 +40,9 @@ are trimmed. A qualified-name datatype is `Error::InvalidLiteral`,
 because resolving the text needs a [prefix](../reference/glossary.md#namespace-and-prefix-prov) table, and the crate-private
 `typed_in`, which takes a `Scope`, is the path both readers use
 instead. Every other datatype, and a `dateTime` that does not parse,
-is `Typed`. The row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "A value has one representation" states the rule this
-routing serves. `"x"` and `"x" %% xsd:string` denote one value, so they
-must be one variant.
+is `Typed`. `"x"` and `"x" %% xsd:string` denote one value, so they
+must be one variant ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"A value has one representation").
 
 Equality and hashing come after the constructors.
 
@@ -55,9 +53,8 @@ Equality and hashing come after the constructors.
 `PartialEq` for `Value` asks for the same variant and then equal
 payloads, and two different variants are never equal. `Hash` feeds the
 variant's discriminant and then the payload, so the two agree. Stop 1
-wrote `QName`'s impls by hand to compare the IRI; here the comment
-above `impl PartialEq` gives a different reason, which the first card
-below takes up. The rule for typed literals sits in `TypedLiteral`'s
+wrote `QName`'s impls by hand to compare the IRI; here the reason is
+a different one, which the first card below takes up. The rule for typed literals sits in `TypedLiteral`'s
 impls, above the enum, and in `Key`. Two typed literals are equal when
 their datatypes are equal and their texts are equal or their keys are.
 `Key::of` trims the XSD white space and reads the text under its
@@ -117,7 +114,8 @@ to `xsd:boolean`, with `to_string` as the text, so the datatype follows
 the Rust type and `Value::from(5i64)` is an `xsd:long`, which is not
 equal to `Value::from(5i32)`. `from_float!` spells `NaN`, `INF` and
 `-INF` as XSD does and picks between plain digits and the exponent form
-by magnitude, with the thresholds the comment gives. After the macros,
+by magnitude, with the exponent below `1e-4` and from `1e16` up, as
+Python's `repr` does. After the macros,
 `From<&str>` and `From<String>` give `Str`, and `QName`, `DateTime` and
 `LangStr` each map to their own variant. `Attributes::insert` takes
 `impl Into<Value>`, so `insert(name, 3)` and `insert(name, "text")`
@@ -213,42 +211,37 @@ pairs in any order hash alike.
 
 ### Why compare numbers by value within one datatype?
 
-Two rows of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-fix the rule. The one beginning "A typed literal is never rejected for
-its text" says a typed literal is kept as written whatever its text,
-because production [41] in section 3.7.3 of
+A typed literal is kept as written whatever its text, because
+production [41] in section 3.7.3 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prod-typedLiteral)
-puts no constraint on the string, and that values compare by value
-under one datatype, so `"5"`, `" 5 "`, `"+5"` and `"005"` are one
-`xsd:int` and `"1e999"` equals `"INF"` as an `xsd:double`. The row
-beginning "Values of the numeric and boolean datatypes compare by
-value" gives the reason, equal values under one datatype are one
-value, and records that ProvPy compares `xsd:int`, `xsd:double` and
-`xsd:boolean` by value and `xsd:long`, `xsd:integer` and `xsd:float`
-by text. The doc comment on `Value` adds the two edges. Text outside
-the datatype's lexical space compares as text, which is why
-`Key::integer` checks the bounds and `"300"` as `xsd:byte` has no
-integer key, and values of different datatypes are never equal, so
-`"5"` as `xsd:int` and `"5"` as `xsd:long` are two values. The comment
-above `impl PartialEq for Value` answers a narrower question, why the
-impl is written out when a derived one would compare the same things.
-The commit "Write out the equality of Value and Attributes again"
-explains that a derived `PartialEq` also implements
+puts no constraint on the string, and values compare by value under
+one datatype, so `"5"`, `" 5 "`, `"+5"` and `"005"` are one `xsd:int`
+and `"1e999"` equals `"INF"` as an `xsd:double`
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"A typed literal is never rejected for its text"). Equal values under
+one datatype are one value. ProvPy compares `xsd:int`, `xsd:double`
+and `xsd:boolean` by value and `xsd:long`, `xsd:integer` and
+`xsd:float` by text ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Values of the numeric and boolean datatypes compare by value"). Two
+edges follow. Text outside the datatype's lexical space compares as
+text, which is why `Key::integer` checks the bounds and `"300"` as
+`xsd:byte` has no integer key, and values of different datatypes are
+never equal, so `"5"` as `xsd:int` and `"5"` as `xsd:long` are two
+values. The impl is written out although a derived one would compare
+the same things, because a derived `PartialEq` also implements
 `StructuralPartialEq`, which lets another crate match a `const Value`
 as a pattern, and that is a promise the public surface does not make.
 
 ### Why are integers typed by range?
 
-The departure row of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-beginning "Integer literals are typed by range in both formats" gives
-the reason. Section 3.7.3 of
+Section 3.7.3 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prod-convenienceNotation)
 calls a bare integer sugar for `xsd:int`, but a number outside the
 `xsd:int` range has no valid `xsd:int` form, and the PROV-JSON note lets
 a native number stand for `xsd:decimal`. One rule for both formats
-means `[ex:k=3000000000]` equals the PROV-JSON `{"ex:k": 3000000000}`.
+means `[ex:k=3000000000]` equals the PROV-JSON `{"ex:k": 3000000000}`
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"Integer literals are typed by range in both formats").
 ProvToolbox reads every bare integer with `Integer.valueOf` and fails
 above 2147483647, so the PROV-N writer writes an integer bare only when
 it is an `xsd:int` and quotes an `xsd:long` or `xsd:integer` with its
@@ -260,19 +253,16 @@ the datatype.
 
 ### Why keep the source text of a `dateTime`?
 
-The doc comment on `DateTime` states it. The text a value was parsed
-from is kept and printed back, and a value built from components prints
-in canonical form. The commit "Add DateTime with XSD value-space
-equality" introduced the field for that purpose, keeping the source
-text for `Display` while comparing in value space. Two rows of
-[CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-need it.
-The row beginning "`xsd:dateTime` follows XSD 1.1" lets the fraction
-have any number of digits, and the row beginning "`xsd:dateTime`
-fractions beyond nine digits" holds equality, ordering and hashing to
-nanoseconds while the source text keeps every digit. The row beginning
-"`xsd:anyURI` stays a typed literal" states the principle for values
-in general, writing returns what was read. So `2011-11-16T24:00:00Z`
+The text a value was parsed from is kept and printed back, and a value
+built from components prints in canonical form, so `Display` returns
+the source while equality works in value space. The fraction may have
+any number of digits, and equality, ordering and hashing go to
+nanoseconds while the source text keeps every digit
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"`xsd:dateTime` follows XSD 1.1" and "`xsd:dateTime` fractions beyond
+nine digits"). The same principle holds for values in general, writing
+returns what was read ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"`xsd:anyURI` stays a typed literal"). So `2011-11-16T24:00:00Z`
 compares equal to the next midnight and prints as written, and
 `parses_and_keeps_source` in the tests checks the round trip.
 
@@ -287,120 +277,104 @@ model of section D.2.1, and in section 3.3.7.3 lists the datatype's
 zoned value against an unzoned one is found by imputing offsets of
 +14:00 and -14:00 to the unzoned one, and that many such pairs are
 incomparable because the two imputations disagree. Rust's `Ord`
-promises a total order, so the doc comment on `DateTime` says it
-implements `PartialOrd` and not `Ord`. `partial_cmp` returns `None`
+promises a total order, so `DateTime` implements `PartialOrd` and not
+`Ord`. `partial_cmp` returns `None`
 for every zoned and unzoned pair, which is a simpler rule than XSD's.
 It leaves incomparable every pair XSD does, and also the pairs far
-enough apart for both imputations to agree. The commit's note adds
-that `Eq` still holds, because equality is reflexive where order is
-undefined.
+enough apart for both imputations to agree. `Eq` still holds, because
+equality is reflexive where order is undefined.
 
 ### Why an `Arc` with copy on write around the attribute set?
 
-The doc comment on `Attributes` states the behaviour. Clones share one
-allocation, and the first write to a clone copies the pairs. The
-commit "Share attribute storage between clones" gives the case. A
-PROV-JSON `hadMember` lists its members in an array and the reader
-fans it out into one record per member, each carrying the same
-attribute set, and a [collection](../reference/glossary.md#collection-and-membership-prov) with thousands of members and as many
-attributes used to deep-copy that set into every record. With the
-`Arc` the records share one allocation, and
-`member_fan_out_shares_one_attribute_allocation` in the JSON reader's
-tests checks that they do. The same commit made `extend_from` into an
-empty set clone the `Arc` rather than the pairs, so unifying a single
-record copies nothing. `clones_share_until_written` is the rule in the
+Clones share one allocation, and the first write to a clone copies the
+pairs. The case that forces it is a PROV-JSON `hadMember`, which lists
+its members in an array. The reader fans it out into one record per
+member, each carrying the same attribute set, and a
+[collection](../reference/glossary.md#collection-and-membership-prov)
+with thousands of members and as many attributes would otherwise
+deep-copy that set into every record. With the `Arc` the records share
+one allocation, and `member_fan_out_shares_one_attribute_allocation`
+in the JSON reader's tests checks that they do. `extend_from` into an
+empty set clones the `Arc` rather than the pairs for the same reason,
+so unifying a single record copies nothing. `clones_share_until_written` is the rule in the
 small. A clone shares until its first `insert`, and then it owns a
 copy.
 
 ## The Rust here
 
-- **`impl Into<String>` and `impl Into<Value>` arguments**, first used
-  in `provkit/src/value/mod.rs` at `LangStr::new`. An argument typed
-  `impl Into<T>` accepts anything that converts into `T`, so a caller
-  passes a `&str` or a `String` to `new`, and a number, a `&str` or a
-  `QName` to `Attributes::insert`.
+- **`impl Into<String>` and `impl Into<Value>` arguments**. An argument
+  typed `impl Into<T>` accepts anything that converts into `T`, so a
+  caller passes a `&str` or a `String` to `LangStr::new`, and a number,
+  a `&str` or a `QName` to `Attributes::insert`.
   [Traits as parameters](https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters)
-- **`compile_fail` doctests**, first used in `provkit/src/value/mod.rs`
-  at `TypedLiteral`. A doctest marked `compile_fail` passes only when
-  it fails to compile, and the error code after the comma pins which
-  error; the two on `TypedLiteral` show that its fields cannot be set
-  from outside the crate.
+- **`compile_fail` doctests**. A doctest marked `compile_fail` passes
+  only when it fails to compile, and the error code after the comma pins
+  which error; the two on `TypedLiteral` show that its fields cannot be
+  set from outside the crate.
   [Documentation tests, attributes](https://doc.rust-lang.org/rustdoc/write-documentation/documentation-tests.html#attributes)
-- **Enums with data in variants**, first used in
-  `provkit/src/value/mod.rs` at `Value`. Each variant carries its own
-  payload type, and a `match` on the enum binds the payload, as `eq`
-  and `datatype` do.
+- **Enums with data in variants**. Each variant of `Value` carries its
+  own payload type, and a `match` on the enum binds the payload, as
+  `eq` and `datatype` do.
   [Defining an enum](https://doc.rust-lang.org/book/ch06-01-defining-an-enum.html)
-- **`FromStr` and `str::parse`**, first used in
-  `provkit/src/value/mod.rs` at `integer_datatype`. `parse::<i64>()`
-  turns text into a number through `i64`'s `FromStr` and returns a
-  `Result`; `impl FromStr for DateTime` gives `DateTime` the same
-  method.
+- **`FromStr` and `str::parse`**. `parse::<i64>()` in
+  `integer_datatype` turns text into a number through `i64`'s `FromStr`
+  and returns a `Result`; `impl FromStr for DateTime` gives `DateTime`
+  the same method.
   [FromStr](https://doc.rust-lang.org/std/str/trait.FromStr.html)
-- **`std::mem::discriminant`**, first used in
-  `provkit/src/value/mod.rs` at `impl Hash for Value`. It gives the
-  variant of an enum value without its fields, which the hash feeds
-  first so that two variants with equal payloads hash apart.
+- **`std::mem::discriminant`**. It gives the variant of an enum value
+  without its fields, which `Hash for Value` feeds first so that two
+  variants with equal payloads hash apart.
   [discriminant](https://doc.rust-lang.org/std/mem/fn.discriminant.html)
-- **`macro_rules!` generating trait impls over a `$t:ty` list**, first
-  used in `provkit/src/value/mod.rs` at `from_native!`. The `$t:ty`
-  fragment captures a type, and the body writes one `impl From<$t>`
-  per row; stop 1's `names!` used the same repetition for statics.
+- **`macro_rules!` generating trait impls over a `$t:ty` list**. The
+  `$t:ty` fragment in `from_native!` captures a type, and the body
+  writes one `impl From<$t>` per row; stop 1's `names!` used the same
+  repetition for statics.
   [Macros by example](https://doc.rust-lang.org/reference/macros-by-example.html)
-- **`From` and `Into`**, first used in `provkit/src/value/mod.rs` at
-  `impl From<&str> for Value`. Implementing `From<T> for Value` gives
+- **`From` and `Into`**. Implementing `From<T> for Value` gives
   `Value::from(t)` and, through the blanket impl, `t.into()`, which is
   what an `impl Into<Value>` argument calls.
   [Recoverable errors with Result](https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html),
   [From](https://doc.rust-lang.org/std/convert/trait.From.html)
-- **`use std::fmt::Write as _`**, first used in
-  `provkit/src/datetime/mod.rs` at `use std::fmt::{self, Write as _}`.
-  The `as _` brings the trait's methods into scope without binding its
-  name, which is all `write!` into a `String` needs in `text`.
+- **`use std::fmt::Write as _`**. The `as _` at the top of
+  `datetime/mod.rs` brings the trait's methods into scope without
+  binding its name, which is all `write!` into a `String` needs in
+  `text`.
   [Underscore imports](https://doc.rust-lang.org/reference/items/use-declarations.html#underscore-imports)
-- **`#[allow(clippy::too_many_arguments)]` with a reason**, first used
-  in `provkit/src/datetime/mod.rs` at `DateTime::new`. The attribute
-  silences one lint on one item, and the comment above it says why
-  eight arguments are right here.
+- **`#[allow(clippy::too_many_arguments)]` with a reason**. The
+  attribute silences one lint on one item, `DateTime::new`, whose
+  arguments are one per XSD component.
   [too_many_arguments](https://clippy.rust-lang.org/master/index.html#too_many_arguments),
   [Lint check attributes](https://doc.rust-lang.org/reference/attributes/diagnostics.html#lint-check-attributes)
-- **`and_then`, `map_err` and `ok_or_else` chains**, first used in
-  `provkit/src/datetime/mod.rs` at `DateTime::new` and `parse`.
-  `and_then` runs the next check only when the last passed, `map_err`
-  turns a `&str` reason into an `Error`, and `ok_or_else` turns a
-  `None` from `split_once` into an `Err`, each before one `?`.
+- **`and_then`, `map_err` and `ok_or_else` chains**. `and_then` runs the
+  next check only when the last passed, `map_err` turns a `&str` reason
+  into an `Error`, and `ok_or_else` turns a `None` from `split_once`
+  into an `Err`, each before one `?` in `DateTime::new` and `parse`.
   [Result](https://doc.rust-lang.org/std/result/enum.Result.html)
-- **`i128::from` widening**, first used in
-  `provkit/src/datetime/mod.rs` at `date`. `From<i64> for i128` is
-  lossless, so the calendar arithmetic in `key` and `days_from_civil`
-  cannot wrap for any year the struct can hold.
+- **`i128::from` widening**. `From<i64> for i128` is lossless, so the
+  calendar arithmetic in `key` and `days_from_civil` cannot wrap for any
+  year the struct can hold.
   [i128](https://doc.rust-lang.org/std/primitive.i128.html)
-- **`bool::then`**, first used in `provkit/src/datetime/mod.rs` at
-  `impl PartialOrd for DateTime`. `cond.then(|| x)` is `Some(x)` when
-  the condition holds and `None` otherwise, which is the whole of
+- **`bool::then`**. `cond.then(|| x)` is `Some(x)` when the condition
+  holds and `None` otherwise, which is the whole of `DateTime`'s
   `partial_cmp`; stop 1's `then_some` is the same without a closure.
   [bool::then](https://doc.rust-lang.org/std/primitive.bool.html#method.then)
-- **`IndexSet`**, first used in `provkit/src/attributes.rs` at
-  `Attributes`. The set counterpart of stop 1's `IndexMap`, keeping
-  insertion order and refusing duplicates by `Hash` and `Eq`.
+- **`IndexSet`**. The set counterpart of stop 1's `IndexMap`, keeping
+  insertion order and refusing duplicates by `Hash` and `Eq`; it is the
+  one field of `Attributes`.
   [IndexSet](https://docs.rs/indexmap/latest/indexmap/set/struct.IndexSet.html)
-- **`Arc::make_mut` and copy on write**, first used in
-  `provkit/src/attributes.rs` at `insert`. It returns a mutable
-  reference to the value inside an `Arc`, cloning the value into a new
-  allocation first when other owners share it.
+- **`Arc::make_mut` and copy on write**. In `insert` it returns a
+  mutable reference to the set inside the `Arc`, cloning the set into a
+  new allocation first when other owners share it.
   [Arc::make_mut](https://doc.rust-lang.org/std/sync/struct.Arc.html#method.make_mut)
-- **`move` closures returning `impl Iterator + 'a`**, first used in
-  `provkit/src/attributes.rs` at `get`. The closure takes ownership of
-  the cloned `name`, so the returned iterator borrows only the set and
-  the caller's key may be a temporary.
+- **`move` closures returning `impl Iterator + 'a`**. The closure in
+  `get` takes ownership of the cloned `name`, so the returned iterator
+  borrows only the set and the caller's key may be a temporary.
   [Closures](https://doc.rust-lang.org/book/ch13-01-closures.html)
-- **Implementing `Iterator`, `DoubleEndedIterator`,
-  `ExactSizeIterator`, `IntoIterator`, `FromIterator` and `Extend`**,
-  first used in `provkit/src/attributes.rs` at
-  `impl FromIterator<(QName, Value)> for Attributes`. `FromIterator`
-  makes `collect` work, `Extend` makes `extend` work, `IntoIterator`
-  for the type and for `&` of it makes `for` work, and the two wrapper
-  iterators forward `next`, `next_back` and `size_hint` to `indexmap`'s.
+- **Implementing `Iterator`, `DoubleEndedIterator`, `ExactSizeIterator`,
+  `IntoIterator`, `FromIterator` and `Extend`**. `FromIterator` makes
+  `collect` work, `Extend` makes `extend` work, `IntoIterator` for the
+  type and for `&` of it makes `for` work, and the two wrapper iterators
+  forward `next`, `next_back` and `size_hint` to `indexmap`'s.
   [std::iter](https://doc.rust-lang.org/std/iter/index.html)
 
 ## Run this
