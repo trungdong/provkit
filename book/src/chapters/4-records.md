@@ -1,14 +1,14 @@
-# Stop 3: Records and documents
+# Chapter 4: Records and documents
 
 A PROV [document](../reference/glossary.md#document-prov) is a set of [records](../reference/glossary.md#record-prov) of eighteen kinds, each a struct
 with an identifier, its [formal attributes](../reference/glossary.md#formal-attribute-prov) and the [attribute](../reference/glossary.md#attribute-prov) set of
-stop 2, held at the top level or in a named [bundle](../reference/glossary.md#bundle-prov). This stop reads
+chapter 3, held at the top level or in a named [bundle](../reference/glossary.md#bundle-prov). This chapter reads
 the table that states the eighteen kinds once, the formal values that
 fill their positions, the document that holds them, the equality both
 `compare` and the tests lean on, the [unification](../reference/glossary.md#unification-prov) that merges records
 sharing an identifier, the builder both readers drive, and the error
-type every layer returns. It builds on stop 1 for `QName`, which is
-every identifier and every name-valued formal, and on stop 2 for
+type every layer returns. It builds on chapter 2 for `QName`, which is
+every identifier and every name-valued formal, and on chapter 3 for
 `DateTime`, `Attributes` and the equality of values.
 
 ## What the code does
@@ -43,7 +43,7 @@ writes a struct per row.
 The `id` field is a `QName` on an element and an `Option<QName>` on a
 relation, which is what `@id_type` picks. Each formal is an `Option`
 of the type `formal_type!` gives it, `QName` or `DateTime`, under the
-doc line `formal_doc!` gives it, and `attributes` is stop 2's set. The
+doc line `formal_doc!` gives it, and `attributes` is chapter 3's set. The
 same main rule writes [`Kind`](../api/provkit/enum.Kind.html), one
 `Copy` variant per row, with `Kind::ALL` as a slice of every variant,
 and `name`, `from_name`, `is_element`, `formals` and the crate-private
@@ -128,7 +128,7 @@ bundles as equality and the writers do.
 
 `merged_bundles` returns a `Cow<'_, [Bundle]>`, which is either a
 borrow of the document's own `bundles` or an owned `Vec` the method
-built. The `all` call, stop 1's adaptor, inserts each identifier into
+built. The `all` call, chapter 2's adaptor, inserts each identifier into
 a `HashSet` of borrowed names and stops at the first one already
 there, so a document whose identifiers are all distinct, which is
 every document a reader builds, copies nothing. Otherwise the loop
@@ -145,8 +145,8 @@ is the last thing in the file before the tests.
 
 `same_records` collects each side into a `HashSet<&Record>` and
 compares the sets, so record order and repeats play no part, and the
-set is keyed by `Record`'s derived `Hash` and `Eq`, which reach stop
-2's rules for every value. `bundle_sets` maps each bundle identifier
+set is keyed by `Record`'s derived `Hash` and `Eq`, which reach chapter
+3's rules for every value. `bundle_sets` maps each bundle identifier
 to the set of records of every bundle carrying it. A `Bundle` is equal
 to another when their identifiers and record sets are, and a
 `Document` when the top-level sets and the bundle maps are. Namespace
@@ -196,7 +196,7 @@ the first, an absent one included. Everywhere else an absent value is
 an existential. The loop over `filter_map` sees only the present
 values, takes the first, lets an equal one pass and fails on a
 different one, so a `None` beside a value yields the value. The
-attribute sets are merged with `extend_from`, which stop 2 showed
+attribute sets are merged with `extend_from`, which chapter 3 showed
 shares the first set's allocation, and `from_parts` rebuilds the
 record under the shared identifier. The doctest below is the rule in
 one program, and the book compiles it.
@@ -317,7 +317,7 @@ their own. The PROV-N reader wraps one of them in `At` at the token it
 was reading, and the PROV-JSON reader wraps one in `InRecord` naming
 the section and the record's key, with a second `InRecord` naming the
 bundle when the record sits in one. Later in the file, `Json` is the
-one variant under `#[cfg(feature = "json")]`, stop 0's gate on a
+one variant under `#[cfg(feature = "json")]`, chapter 1's gate on a
 single variant, because its payload comes from an optional
 dependency, and `Io` uses `#[from]` so an `io::Error` from a writer's
 stream converts with `?`. `JsonError` marks its `serde_json` error
@@ -428,7 +428,7 @@ the inner error, so it is not also the `source()`.
   rule whose pattern starts with a marker is called by the macro itself
   to pick a piece of code by a row's shape, as `records!(@id_type
   $shape)` does, and the `$($field: $attr,)*` inside each row is a
-  repetition nested in the one over rows; stop 1's `names!` used a
+  repetition nested in the one over rows; chapter 2's `names!` used a
   single level.
   [Repetitions](https://doc.rust-lang.org/reference/macros-by-example.html#repetitions),
   [Internal rules](https://veykril.github.io/tlborm/decl-macros/patterns/internal-rules.html)
@@ -452,18 +452,18 @@ the inner error, so it is not also the `source()`.
   [Associated constants](https://doc.rust-lang.org/reference/items/associated-items.html#associated-constants)
 - **Owned and borrowed twins**. `Formal` holds values and `FormalRef`
   holds references with a lifetime, with `From<FormalRef<'_>> for
-  Formal` as the one-way bridge; stop 1's `QName` borrowed with `&str`,
+  Formal` as the one-way bridge; chapter 2's `QName` borrowed with `&str`,
   and here the borrowed form is a type of its own.
   [Validating references with lifetimes](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html)
 - **A generic method bounded by a private trait**. `Formals::take<T:
   FormalValue>` is one function for `QName` and `DateTime`, and the
   caller never names `T`, because the field being assigned fixes it;
-  stop 2's `impl Into<T>` arguments are the same mechanism on the
+  chapter 3's `impl Into<T>` arguments are the same mechanism on the
   argument side.
   [Generic data types, in function definitions](https://doc.rust-lang.org/book/ch10-01-syntax.html#in-function-definitions)
 - **`pub(super)`**. `FormalValue` is visible in the parent module,
   `record`, and its children, and nowhere else, which is narrower than the
-  `pub(crate)` stop 0 showed; `Formals` and its methods carry the same
+  `pub(crate)` chapter 1 showed; `Formals` and its methods carry the same
   marker.
   [pub(in path), pub(crate), pub(super), and pub(self)](https://doc.rust-lang.org/reference/visibility-and-privacy.html#pubin-path-pubcrate-pubsuper-and-pubself)
 - **`Cow`**. `Cow<'_, [Bundle]>` is either `Borrowed` of the document's
@@ -474,7 +474,7 @@ the inner error, so it is not also the `source()`.
 - **`HashSet` and `HashMap` with borrowed keys**. A `HashSet<&QName>` in
   `merged_bundles` or a `HashSet<&Record>` in `same_records` holds
   references into the document, so building one clones nothing, and
-  the set lives no longer than the borrow; stop 1's
+  the set lives no longer than the borrow; chapter 2's
   maps owned their keys.
   [HashSet](https://doc.rust-lang.org/std/collections/struct.HashSet.html),
   [Storing keys with associated values in hash maps](https://doc.rust-lang.org/book/ch08-03-hash-maps.html)
@@ -504,7 +504,7 @@ the inner error, so it is not also the `source()`.
   [thiserror](https://docs.rs/thiserror/latest/thiserror/)
 - **A recursive type through `Box`**. An enum cannot contain itself by
   value, because its size would have no bound, so the inner error of
-  `At` lives on the heap behind a `Box<Error>`; stop 1's `Box<str>` was the same
+  `At` lives on the heap behind a `Box<Error>`; chapter 2's `Box<str>` was the same
   pointer holding text.
   [Enabling recursive types with boxes](https://doc.rust-lang.org/book/ch15-01-box.html#enabling-recursive-types-with-boxes)
 - **A `Result` type alias**. `type Result<T> = std::result::Result<T,

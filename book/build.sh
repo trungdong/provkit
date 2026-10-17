@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build the book: the idiom index, the check that the New to Rust table
-# matches the stop pages' idiom lists, the check that the three-views doctest
+# matches the chapter pages' idiom lists, the check that the three-views doctest
 # repeats the two example files, the library the doctests link against,
 # the rustdoc, the HTML, and the doctests. The rustdoc is copied into
 # book/src/api before the HTML build, because mdBook copies every

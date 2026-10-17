@@ -175,4 +175,4 @@ error. Change a label in one file and run it again to see the record
 printed under the side that has it.
 
 Next: [New to Rust](new-to-rust.md) or [New to PROV](new-to-prov.md),
-or straight to [Stop 0](../stops/0-orientation.md).
+or straight to [Chapter 1](../chapters/1-orientation.md).

@@ -182,7 +182,7 @@ Each value has one owner, and assigning or passing it to another owner moves it,
 
 ### profile (PROV)
 
-A provkit setting that decides how strictly a reader treats input. `Strict` reads the whole grammar and the MUST statements of its prose, and `Default` adds the extensions ProvPy and ProvToolbox write. [Stop 5](../stops/5-provn.md) shows the code.
+A provkit setting that decides how strictly a reader treats input. `Strict` reads the whole grammar and the MUST statements of its prose, and `Default` adds the extensions ProvPy and ProvToolbox write. [Chapter 6](../chapters/6-provn.md) shows the code.
 
 ### PROV-CONSTRAINTS (PROV)
 
@@ -198,7 +198,7 @@ The text notation for PROV, with one functional-style statement per record ([PRO
 
 ### record (PROV)
 
-provkit's word for one PROV-DM description, such as an entity, an activity or a relation. [Stop 3](../stops/3-records.md) shows the type.
+provkit's word for one PROV-DM description, such as an entity, an activity or a relation. [Chapter 4](../chapters/4-records.md) shows the type.
 
 ### rustdoc and clippy (Rust)
 

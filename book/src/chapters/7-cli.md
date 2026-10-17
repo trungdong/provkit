@@ -1,19 +1,19 @@
-# Stop 6: The command line
+# Chapter 7: The command line
 
 The `provkit-cli` crate is the binary `provkit`, and it owns everything
 the library refuses to. The library reads `&str` and writes to
 `impl std::io::Write` and never touches a file, and the CLI owns
-files, format detection and exit codes. This stop
+files, format detection and exit codes. This chapter
 reads the clap definitions that turn two structs and an enum into the
 commands and their help, the function both
 commands read their input through, the sniffer that tells PROV-JSON
 from PROV-N by looking at the text, the `main` that turns a `Result`
 into an exit code, and `compare`, which prints what one [document](../reference/glossary.md#document-prov) has
-and the other lacks. It builds on stop 4 for `json::read` and
-`json::write`, on stop 5 for `provn::read_report`, `provn::write`,
-`provn::statement` and `provn::name`, on stop 3 for the set-based
+and the other lacks. It builds on chapter 5 for `json::read` and
+`json::write`, on chapter 6 for `provn::read_report`, `provn::write`,
+`provn::statement` and `provn::name`, on chapter 4 for the set-based
 equality `compare` starts from and for `merged_bundles` and
-`unified`, and on stop 1 for the [namespace](../reference/glossary.md#namespace-and-prefix-prov) table each side of a
+`unified`, and on chapter 2 for the [namespace](../reference/glossary.md#namespace-and-prefix-prov) table each side of a
 comparison renders against.
 
 ## What the code does
@@ -135,7 +135,7 @@ neither format. The decision is made on what is left. `{` is
 PROV-JSON, and `document` is PROV-N when nothing, a whitespace
 character or the start of a comment follows it, so `documentary` and
 `document(` are neither. `skip_trivia` in the library's lexer from
-stop 5 does the same job, but it is private to the library, so this
+chapter 6 does the same job, but it is private to the library, so this
 loop mirrors it rather than calling it.
 
 ### provkit-cli/src/compare.rs
@@ -151,8 +151,8 @@ both, and `--unified`, a `bool` flag that is true when present.
 input can be read once, and reads each side through `read_document`
 with the one `-f`. With `--unified` each document is replaced by its
 [`unified`](../api/provkit/struct.Document.html#method.unified) form
-from stop 3, and `with_context` puts the file name in front of a
-[unification](../reference/glossary.md#unification-prov) failure. Then `a == b` is the set-based equality of stop 3,
+from chapter 4, and `with_context` puts the file name in front of a
+[unification](../reference/glossary.md#unification-prov) failure. Then `a == b` is the set-based equality of chapter 4,
 so two documents in different formats, with different namespace
 tables and different [record](../reference/glossary.md#record-prov) order, compare equal, and the command
 returns `ExitCode::SUCCESS` with nothing printed. Otherwise it builds
@@ -165,7 +165,7 @@ of it printed, and returns 1.
 ```
 
 `only_in` collects `theirs` into a `HashSet<&Record>`, borrowing the
-records as stop 3's equality did, and keeps each record of `mine`
+records as chapter 4's equality did, and keeps each record of `mine`
 that the set lacks. The second test in the `filter` is
 `seen.insert(*r)`, which returns `false` for a record already
 inserted, so a record repeated on one side is listed once. The
@@ -210,7 +210,7 @@ exit code 1, and not a failure with exit code 2.
 ### Why `anyhow` in the binary and `thiserror` in the library?
 
 The library's [`Error`](../api/provkit/enum.Error.html) is an enum
-derived with `thiserror`, as stop 3 showed, and its doc example
+derived with `thiserror`, as chapter 4 showed, and its doc example
 matches a variant by name with `..` for the fields it does not need.
 `located` destructures `Syntax` and `At` the same way, because the
 binary wants their line and column, binds the `JsonError` inside
@@ -237,7 +237,7 @@ cannot write"). A name that belongs to an
 PROV-N`. The exit code stays 1, because PROV-JSON can hold such an
 IRI, and a difference in such a record is still a difference and not
 a failure with exit code 2. `provn::statement` still returns the
-error, so the library's contract from stop 5 is unchanged and the
+error, so the library's contract from chapter 6 is unchanged and the
 heading is the binary's own rendering, which `statement_line` builds
 from the name inside `Error::Unwritable`. The test
 `compare_marks_records_prov_n_cannot_write` pins each form.
@@ -295,31 +295,31 @@ declarations and the `prefix` lines beneath them. The tests
 - **`io::ErrorKind`**. `e.kind()` classifies an I/O error, `InvalidData`
   being the kind `fs::read_to_string` returns for text that is not
   UTF-8; `write_stdout` matches `BrokenPipe` with a `match` guard, as
-  stop 5's lexer matched on a condition.
+  chapter 6's lexer matched on a condition.
   [ErrorKind](https://doc.rust-lang.org/std/io/enum.ErrorKind.html)
-- **`Result::is_ok_and`**. The `Result` twin of stop 1's `is_some_and`;
+- **`Result::is_ok_and`**. The `Result` twin of chapter 2's `is_some_and`;
   the closure runs on the `Ok` value and an `Err` is `false`, so in
   `starts_with_utf16_mark` an unreadable file is simply not a UTF-16
   one. The `use std::io::Read as
   _` at the top of the file brings `read_exact` into scope without a
-  name, as stop 2's `fmt::Write as _` did.
+  name, as chapter 3's `fmt::Write as _` did.
   [Result::is_ok_and](https://doc.rust-lang.org/std/result/enum.Result.html#method.is_ok_and)
 - **`Option::as_deref` and `Option::filter`**. `as_deref` turns
-  `&Option<PathBuf>` into `Option<&Path>`, the `Option` twin of stop 5's
+  `&Option<PathBuf>` into `Option<&Path>`, the `Option` twin of chapter 6's
   `Result::as_deref`, and `filter` drops the value when the closure says
   no, so `-o -` in `convert` becomes `None` and means standard output.
   [Option::as_deref](https://doc.rust-lang.org/std/option/enum.Option.html#method.as_deref),
   [Option::filter](https://doc.rust-lang.org/std/option/enum.Option.html#method.filter)
 - **Destructuring an error variant with `..`**. `Error::Syntax { line,
   column, message, .. }` in `located` binds three fields by name and
-  ignores the rest, which a `#[non_exhaustive]` variant from stop 3 requires of code
+  ignores the rest, which a `#[non_exhaustive]` variant from chapter 4 requires of code
   outside its crate.
   [Destructuring enums](https://doc.rust-lang.org/book/ch19-03-pattern-syntax.html#destructuring-enums),
   [Ignoring remaining parts with `..`](https://doc.rust-lang.org/book/ch19-03-pattern-syntax.html#ignoring-remaining-parts-of-a-value-with-)
 - **A `[char; N]` array as a string pattern**. An array of `char`
   implements `Pattern`, so `trim_start_matches(Self::WS)` and
   `starts_with(Self::WS)` match any one of the four; the constant itself
-  is an associated constant as stop 3 introduced them.
+  is an associated constant as chapter 4 introduced them.
   [Pattern](https://doc.rust-lang.org/std/str/pattern/trait.Pattern.html)
 - **`eq_ignore_ascii_case`, `strip_prefix`, `trim_start_matches` and
   `split_once`**. `eq_ignore_ascii_case` compares without making a
@@ -331,10 +331,10 @@ declarations and the `prefix` lines beneath them. The tests
 - **`HashSet::insert` inside a `filter`**. `insert` returns whether the
   value was new, so `seen.insert(*r)` in `only_in` both remembers a
   record and decides whether to keep it, and `collect` gathers the survivors into a
-  `Vec`; the set borrows its records as stop 3's did.
+  `Vec`; the set borrows its records as chapter 4's did.
   [HashSet::insert](https://doc.rust-lang.org/std/collections/struct.HashSet.html#method.insert),
   [Processing items with iterators](https://doc.rust-lang.org/book/ch13-02-iterators.html)
-- **A lifetime parameter on a function**. Stops 1 and 5 put a lifetime
+- **A lifetime parameter on a function**. Chapters 2 and 6 put a lifetime
   on a struct and on a method; `only_in<'a>` names one on a free
   function so the returned `Vec<&'a Record>` is tied to `mine` and not
   to `theirs`, which elision could not express with two reference
@@ -421,7 +421,7 @@ endDocument
 
 The second run exits 0 and prints nothing. `read_document` reads one
 file as PROV-JSON by its extension and the other as PROV-N, and
-`a == b` holds because stop 3's equality compares the records as a
+`a == b` holds because chapter 4's equality compares the records as a
 set and ignores the format and the namespace tables.
 
 ```text
@@ -430,7 +430,7 @@ set and ignores the format and the namespace tables.
 
 The third run exits 2 with one line on standard error. The message
 names the undeclared prefix, not the missing `)`, and points at line
-2, column 10, the start of `ex:e`. Stop 5's parser resolves a name
+2, column 10, the start of `ex:e`. Chapter 6's parser resolves a name
 as soon as it reads it, in `identifier_and_first_argument`, so
 `resolve` returns `Error::UndeclaredPrefix` wrapped in `Error::At`
 with that token's position before `remaining_arguments` reaches the

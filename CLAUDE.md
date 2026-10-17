@@ -65,7 +65,7 @@ Accepted spellings go in `_typos.toml` with a comment saying why.
 ## The book
 
 - A change that touches code between `ANCHOR` comments, changes
-  behaviour a stop page describes, or introduces an idiom updates the
+  behaviour a chapter describes, or introduces an idiom updates the
   matching page under `book/src` in the same commit.
 - `book/build.sh` builds the book and runs its doctests. CI runs the same.
 - The idiom index is generated from the `Rust notes:` trailers.

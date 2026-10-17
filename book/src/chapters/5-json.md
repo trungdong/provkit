@@ -1,14 +1,14 @@
-# Stop 4: PROV-JSON
+# Chapter 5: PROV-JSON
 
 PROV-JSON is the W3C member submission of April 2013, a JSON object
 keyed by [record](../reference/glossary.md#record-prov) kind and then by identifier, with a `prefix` object
 for the [namespace](../reference/glossary.md#namespace-and-prefix-prov) table and a `bundle` object for the named [bundles](../reference/glossary.md#bundle-prov).
-This stop reads the three layers of the `json` module. serde sees the
+This chapter reads the three layers of the `json` module. serde sees the
 shape and refuses what is not PROV-JSON, `read` turns the shape into
 builder calls, and `write` goes back from a [document](../reference/glossary.md#document-prov) to text. It
-builds on stop 3 for the builder both readers drive and for
+builds on chapter 4 for the builder both readers drive and for
 `Record::from_parts`, which checks every record this reader makes, and
-on stop 1 for the scope that resolves each key to a `QName`.
+on chapter 2 for the scope that resolves each key to a `QName`.
 
 ## What the code does
 
@@ -81,7 +81,7 @@ function, generic over `V` through a `PhantomData<V>` field because it
 stores no `V` of its own, and its `visit_map` is the same loop with the
 `IndexMap` `entry` API deciding each key. A vacant entry takes the
 value. An occupied one reads the value into `IgnoredAny`, discards it
-and returns `duplicate field` naming the key. Stop 1 called
+and returns `duplicate field` naming the key. Chapter 2 called
 `entry().or_default()`; here the two variants of `Entry` are matched by
 name. `Bundles`, below the span, reads the `bundle` object with a
 `HashSet` instead, because it records a repeated key and stops rather
@@ -153,9 +153,9 @@ that does not resolve and a repeat, each wrapped in an `InRecord`
 whose section is `bundle`, before any bundle body is read. The closure
 `located` captures `key` and is called at each of those points, by
 hand or through `map_err`, so every error under one key is wrapped the
-same way; stop 2's `map_err` calls took a closure written in place.
+same way; chapter 3's `map_err` calls took a closure written in place.
 The second loop emits each bundle between `start_bundle` and
-`end_bundle`, and `end_document` closes the sequence stop 3 described.
+`end_bundle`, and `end_document` closes the sequence chapter 4 described.
 `emit_sections`, below the span, is where a section's `OneOrMany` is
 read. `record_id` resolves the key, or returns `None` for a `_:` key
 on a relation and an error for one on an element, and `as_slice` on
@@ -171,7 +171,7 @@ key resolves in scope, and `formal_named` says whether the name is one
 of the kind's formals. A formal's value goes through `formal_value`,
 which reads a time from a string or an `xsd:dateTime` object and a name
 from a string or an `xsd:QName` or `prov:QUALIFIED_NAME` object, and
-any other value goes through `decode_value` into stop 2's `Value`, one
+any other value goes through `decode_value` into chapter 3's `Value`, one
 attribute per element of an array. The `prov:entity` of a `hadMember`
 is the exception. Its elements are gathered as `members`, and when
 there are any the function returns one record per member, each with a
@@ -333,7 +333,7 @@ one identifier"). Section 2 of
 [PROV-JSON](https://www.w3.org/Submission/2013/SUBM-prov-json-20130424/#PROV-JSON-overview)
 makes each section a map of records indexed by identifier, so without
 the array a second `entity` under the identifier of the first has
-nowhere to go, while `Document` equality, which stop 3 showed is a set
+nowhere to go, while `Document` equality, which chapter 4 showed is a set
 over records, keeps both. ProvToolbox's reader refuses the form.
 
 ### Why are blank-node labels not preserved?
@@ -395,8 +395,8 @@ key as no identifier, and `sections` writes a fresh one.
   [Using the newtype pattern](https://doc.rust-lang.org/book/ch20-02-advanced-traits.html#using-the-newtype-pattern-to-implement-external-traits-on-external-types)
 - **`IndexMap` `Entry` matched by variant**. `entry(key)` in `Unique`'s
   visitor is `Vacant` or `Occupied`, and matching the two is what makes
-  a repeat visible; stop
-  1's `or_default` chose for the caller.
+  a repeat visible; chapter
+  2's `or_default` chose for the caller.
   [Entry](https://docs.rs/indexmap/latest/indexmap/map/enum.Entry.html)
 - **`Vec::with_capacity`**. In `emit` the vector is allocated once for
   the number of bundles, which is known, so no push grows it.

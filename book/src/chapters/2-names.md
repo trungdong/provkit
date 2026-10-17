@@ -1,11 +1,11 @@
-# Stop 1: Names
+# Chapter 2: Names
 
 A PROV identifier is a [namespace](../reference/glossary.md#namespace-and-prefix-prov) IRI plus a local part. Everything a
 [document](../reference/glossary.md#document-prov) names, from an [entity](../reference/glossary.md#entity-prov) to an [attribute](../reference/glossary.md#attribute-prov) key, is one of these,
 and the two readers turn every `prefix:local` they meet into one. This
-stop reads the character rules the local part and the [prefix](../reference/glossary.md#namespace-and-prefix-prov) obey, the
+chapter reads the character rules the local part and the [prefix](../reference/glossary.md#namespace-and-prefix-prov) obey, the
 name type itself, and the prefix tables that both readers resolve
-through. It builds on stop 0 only, for the module list and the
+through. It builds on chapter 1 only, for the module list and the
 `pub use` lines that bring `QName`, `Namespaces` and `well_known` to
 the crate root.
 
@@ -23,7 +23,7 @@ prefix follows `PN_PREFIX` from
 production [99], which rests on `PN_CHARS_BASE` [95], `PN_CHARS_U` [96]
 and `PN_CHARS` [98]. This file holds those classes as small
 functions, one per production, and two of them matter to every other
-file at this stop.
+file in this chapter.
 
 `prefix_len` measures a `PN_PREFIX` at the front of a string. The
 first character must be in `PN_CHARS_BASE`, which holds letters and
@@ -180,7 +180,7 @@ restates a predeclared binding still reads. Everything else goes to
 `bind`, which replaces an earlier binding of the same prefix in place
 and keeps the reverse table in step.
 
-The last item at this stop is `Scope`, which is how a bundle sees the
+The last item in this chapter is `Scope`, which is how a bundle sees the
 document around it.
 
 ```rust,ignore
@@ -279,7 +279,7 @@ prefix adds to it.
 
 ## The Rust here
 
-- **Ownership and borrowing**. Every function at this stop takes `&str`,
+- **Ownership and borrowing**. Every function in this chapter takes `&str`,
   a borrowed view of text someone else owns, and returns a length or a
   new value; `QName::new` is where a borrowed `&str` is copied into an
   owned string the name keeps.

@@ -1,16 +1,16 @@
-# Stop 8: Build and release
+# Chapter 9: Build and release
 
-The last stop is everything that runs before and after the code: the
+The last chapter is everything that runs before and after the code: the
 lint set, the checks CI runs on a push to `main` and on every pull
 request, the licence check and the workflow that turns a tag into a
 release. None of it is Rust, and all
 of it decides what a contributor's change must pass and what a user
-downloads. This stop reads the release profile in the root manifest,
+downloads. This chapter reads the release profile in the root manifest,
 the clippy and rustfmt settings, the configuration of `cargo deny`,
 `typos` and `cargo about`, and the CI and release workflows, each
-file included whole. It builds on stop 0 for the manifests and the
-lint table, which that stop shows and this one does not repeat, and on
-stop 7 for the `exclude` line and the `[[test]]` targets that the
+file included whole. It builds on chapter 1 for the manifests and the
+lint table, which that chapter shows and this one does not repeat, and on
+chapter 8 for the `exclude` line and the `[[test]]` targets that the
 packaged-crate and feature-subset steps of CI exercise.
 
 ## What the code does
@@ -32,7 +32,7 @@ as one unit instead of splitting it for parallel compilation, and
 build time for a smaller, faster binary. The `dev` profile that
 `cargo build` and `cargo test` use is not changed. The lint table sits
 above the profile in the same file, and
-[stop 0](0-orientation.md#cargotoml) reads it. Each crate manifest
+[chapter 1](1-orientation.md#cargotoml) reads it. Each crate manifest
 carries `[lints]` with `workspace = true`, so both crates build under
 that one table.
 
@@ -47,7 +47,7 @@ setting beyond the defaults.
 
 `large-error-threshold` is the size in bytes above which clippy's
 `result_large_err` lint warns about the `Err` type of a returned
-`Result`. The [`Error`](../api/provkit/enum.Error.html) enum of stop 3
+`Result`. The [`Error`](../api/provkit/enum.Error.html) enum of chapter 4
 is larger than clippy's default because the `Unification` variant
 carries two `Option<Formal>` beside the identifier, and boxing that
 rare variant was judged worse than the extra bytes on every `Result`,
@@ -139,7 +139,7 @@ job runs once per entry in its matrix, on the latest Ubuntu and the
 latest Windows runner. On Windows the first step turns off CRLF
 conversion before the checkout, because the tests read LF text. The
 checkout brings the corpus submodule, because the corpus tests of
-stop 7 read it. The toolchain step installs the version its
+chapter 8 read it. The toolchain step installs the version its
 `toolchain` line names, together with `rustfmt`, `clippy` and the
 `wasm32-unknown-unknown` target. Every action is pinned to a commit,
 with the tag that commit carries in a trailing comment.
@@ -150,7 +150,7 @@ runs on both runners. Every other one carries
 Windows. The Ubuntu steps are `cargo fmt --check`, clippy over every target and
 feature with warnings as errors, the workspace tests, `cargo package
 --workspace` followed by `cargo test` on the packaged copy of
-`provkit` under `target/package`, which stop 7's last card covers,
+`provkit` under `target/package`, which chapter 8's last card covers,
 the tests of `provkit` under `provn` alone and under `json` alone,
 `cargo check --tests` under no default features, `provn` alone and
 `json` alone with `RUSTFLAGS` set to deny warnings, `cargo doc` with
@@ -230,12 +230,12 @@ tag readable beside the hash.
 ### Why test the feature subsets?
 
 A user who only exchanges PROV-N switches `json` off and pays nothing
-for the serde crates, as stop 0's "Why two features?" card says, and
+for the serde crates, as chapter 1's "Why two features?" card says, and
 the subset steps in `ci.yml` build what that user gets. The
 crate-level example builds to an empty `main` when a feature is off,
 so the feature-subset test runs compile, and the `cargo check --tests`
 steps under `RUSTFLAGS=-D warnings` cover no default features, `provn`
-alone and `json` alone. Stop 0 read the pieces of the library these
+alone and `json` alone. Chapter 1 read the pieces of the library these
 steps exercise, the
 `required-features` on each `[[test]]` target, so a corpus test that
 needs a feature is skipped rather than failed, and the crate-level
@@ -246,7 +246,7 @@ warnings`.
 ### Why build for wasm32?
 
 The library takes strings and writers so that it never touches files,
-as stop 0's first card says, and `ci.yml` builds it for
+as chapter 1's first card says, and `ci.yml` builds it for
 `wasm32-unknown-unknown`, a target with no filesystem, with nothing to
 exclude. The step compiles the library and every dependency its
 default features pull in for a target with no operating system
@@ -298,7 +298,7 @@ crates.io, so the version number can stay.
   [codegen-units](https://doc.rust-lang.org/cargo/reference/profiles.html#codegen-units),
   [strip](https://doc.rust-lang.org/cargo/reference/profiles.html#strip)
 - **`[workspace.lints]` and clippy lint groups**. A lint table in the
-  workspace manifest, which stop 0 shows, applies to every crate whose
+  workspace manifest, which chapter 1 shows, applies to every crate whose
   own manifest says `[lints] workspace = true`. `all` and `pedantic` are groups of clippy
   lints, and `priority = -1` on a group lets a single lint named after
   it override the group's level.

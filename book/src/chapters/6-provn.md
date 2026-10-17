@@ -1,17 +1,17 @@
-# Stop 5: PROV-N
+# Chapter 6: PROV-N
 
 PROV-N is the notation of the W3C Recommendation of April 2013, a
 text form with one statement per [record](../reference/glossary.md#record-prov), `prefix` and `default`
 declarations for the [namespace](../reference/glossary.md#namespace-and-prefix-prov) table and `bundle ... endBundle` for
 the named [bundles](../reference/glossary.md#bundle-prov). Its grammar is the authority for this module, and
-this stop follows the grammar from characters to tokens, from tokens
+this chapter follows the grammar from characters to tokens, from tokens
 to statements and from a [document](../reference/glossary.md#document-prov) back to text. It reads the two
 [profiles](../reference/glossary.md#profile-prov) the reader offers, the lexer, the recursive-descent parser,
 the [extensibility expressions](../reference/glossary.md#extensibility-expression-prov) the parser accepts and leaves out, and
-the writer. It builds on stop 1 for the `PN_PREFIX` and `PN_LOCAL`
+the writer. It builds on chapter 2 for the `PN_PREFIX` and `PN_LOCAL`
 character classes the lexer and writer share and for the scope that
-resolves each name, on stop 2 for the values a [literal](../reference/glossary.md#literal-and-typed-literal-prov) becomes, and on
-stop 3 for the builder the parser drives and for `Record::from_parts`,
+resolves each name, on chapter 3 for the values a [literal](../reference/glossary.md#literal-and-typed-literal-prov) becomes, and on
+chapter 4 for the builder the parser drives and for `Record::from_parts`,
 which checks every record the parser makes.
 
 ## What the code does
@@ -53,10 +53,10 @@ document plus the list of those.
 
 [`read_report`](../api/provkit/provn/fn.read_report.html) is the one
 function that does the work. `strip_bom` drops one leading byte order
-mark, as the PROV-JSON reader did in stop 4, `lexer::tokenize` turns
+mark, as the PROV-JSON reader did in chapter 5, `lexer::tokenize` turns
 the whole text into a `Vec<Token>` ending in `Eof`, and
 `Parser::new` takes the text, the tokens and the profile. The parser
-drives a `DocumentBuilder` from stop 3 through its `document` method,
+drives a `DocumentBuilder` from chapter 4 through its `document` method,
 and the report is `builder.finish()` beside the parser's `ignored`
 list. [`read_with`](../api/provkit/provn/fn.read_with.html), above the
 span, calls `read_report` and keeps the document, and
@@ -83,7 +83,7 @@ the language tag, which only follows a string.
 Each variant is one terminal. A `Name` carries its [prefix](../reference/glossary.md#namespace-and-prefix-prov) and
 local part with the escapes of the local part already decoded, and an
 empty prefix for a bare name. `Str` is unescaped too. `Int` keeps its text
-as written, because stop 2's `Value` types an integer from its text,
+as written, because chapter 3's `Value` types an integer from its text,
 and `DateTime` keeps its text for `DateTime::parse`. `Typed` is the `%%` that joins a string to
 its datatype, `Marker` is the `-` that stands for an absent argument,
 `QNameLiteral` is the quoted `'prefix:local'` form, `Iri` and `LangTag` carry their text without the angle brackets or the `@`, and `Eof` marks the end of input. The rest are single characters. Two methods below the span answer
@@ -121,7 +121,7 @@ integer but `2011a` is a name, and keeps a lone `-` as `Marker`. The
 `skip_trivia` passes over the grammar's `WS`, `//` comments and `/* */`
 comments, `decode_code_point` reads the hex digits of a `\u` or `\U`
 escape and makes a `char` of them, and `scan_name` and `scan_local`
-apply the `PN_PREFIX` and `PN_LOCAL` classes from stop 1 with escape
+apply the `PN_PREFIX` and `PN_LOCAL` classes from chapter 2 with escape
 decoding and error positions added.
 
 ### provkit/src/provn/parser/mod.rs
@@ -145,14 +145,14 @@ methods above `document` return references tied to that lifetime, so a
 `&'t Token` from `peek` or `bump` stays usable after the next call
 that takes `&mut self`. `bump` returns the current token and advances
 unless it is `Eof`, so no method runs off the end of the slice.
-`scope` builds stop 1's `Scope` from the two tables, the bundle's in
+`scope` builds chapter 2's `Scope` from the two tables, the bundle's in
 front of the document's, and `resolve` resolves a name in it, placing
 any error at the name's token. `identifier` is where a `digit_name`
 becomes a bare local name. Above the span, `NameParts` is a name token
 split into its parts before resolution, `Positional` is a type alias,
 with a lifetime parameter, for an argument paired with the token it
 came from, and `LiteralParts` and `Suffix` are the tokens of a
-literal before any name in it is resolved. Stop 3's `Result` alias
+literal before any name in it is resolved. Chapter 4's `Result` alias
 had no lifetime; `Positional<'t>` shows one on an alias.
 
 ```rust,ignore
@@ -197,7 +197,7 @@ extensibility expressions.
 
 ### provkit/src/provn/parser/declarations.rs
 
-This file is a second `impl Parser<'t>` block, as stop 3 showed for
+This file is a second `impl Parser<'t>` block, as chapter 4 showed for
 `Document`, holding the declaration productions of section 3.7.4.
 
 ```rust,ignore
@@ -214,8 +214,8 @@ prefix declared twice in one scope is refused under both. `prov` or
 section 3.7.4 says a namespace declaration MUST NOT declare them, and
 `Namespaces::declare` refuses either prefix at any other IRI under
 both profiles. `seen` is a `HashSet<&str>` borrowing from the tokens,
-as stop 3's sets borrowed their keys. `prefix_name`, below the span,
-tests the prefix's text as written with `is_pn_prefix` from stop 1,
+as chapter 4's sets borrowed their keys. `prefix_name`, below the span,
+tests the prefix's text as written with `is_pn_prefix` from chapter 2,
 because production [46] takes a `PN_PREFIX`, which has no escapes.
 
 ### provkit/src/provn/extension.rs
@@ -272,7 +272,7 @@ prefix gets a minted `ns1`, `ns2` and so on, and the document is left
 unchanged, because the function works on a clone of the table. A
 record without an identifier is written without one. Bundles that
 share an identifier are written as one, through `merged_bundles` from
-stop 3. The body is rendered before the declarations are printed,
+chapter 4. The body is rendered before the declarations are printed,
 because every prefix minted while rendering a name lands in `names`,
 and `declarations` then sees it. The block around the top-level
 loop ends the mutable borrow that `WriteScope::of` takes on `names`,
@@ -428,7 +428,7 @@ text with `is_pn_prefix`.
   returns it.
   [Derive](https://doc.rust-lang.org/reference/attributes/derive.html),
   [Default for enums](https://doc.rust-lang.org/std/default/trait.Default.html#enums)
-- **References tied to the input, not to `&self`**. Stop 1 gave a struct
+- **References tied to the input, not to `&self`**. Chapter 2 gave a struct
   a lifetime; here `Lexer::rest(&self) -> &'a str` returns a slice with the
   input's lifetime `'a` rather than the borrow of `self`, so the slice
   stays usable across `self.advance()`, and `Parser::peek` does the same
@@ -436,7 +436,7 @@ text with `is_pn_prefix`.
   [Lifetime syntax](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html)
 - **Recursive descent, one method per production**. Each method of
   `Parser`, from `document` down, consumes the tokens of its production, calls the methods for the productions
-  inside it, and returns a value or an error; stop 1's `?` ends the
+  inside it, and returns a value or an error; chapter 2's `?` ends the
   whole parse at the first error.
   [Recoverable errors with `?`](https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html)
 - **`match` guards**. In `next_token`, `'@' if self.after_string` takes

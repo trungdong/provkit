@@ -1,11 +1,11 @@
-# Stop 2: Values
+# Chapter 3: Values
 
 An [attribute](../reference/glossary.md#attribute-prov) value is a string, a language-tagged string, a name, a
 time or a [typed literal](../reference/glossary.md#literal-and-typed-literal-prov), and a [record](../reference/glossary.md#record-prov) carries its values as a set of
-name and value pairs. This stop reads how each kind is stored and when
+name and value pairs. This chapter reads how each kind is stored and when
 two of them are equal, which is the rule every later layer leans on,
 from the deduplication of a record's attribute set to `compare` in the
-command line. It builds on stop 1 for `QName`, which is both a kind of
+command line. It builds on chapter 2 for `QName`, which is both a kind of
 value and the key of every pair, and for the `well_known` statics the
 datatype checks compare against.
 
@@ -31,7 +31,7 @@ The book shows this span and those that follow as they stand in the
 files, and compiles none of them. A
 [`Value`](../api/provkit/enum.Value.html) is one of five variants, and
 each carries its payload. `Str` is an `xsd:string`, `LangStr` and
-`QName` wrap the type above and stop 1's name, `DateTime` is a parsed
+`QName` wrap the type above and chapter 2's name, `DateTime` is a parsed
 `xsd:dateTime`, and `Typed` is everything else, kept as written.
 `Value::typed`, below the enum, is where a text and a datatype become
 one of them. An `xsd:string` folds to `Str`. An `xsd:dateTime` that
@@ -52,7 +52,7 @@ Equality and hashing come after the constructors.
 
 `PartialEq` for `Value` asks for the same variant and then equal
 payloads, and two different variants are never equal. `Hash` feeds the
-variant's discriminant and then the payload, so the two agree. Stop 1
+variant's discriminant and then the payload, so the two agree. Chapter 2
 wrote `QName`'s impls by hand to compare the IRI; here the reason is
 a different one, which the first card below takes up. The rule for typed literals sits in `TypedLiteral`'s
 impls, above the enum, and in `Key`. Two typed literals are equal when
@@ -172,7 +172,7 @@ pairs a record carries.
 The struct has one field, an `IndexSet` of `(QName, Value)` pairs
 behind an `Arc`. `IndexSet` keeps insertion order and refuses a pair already present,
 and it tells a pair is present by the `Hash` and `Eq` of the tuple,
-which are `QName`'s from stop 1 and `Value`'s from above. So
+which are `QName`'s from chapter 2 and `Value`'s from above. So
 `ex:v="01" %% xsd:int` after `ex:v="1" %% xsd:int` is not added, and
 the first spelling stays. `get` by name walks the pairs, because the
 set is keyed by the whole pair.
@@ -327,7 +327,7 @@ copy.
   [discriminant](https://doc.rust-lang.org/std/mem/fn.discriminant.html)
 - **`macro_rules!` generating trait impls over a `$t:ty` list**. The
   `$t:ty` fragment in `from_native!` captures a type, and the body
-  writes one `impl From<$t>` per row; stop 1's `names!` used the same
+  writes one `impl From<$t>` per row; chapter 2's `names!` used the same
   repetition for statics.
   [Macros by example](https://doc.rust-lang.org/reference/macros-by-example.html)
 - **`From` and `Into`**. Implementing `From<T> for Value` gives
@@ -356,9 +356,9 @@ copy.
   [i128](https://doc.rust-lang.org/std/primitive.i128.html)
 - **`bool::then`**. `cond.then(|| x)` is `Some(x)` when the condition
   holds and `None` otherwise, which is the whole of `DateTime`'s
-  `partial_cmp`; stop 1's `then_some` is the same without a closure.
+  `partial_cmp`; chapter 2's `then_some` is the same without a closure.
   [bool::then](https://doc.rust-lang.org/std/primitive.bool.html#method.then)
-- **`IndexSet`**. The set counterpart of stop 1's `IndexMap`, keeping
+- **`IndexSet`**. The set counterpart of chapter 2's `IndexMap`, keeping
   insertion order and refusing duplicates by `Hash` and `Eq`; it is the
   one field of `Attributes`.
   [IndexSet](https://docs.rs/indexmap/latest/indexmap/set/struct.IndexSet.html)

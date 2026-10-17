@@ -1,10 +1,10 @@
-# Stop 0: Orientation
+# Chapter 1: Orientation
 
 provkit is a workspace of two crates. `provkit` is the library, which
 holds the data model and the two formats, and `provkit-cli` is the
-`provkit` binary that gives the library a command line. This stop reads
+`provkit` binary that gives the library a command line. This chapter reads
 the crate root of the library and the two manifests, nothing else. It
-builds on no earlier stop; every later stop assumes the module list,
+builds on no earlier chapter; every later chapter assumes the module list,
 the feature gates and the public surface shown here.
 
 ## What the code does

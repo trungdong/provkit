@@ -1,4 +1,4 @@
-# Stop 7: Tests
+# Chapter 8: Tests
 
 The tests live in three places. Unit tests sit beside each module, in
 a sibling `tests.rs` or an inline `mod tests`, and reach private
@@ -6,29 +6,29 @@ items. The corpus tests under `provkit/tests` run every file of a
 corpus shared with ProvPy, and every excluded file and known
 difference is listed in `provkit/tests/data/*.tsv` with a reason. The
 end-to-end tests under `provkit-cli/tests` run the built binary. This
-stop reads
+chapter reads
 the helpers the unit tests share, the report
 that collects failures across a corpus, the test that reads every
 PROV-JSON file, the test that checks every probe against its row, the
 three data files, the binary's tests and the manifest lines that
-decide which tests ship. It builds on every stop before it, on stop 0
+decide which tests ship. It builds on every chapter before it, on chapter 1
 for the `test_util` module under `#[cfg(test)]` and the `[[test]]`
-targets, on stop 1 for `mod tests;`, on stop 2 for `DateTime::parse`
-and argument-position `impl Trait`, on stop 3 for the equality every
-round trip ends in, on stop 4 for `json::read` and `json::to_string`,
-on stop 5 for `provn::read_with` and the two [profiles](../reference/glossary.md#profile-prov), and on stop 6
+targets, on chapter 2 for `mod tests;`, on chapter 3 for `DateTime::parse`
+and argument-position `impl Trait`, on chapter 4 for the equality every
+round trip ends in, on chapter 5 for `json::read` and `json::to_string`,
+on chapter 6 for `provn::read_with` and the two [profiles](../reference/glossary.md#profile-prov), and on chapter 7
 for the binary the end-to-end tests run.
 
 ## What the code does
 
 ### provkit/src/test_util.rs
 
-Stop 0 showed `lib.rs` declaring this module as `pub(crate)` under
+Chapter 1 showed `lib.rs` declaring this module as `pub(crate)` under
 `#[cfg(test)]`, so it exists only while tests build and every unit
 test in the crate can `use crate::test_util`. The larger modules load
-a sibling `tests.rs` through the `mod tests;` line stop 1 introduced,
+a sibling `tests.rs` through the `mod tests;` line chapter 2 introduced,
 and the smaller ones hold `mod tests { ... }` at the end of their own
-file, as stop 1 said of `qname.rs`. Either way the tests are a child
+file, as chapter 2 said of `qname.rs`. Either way the tests are a child
 module of the code they test, so they see its private items. The
 first half of the file is builders. `ex` and `prov` make a name in
 `http://example.org/` or the PROV [namespace](../reference/glossary.md#namespace-and-prefix-prov), `entity`, `agent`,
@@ -50,13 +50,13 @@ line.
 `Broken` is a unit struct, a type with no fields, and it implements
 `std::io::Write`. Its `write` returns an error built by
 `io::Error::other` on every call, and its `flush` succeeds. The
-writers of stops 4 and 5 take `impl std::io::Write`, so a test hands
+writers of chapters 5 and 6 take `impl std::io::Write`, so a test hands
 them `&mut Broken` and checks the error path without a file system.
 `failing_writer_reports_io` in `json/write.rs` and
 `io_failure_is_reported_as_io` in `provn/write/tests.rs` both assert
 that the result is
 [`Error::Io`](../api/provkit/enum.Error.html#variant.Io), the variant
-stop 3 showed wrapping an `io::Error`.
+chapter 4 showed wrapping an `io::Error`.
 
 ```rust,ignore
 {{#include ../../../provkit/src/test_util.rs:round_trip}}
@@ -123,7 +123,7 @@ one method serves both formats. `corpus_json.rs` passes the functions
 closure that calls `read_with` under `Profile::Default`. A write
 failure, a re-read failure and a document that differs after the trip
 are three distinct messages, and `back == *document` is the set-based
-equality of stop 3, so record order and the namespace table do not
+equality of chapter 4, so record order and the namespace table do not
 count. `finish` consumes the report. It asserts the checked count
 against the expected one only when no filter is set, and then asserts
 that there are no failures, with a message
@@ -158,7 +158,7 @@ the number its name carries. `round_trips_all_398` below it reads
 each file and then calls `round_trip` with the two PROV-JSON
 functions. `unification_over_the_corpus` calls
 [`unified`](../api/provkit/struct.Document.html#method.unified) from
-stop 3 on every document, expects the `scruffy-*` files to fail with a
+chapter 4 on every document, expects the `scruffy-*` files to fail with a
 `Unification` error on a formal, checks the ones that fail on a name
 against a constant list and counts the ones that fail on a time, and
 checks that every other document unifies, that unifying twice gives
@@ -205,7 +205,7 @@ The test reads every `.provn` file in the directory, strips the
 extension to get the probe's name, and looks the row up. A probe with
 no row fails. For each of the two profiles it reads the text with
 [`provn::read_with`](../api/provkit/provn/fn.read_with.html) from
-stop 5, turns the result into an `Outcome`, and records a failure
+chapter 6, turns the result into an `Outcome`, and records a failure
 naming the profile when it differs from the row. When no filter is
 set it also checks the table the other way, so a row with no probe
 file fails, and `finish` is given `PROBE_COUNT`. The `rule` column is
@@ -274,14 +274,14 @@ standard output after eight bytes, and then reads
 standard error and the exit code. Several tests pin the help text,
 among them `help_states_the_precedence_rule` for the order
 in which `-f`, `-t` and the extension decide a format and
-`compare_help_names_the_exit_codes` for the three codes stop 6
+`compare_help_names_the_exit_codes` for the three codes chapter 7
 described. The rest exercise one behaviour each, the sniffer on
 standard input, a byte order mark, a positioned error, a closed pipe,
 and the shape of a comparison listing.
 
 ### provkit/Cargo.toml
 
-Stop 0 read the `[[test]]` targets and their `required-features`,
+Chapter 1 read the `[[test]]` targets and their `required-features`,
 so a feature-subset build skips a target rather than failing to
 compile it. The lines above those targets decide what the published
 crate carries.
@@ -356,7 +356,7 @@ what ships still builds and passes.
   the test harness runs; `assert!` panics when its condition is false
   and `assert_eq!` when its two sides differ, and both take a format
   message after the operands, as `Report::finish` and `round_trip` in
-  `test_util` do, where the doctests of earlier stops called them
+  `test_util` do, where the doctests of earlier chapters called them
   without one.
   [How to write tests](https://doc.rust-lang.org/book/ch11-01-writing-tests.html)
 - **`env!`**. It reads an environment variable at compile time and fails
@@ -366,7 +366,7 @@ what ships still builds and passes.
   and, when the package has a binary, `CARGO_BIN_EXE_<name>`.
   [env!](https://doc.rust-lang.org/std/macro.env.html),
   [Environment variables Cargo sets for crates](https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates)
-- **`impl FnOnce` arguments**. Stop 2 put `impl Into<String>` in
+- **`impl FnOnce` arguments**. Chapter 3 put `impl Into<String>` in
   argument position for a conversion; on `Report::round_trip` the bound
   is a closure trait, `FnOnce` because each is called once, and a plain function such as
   `json::to_string` satisfies it as well as a closure.
@@ -386,7 +386,7 @@ what ships still builds and passes.
   [To panic! or not to panic!](https://doc.rust-lang.org/book/ch09-03-to-panic-or-not-to-panic.html)
 - **`#![allow(dead_code)]` on a shared test module**. The `#!` form at
   the top of `common/mod.rs` is an inner attribute and applies to the
-  whole module, where stop 2's `#[allow(..)]` applied to one item.
+  whole module, where chapter 3's `#[allow(..)]` applied to one item.
   [Attributes](https://doc.rust-lang.org/reference/attributes.html)
 - **`assert_cmd::Command::cargo_bin` and `predicates`**. `cargo_bin` in
   the `provkit` helper finds the binary Cargo built for the test, `assert()` runs it and
