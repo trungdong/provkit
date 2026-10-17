@@ -260,11 +260,13 @@ any number of digits, and equality, ordering and hashing go to
 nanoseconds while the source text keeps every digit
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "`xsd:dateTime` follows XSD 1.1" and "`xsd:dateTime` fractions beyond
-nine digits"). The same principle holds for values in general, writing
-returns what was read ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"`xsd:anyURI` stays a typed literal"). So `2011-11-16T24:00:00Z`
-compares equal to the next midnight and prints as written, and
-`parses_and_keeps_source` in the tests checks the round trip.
+nine digits"). So `2011-11-16T24:00:00Z` compares equal to the next
+midnight and prints as written, and `parses_and_keeps_source` in the
+tests checks the round trip. Values in general keep their lexical form
+and datatype, so writing returns what was read. An `xsd:anyURI`
+literal, for example, stays a typed literal and is not turned into an
+identifier ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"`xsd:anyURI` stays a typed literal").
 
 ### Why `PartialOrd` and no `Ord`?
 
