@@ -32,7 +32,10 @@ files, and compiles none of them. A
 [`Value`](../api/provkit/enum.Value.html) is one of five variants, and
 each carries its payload. `Str` is an `xsd:string`, `LangStr` and
 `QName` wrap the type above and chapter 2's name, `DateTime` is a parsed
-`xsd:dateTime`, and `Typed` is everything else, kept as written.
+`xsd:dateTime`, and `Typed` is everything else, kept as written. The
+enum is `#[non_exhaustive]` (chapter 4 explains the attribute), so a
+`match` in another crate needs a wildcard arm and a variant added
+later is not a breaking change.
 `Value::typed`, below the enum, is where a text and a datatype become
 one of them. An `xsd:string` folds to `Str`. An `xsd:dateTime` that
 parses becomes `DateTime`, after the space, tab, CR and LF around it

@@ -137,6 +137,9 @@ impl Hash for TypedLiteral {
 // ANCHOR: value
 /// The value of a non-formal attribute.
 ///
+/// The enum is `#[non_exhaustive]`, so a `match` in another crate needs a
+/// wildcard arm.
+///
 /// Values compare and hash by what they denote. Under one datatype, two
 /// typed literals are equal when their values are equal, whatever their
 /// spelling, so `"5"`, `" 5 "`, `"+5"` and `"005"` are one `xsd:int`. This
@@ -158,6 +161,7 @@ impl Hash for TypedLiteral {
 /// assert_eq!(double("1"), double("1.0E0"));
 /// ```
 #[derive(Clone, Debug)]
+#[non_exhaustive]
 pub enum Value {
     /// A plain string (`xsd:string`).
     Str(String),
