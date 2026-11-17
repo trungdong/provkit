@@ -150,8 +150,8 @@ on neither `serde` nor `serde_core`, which an `indexmap` built with its
 
 ### Why does every data-model type sit at the crate root?
 
-With every module private except `json`, `provn` and `well_known`,
-each data-model type has exactly one public path and shows once in the
+With every module private except `json` and `provn`, and `well_known`
+re-exported from the private `qname`, each data-model type has exactly one public path and shows once in the
 API reference, at the root. `provn` keeps its own three types,
 `Profile`, `Ignored` and `ReadReport`. A private module with a
 `pub use` re-export is what gives an item that single path. The file

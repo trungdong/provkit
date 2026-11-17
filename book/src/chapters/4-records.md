@@ -344,10 +344,10 @@ PROV-CONSTRAINTS names the kind, an entry in the constraint tables of
 
 ### Why is every formal an `Option`?
 
-The PROV-JSON reader does not check that a mandatory formal is
-present, and `Strict` rejects `-` in a required argument of a relation
-because the grammar does, so a document with missing arguments reads,
-and `Default` reads such a PROV-N document
+A document with a missing mandatory formal still reads. The PROV-JSON
+reader does not check that a mandatory formal is present. In PROV-N,
+`Strict` rejects `-` in a required argument of a relation, because the
+grammar does, but `Default` reads such a document
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Every formal attribute is an `Option`"). Section 2.4 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prov-n-optionals)

@@ -156,7 +156,8 @@ give one key, and pairs that with the nanoseconds. Working in `i128`
 means no year `parse` accepts can overflow. `eq` asks whether both are
 zoned or both unzoned and then compares keys, `Hash` feeds the same two
 facts, and `partial_cmp` returns `None` when one is zoned and the other
-not, and the key order otherwise. There is no `Ord`. The fourth card
+not, and the key order otherwise. There is no `Ord`.
+[Why `PartialOrd` and no `Ord`?](#why-partialord-and-no-ord)
 below sets that rule beside XSD's, which orders some zoned and unzoned
 pairs. Hour 24 needs no special case here, because a day's seconds
 plus 24 hours is the next day's midnight.

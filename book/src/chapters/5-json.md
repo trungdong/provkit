@@ -363,7 +363,7 @@ key as no identifier, and `sections` writes a fresh one.
 ## The Rust here
 
 - **serde's `Deserialize` and `Visitor`**. `Deserialize::deserialize`
-  hands the deserializer a visitor, and the deserializer calls the
+  hands the deserialiser a visitor, and the deserialiser calls the
   `visit_*` method for the shape it finds; `visit_map` gets a
   `MapAccess` whose `next_key` and `next_value` read the object one
   entry at a time, so `ContainerVisitor` decides each key before its

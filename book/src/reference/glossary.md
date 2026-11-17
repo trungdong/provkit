@@ -204,7 +204,7 @@ provkit's word for one PROV-DM description, such as an entity, an activity or a 
 
 `rustdoc` builds HTML documentation from doc comments, and `clippy` is the linter that flags common mistakes ([the rustdoc book](https://doc.rust-lang.org/rustdoc/), [the Clippy book](https://doc.rust-lang.org/clippy/)).
 
-### specialization (PROV)
+### specialisation (PROV)
 
 The relation `specializationOf`, which says one entity is a more specific view of another ([PROV-DM section 5.5.1](https://www.w3.org/TR/2013/REC-prov-dm-20130430/#term-specialization)).
 

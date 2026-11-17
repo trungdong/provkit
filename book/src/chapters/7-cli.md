@@ -186,7 +186,9 @@ after the records of that scope. `statement_line` tries
 clone of the table and assigns the clone back on success, so a
 prefix minted by the failed attempt is discarded. When the failure is
 [`Error::Unwritable`](../api/provkit/enum.Error.html#variant.Unwritable)
-it builds the heading the third card below describes, the keyword, the
+it builds the heading that
+[Why can `compare` print a record PROV-N cannot write?](#why-can-compare-print-a-record-prov-n-cannot-write)
+below describes, the keyword, the
 identifier and the offending name as `<IRI>`, ending in `// not valid
 PROV-N`, and any other error is returned.
 

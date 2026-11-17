@@ -151,7 +151,8 @@ runs on both runners. Every other one carries
 Windows. The Ubuntu steps are `cargo fmt --check`, clippy over every target and
 feature with warnings as errors, the workspace tests, `cargo package
 --workspace` followed by `cargo test` on the packaged copy of
-`provkit` under `target/package`, which chapter 8's last card covers,
+`provkit` under `target/package`, which chapter 8 covers under
+[Why test the packaged crate in CI?](8-tests.md#why-test-the-packaged-crate-in-ci),
 the tests of `provkit` under `provn` alone and under `json` alone,
 `cargo check --tests` under no default features, `provn` alone and
 `json` alone with `RUSTFLAGS` set to deny warnings, `cargo doc` with
@@ -245,7 +246,8 @@ tag readable beside the hash.
 ### Why test the feature subsets?
 
 A user who only exchanges PROV-N switches `json` off and pays nothing
-for the serde crates, as chapter 1's "Why two features?" card says, and
+for the serde crates, as chapter 1 says under
+[Why two features?](1-orientation.md#why-two-features), and
 the subset steps in `ci.yml` build what that user gets. The
 crate-level example builds to an empty `main` when a feature is off,
 so a crate built with one feature compiles and its tests run. The
@@ -261,7 +263,9 @@ warnings`.
 ### Why build for wasm32?
 
 The library takes strings and writers so that it never touches files,
-as chapter 1's first card says, and `ci.yml` builds it for
+as chapter 1 says under
+[Why do readers take `&str` and writers take `impl Write`?](1-orientation.md#why-do-readers-take-str-and-writers-take-impl-write),
+and `ci.yml` builds it for
 `wasm32-unknown-unknown`, a target with no filesystem, with nothing to
 exclude. The step compiles the library and every dependency its
 default features pull in for a target with no operating system

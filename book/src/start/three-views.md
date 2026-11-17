@@ -162,6 +162,13 @@ order, the namespace table and blank-node labels do not count.
 
 ## Check it
 
+The corpus that the tests and several later pages read is a git
+submodule, so clone with `git clone --recurse-submodules`, or run
+`git submodule update --init` in a checkout made without it. The
+commands in this book show the installed name `provkit`. In a
+checkout, `cargo run -q -p provkit-cli --` followed by the same
+arguments does the same.
+
 ```sh
 provkit compare book/examples/edit.provn book/examples/edit.json
 echo $?

@@ -1,7 +1,7 @@
 # Not here on purpose
 
 A reader meets each of these absences as a question at some chapter, such
-as why there is no builder or why `-o` writes in place. Each one is a
+as why there is no public builder or why `-o` writes in place. Each one is a
 decision, not an oversight. The sections below say what the code does
 instead and, where one is set, give the release or the condition that
 brings the missing part, and link the chapter where the question comes
@@ -10,9 +10,10 @@ up.
 ## Builders for records, `Document`, `Bundle` and `Value`
 
 Today a record is a struct literal with public fields, as in
-[One document, three views](start/three-views.md). A fluent builder is
-arrives in 0.3.0.
-The record types are read in [chapter 4](chapters/4-records.md).
+[One document, three views](start/three-views.md). A public fluent
+builder arrives in 0.3.0. The `DocumentBuilder` that both readers
+drive is crate-private. It and the record types are read in
+[chapter 4](chapters/4-records.md).
 
 ## Feature gates for a third format
 
