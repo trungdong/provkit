@@ -31,7 +31,7 @@ fn namespaces(prefix: &IndexMap<String, String>) -> Result<Namespaces> {
     let mut ns = Namespaces::new();
     for (p, iri) in prefix {
         if p == DEFAULT {
-            ns.set_default(iri.as_str());
+            ns.set_default(iri)?;
         } else {
             ns.declare(p, iri)?;
         }

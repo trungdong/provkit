@@ -1084,6 +1084,39 @@ fn a_prefix_that_is_not_a_pn_prefix_is_invalid() {
 }
 
 #[test]
+fn an_empty_namespace_iri_is_an_error_but_a_space_is_not() {
+    let empty = [
+        r#"{"prefix": {"z": ""}}"#,
+        r#"{"prefix": {"z": ""}, "entity": {"z:e": {}}}"#,
+        r#"{"prefix": {"default": ""}}"#,
+    ];
+    for text in empty {
+        assert!(
+            matches!(json::read(text), Err(Error::EmptyNamespace)),
+            "{text}"
+        );
+    }
+    let in_bundle = [
+        r#"{"bundle": {"ex:b": {"prefix": {"z": ""}}}}"#,
+        r#"{"bundle": {"ex:b": {"prefix": {"z": ""}, "entity": {"z:e": {}}}}}"#,
+        r#"{"bundle": {"ex:b": {"prefix": {"default": ""}}}}"#,
+    ];
+    for text in in_bundle {
+        let (section, key, error) = record_error(text);
+        assert_eq!(
+            (section.as_str(), key.as_str()),
+            ("bundle", "ex:b"),
+            "{text}"
+        );
+        assert!(matches!(error, Error::EmptyNamespace), "{text}");
+    }
+    // A whitespace-only IRI is not empty and reads as it did.
+    let d = doc(r#"{"prefix": {"z": " "}, "entity": {"z:e": {}}}"#);
+    assert_eq!(d.records.len(), 1);
+    assert_eq!(d.namespaces.lookup("z"), Some(" "));
+}
+
+#[test]
 fn an_empty_array_reads_as_nothing() {
     // No value under an attribute key.
     let d = doc(&entity(r#""ex:a": [], "ex:b": "kept""#));

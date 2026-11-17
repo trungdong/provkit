@@ -24,6 +24,10 @@ The first release.
     of its three arguments is refused.
   - A PROV-N `\U` escape below U+10000 decodes. A surrogate or a value above
     U+10FFFF stays a syntax error.
+  - An empty namespace IRI is an error. `Namespaces::declare`,
+    `Namespaces::set_default` and `QName::new` refuse it, both readers refuse
+    `prefix z <>`, `default <>` and a PROV-JSON `""`, and `set_default` now
+    returns a `Result`.
 - `provkit-cli`, the `provkit` command: `convert` between the two formats and
   `compare` two documents, with prebuilt binaries for macOS, Linux and
   Windows on each release. The command reference is in the

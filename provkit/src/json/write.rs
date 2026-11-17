@@ -85,7 +85,7 @@ fn to_wire(document: &Document) -> Result<JsonDocument> {
 fn working_table(namespaces: &Namespaces) -> Result<Namespaces> {
     let mut table = Namespaces::new();
     if let Some(default) = namespaces.default_namespace() {
-        table.set_default(default);
+        table.set_default(default)?;
     }
     for (prefix, iri) in namespaces.iter().filter(|(p, _)| *p != DEFAULT) {
         table.declare(prefix, iri)?;
@@ -320,9 +320,19 @@ mod tests {
     }
 
     #[test]
+    fn a_table_with_a_prefix_minted_for_the_empty_namespace_is_refused() {
+        let mut d = Document::new();
+        assert_eq!(d.namespaces.ensure_prefix(""), "ns1");
+        assert!(matches!(
+            json::to_string(&d),
+            Err(crate::Error::EmptyNamespace)
+        ));
+    }
+
+    #[test]
     fn a_bundle_writes_bare_names_against_its_own_default() {
         let mut d = Document::new();
-        d.namespaces.set_default("http://one.org/");
+        d.namespaces.set_default("http://one.org/").unwrap();
         let mut inner = bundle(
             "b1",
             vec![
@@ -330,7 +340,7 @@ mod tests {
                 entity_in("http://two.org/", "b"),
             ],
         );
-        inner.namespaces.set_default("http://two.org/");
+        inner.namespaces.set_default("http://two.org/").unwrap();
         d.namespaces.declare("ex", "http://example.org/").unwrap();
         d.bundles.push(inner);
 
@@ -475,7 +485,7 @@ mod tests {
     #[test]
     fn default_namespace_never_mints_a_prefix() {
         let mut d = Document::new();
-        d.namespaces.set_default("http://example.org/");
+        d.namespaces.set_default("http://example.org/").unwrap();
         d.records.push(entity("e"));
         let (_, v) = round_trip(&d);
         assert_eq!(
@@ -569,7 +579,7 @@ mod tests {
     fn a_prefix_named_default_is_minted_afresh() {
         let mut d = Document::new();
         d.namespaces.declare("default", "http://d.org/").unwrap();
-        d.namespaces.set_default("http://example.org/");
+        d.namespaces.set_default("http://example.org/").unwrap();
         d.records.push(entity_in("http://d.org/", "e"));
         let mut inner = Namespaces::new();
         inner.declare("default", "http://b.org/").unwrap();

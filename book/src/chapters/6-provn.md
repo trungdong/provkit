@@ -220,6 +220,8 @@ both profiles. `seen` is a `HashSet<&str>` borrowing from the tokens,
 as chapter 4's sets borrowed their keys. `prefix_name`, below the span,
 tests the prefix's text as written with `is_pn_prefix` from chapter 2,
 because production [46] takes a `PN_PREFIX`, which has no escapes.
+An empty IRI, as in `prefix z <>` or `default <>`, is refused under both
+profiles, although `IRI_REF` admits `<>`.
 
 ### provkit/src/provn/extension.rs
 

@@ -98,18 +98,23 @@ fn unification_over_the_corpus() {
 }
 
 /// Number of PROV-JSON documents in `corpus/constraints/`.
-const CONSTRAINTS_CORPUS_SIZE: usize = 171;
+const CONSTRAINTS_CORPUS_SIZE: usize = 173;
 
-/// The six files on which the `ProvToolbox` validator expects a failed merge:
-/// an association with and without a plan, a derivation with and without
-/// an activity, under one identifier.
-const NONE_POSITION_FAILURES: [&str; 6] = [
+/// The eight files that fail on a none position: the six on which the
+/// `ProvToolbox` validator expects a failed merge, and `derivation-fail5` and
+/// `derivation-fail6`, written for the corpus. They pair an association with
+/// and without a plan, a derivation with and without an activity, a derivation
+/// with and without a generation, and a derivation with and without a usage,
+/// under one identifier.
+const NONE_POSITION_FAILURES: [&str; 8] = [
     "association-fail4.json",
     "association-fail5.json",
     "derivation-fail1.json",
     "derivation-fail2.json",
     "derivation-fail3.json",
     "derivation-fail4.json",
+    "derivation-fail5.json",
+    "derivation-fail6.json",
 ];
 
 /// Constraints files that lack a mandatory party, from

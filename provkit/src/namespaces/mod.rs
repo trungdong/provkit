@@ -51,8 +51,17 @@ impl Namespaces {
     }
 
     /// Set the default namespace, used for bare names.
-    pub fn set_default(&mut self, iri: &str) {
+    ///
+    /// # Errors
+    ///
+    /// [`Error::EmptyNamespace`] if `iri` is the empty string. The table
+    /// keeps its earlier default. A whitespace-only `iri` is not empty.
+    pub fn set_default(&mut self, iri: &str) -> Result<()> {
+        if iri.is_empty() {
+            return Err(Error::EmptyNamespace);
+        }
         self.default = Some(Arc::from(iri));
+        Ok(())
     }
 
     /// The default namespace, if any.
@@ -69,11 +78,16 @@ impl Namespaces {
     /// start with a letter, continue with letters, digits, `-`, `_`, `.` or
     /// another `PN_CHARS` character such as U+00B7, and not end in `.`. `_`,
     /// which introduces blank nodes, is never a prefix.
+    /// [`Error::EmptyNamespace`] if `iri` is the empty string. A whitespace-only
+    /// `iri` is not empty.
     /// [`Error::ReservedPrefix`] if `prefix` is `prov` or `xsd` and `iri` is
     /// not its fixed IRI.
     pub fn declare(&mut self, prefix: &str, iri: &str) -> Result<()> {
         if !pn::is_pn_prefix(prefix) {
             return Err(Error::InvalidPrefix(prefix.into()));
+        }
+        if iri.is_empty() {
+            return Err(Error::EmptyNamespace);
         }
         if let Some(expected) = reserved(prefix) {
             if expected == iri {
@@ -182,6 +196,8 @@ impl Namespaces {
     }
 
     /// The prefix for `namespace`, minting `ns1`, `ns2`, ... when none exists.
+    /// An empty `namespace` gets a prefix too, and both writers then refuse
+    /// the table.
     pub fn ensure_prefix(&mut self, namespace: &str) -> String {
         WriteScope::of(self).ensure_prefix(namespace)
     }

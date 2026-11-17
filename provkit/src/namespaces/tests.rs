@@ -7,9 +7,9 @@ fn tables_that_differ_only_in_the_default_are_unequal() {
     a.declare("ex", "http://example.org/").unwrap();
     let mut b = a.clone();
     assert_eq!(a, b);
-    b.set_default("http://default.org/");
+    b.set_default("http://default.org/").unwrap();
     assert_ne!(a, b);
-    a.set_default("http://other.org/");
+    a.set_default("http://other.org/").unwrap();
     assert_ne!(a, b);
 }
 
@@ -17,7 +17,7 @@ fn tables_that_differ_only_in_the_default_are_unequal() {
 fn resolves_prefixed_bare_and_predeclared() {
     let mut ns = Namespaces::new();
     ns.declare("ex", "http://example.org/").unwrap();
-    ns.set_default("http://default.org/");
+    ns.set_default("http://default.org/").unwrap();
     assert_eq!(ns.resolve("ex:e1").unwrap(), ex("e1"));
     assert_eq!(
         ns.resolve("e1").unwrap(),
@@ -52,7 +52,7 @@ fn a_full_iri_is_an_undeclared_prefix_naming_its_scheme() {
 #[test]
 fn malformed_names_are_invalid() {
     let mut ns = Namespaces::new();
-    ns.set_default("http://default.org/");
+    ns.set_default("http://default.org/").unwrap();
     assert!(matches!(ns.resolve(":e1"), Err(Error::InvalidQName(_))));
     assert!(matches!(ns.resolve(""), Err(Error::InvalidQName(_))));
 }
@@ -61,7 +61,7 @@ fn malformed_names_are_invalid() {
 fn a_local_part_provn_cannot_write_does_not_resolve() {
     let mut ns = Namespaces::new();
     ns.declare("ex", "http://example.org/").unwrap();
-    ns.set_default("http://default.org/");
+    ns.set_default("http://default.org/").unwrap();
     for text in ["ex:a b", "a b", "ex:a%4"] {
         assert!(
             matches!(ns.resolve(text), Err(Error::InvalidQName(t)) if t == text),
@@ -94,7 +94,7 @@ fn underscore_is_never_a_prefix() {
     assert!(matches!(ns.resolve("_:x"), Err(Error::InvalidQName(_))));
     let doc = Namespaces::new();
     let mut bundle = Namespaces::new();
-    bundle.set_default("http://default.org/");
+    bundle.set_default("http://default.org/").unwrap();
     let merged = bundle.with_fallback(&doc);
     assert!(matches!(merged.resolve("_:x"), Err(Error::InvalidQName(_))));
 }
@@ -146,7 +146,7 @@ fn ensure_prefix_reuses_then_mints() {
 fn render_parts_split_the_prefix_from_the_local_part() {
     let mut ns = Namespaces::new();
     ns.declare("ex", "http://example.org/").unwrap();
-    ns.set_default("http://default.org/");
+    ns.set_default("http://default.org/").unwrap();
     let q = |iri: &str, local: &str| QName::new(iri, local).unwrap();
     // The prefix alone comes back; `None` means bare.
     assert_eq!(
@@ -168,7 +168,7 @@ fn render_parts_split_the_prefix_from_the_local_part() {
     assert_eq!(ns.iter().count(), 2);
     // A name in the default namespace never mints a prefix.
     let mut plain = Namespaces::new();
-    plain.set_default("http://default.org/");
+    plain.set_default("http://default.org/").unwrap();
     assert_eq!(
         WriteScope::of(&mut plain).render_parts(&q("http://default.org/", "b")),
         None
@@ -202,7 +202,7 @@ fn a_bundle_table_falls_back_to_the_document() {
 #[test]
 fn resolve_parts_keeps_a_colon_in_the_local_part() {
     let mut doc = Namespaces::new();
-    doc.set_default("http://default.org/");
+    doc.set_default("http://default.org/").unwrap();
     doc.declare("a", "http://a.org/").unwrap();
     let mut bundle = Namespaces::new();
     bundle.declare("a", "http://bundle.org/").unwrap();
@@ -233,7 +233,7 @@ fn resolve_parts_keeps_a_colon_in_the_local_part() {
 fn a_merged_table_prefers_the_bundle_binding() {
     let mut doc = Namespaces::new();
     doc.declare("ex", "http://doc.org/").unwrap();
-    doc.set_default("http://doc-default.org/");
+    doc.set_default("http://doc-default.org/").unwrap();
     let mut bundle = Namespaces::new();
     bundle.declare("ex", "http://bundle.org/").unwrap();
     let merged = bundle.with_fallback(&doc);
@@ -246,7 +246,9 @@ fn a_merged_table_prefers_the_bundle_binding() {
         QName::new("http://doc-default.org/", "e").unwrap()
     );
     let mut own_default = Namespaces::new();
-    own_default.set_default("http://bundle-default.org/");
+    own_default
+        .set_default("http://bundle-default.org/")
+        .unwrap();
     assert_eq!(
         own_default.with_fallback(&doc).resolve("e").unwrap(),
         QName::new("http://bundle-default.org/", "e").unwrap()
@@ -283,7 +285,7 @@ fn a_redeclared_prefix_moves_to_its_new_iri() {
 #[test]
 fn the_default_namespace_has_no_prefix() {
     let mut ns = Namespaces::new();
-    ns.set_default("http://x.org/");
+    ns.set_default("http://x.org/").unwrap();
     assert_eq!(ns.prefix_for("http://x.org/"), None);
 }
 
@@ -349,10 +351,10 @@ fn an_empty_local_part_resolves() {
 #[test]
 fn absorb_keeps_the_first_default_and_the_first_binding() {
     let mut first = Namespaces::new();
-    first.set_default("http://first.org/");
+    first.set_default("http://first.org/").unwrap();
     first.declare("p", "http://first.org/p/").unwrap();
     let mut second = Namespaces::new();
-    second.set_default("http://second.org/");
+    second.set_default("http://second.org/").unwrap();
     second.declare("p", "http://second.org/p/").unwrap();
     second.declare("q", "http://second.org/q/").unwrap();
     first.absorb(&second);
@@ -370,7 +372,7 @@ fn absorb_keeps_the_first_default_and_the_first_binding() {
 /// each other, with a default on each.
 fn layered() -> (Namespaces, Namespaces) {
     let mut document = Namespaces::new();
-    document.set_default("http://doc.org/");
+    document.set_default("http://doc.org/").unwrap();
     document.declare("ex", "http://document.org/").unwrap();
     document.declare("o", "http://other.org/").unwrap();
     document.declare("alias", "http://other.org/").unwrap();
@@ -414,7 +416,9 @@ fn a_scope_resolves_as_the_merged_table_does() {
         "http://doc.org/"
     );
     let mut with_default = bundle.clone();
-    with_default.set_default("http://bundle-default.org/");
+    with_default
+        .set_default("http://bundle-default.org/")
+        .unwrap();
     let scope = Scope::within(&with_default, &document);
     assert_eq!(
         scope.resolve("bare").unwrap().namespace(),
@@ -478,7 +482,7 @@ fn a_write_scope_renders_as_the_merged_table_does() {
 #[test]
 fn a_write_scope_with_its_own_default_renders_as_the_merged_table_does() {
     let (document, mut bundle) = layered();
-    bundle.set_default("http://bundle-default.org/");
+    bundle.set_default("http://bundle-default.org/").unwrap();
     let names = [
         ("http://bundle-default.org/", "bare"),
         ("http://bundle-default.org/", "with:colon"),
@@ -495,7 +499,7 @@ fn a_write_scope_with_its_own_default_renders_as_the_merged_table_does() {
 #[test]
 fn a_bundle_default_writes_bare_and_the_document_default_takes_a_prefix() {
     let (document, mut bundle) = layered();
-    bundle.set_default("http://bundle-default.org/");
+    bundle.set_default("http://bundle-default.org/").unwrap();
     let mut scope = WriteScope::within(&mut bundle, &document);
     let own = QName::new("http://bundle-default.org/", "bare").unwrap();
     assert_eq!(scope.render_parts(&own), None);
@@ -517,4 +521,22 @@ fn minting_continues_past_the_last_minted_number() {
     other.declare("ns3", "http://b/").unwrap();
     other.declare("ns4", "http://c/").unwrap();
     assert_eq!(ns, other);
+}
+
+#[test]
+fn an_empty_iri_is_refused_and_a_space_is_not() {
+    let mut ns = Namespaces::new();
+    ns.declare("ex", "http://example.org/").unwrap();
+    ns.set_default("http://default.org/").unwrap();
+    let before = ns.clone();
+    assert!(matches!(ns.declare("z", ""), Err(Error::EmptyNamespace)));
+    assert!(matches!(ns.declare("ex", ""), Err(Error::EmptyNamespace)));
+    assert!(matches!(ns.set_default(""), Err(Error::EmptyNamespace)));
+    assert_eq!(ns, before);
+    assert_eq!(ns.default_namespace(), Some("http://default.org/"));
+    // The IRI is never trimmed.
+    ns.declare("z", " ").unwrap();
+    ns.set_default(" ").unwrap();
+    assert_eq!(ns.lookup("z"), Some(" "));
+    assert_eq!(ns.default_namespace(), Some(" "));
 }

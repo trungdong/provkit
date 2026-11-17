@@ -6,7 +6,7 @@ use super::{NameParts, Parser, at};
 use crate::error::clip;
 use crate::pn;
 use crate::provn::Relaxation;
-use crate::{Namespaces, Result};
+use crate::{Error, Namespaces, Result};
 
 impl<'t> Parser<'t> {
     // ANCHOR: namespace_declarations
@@ -33,8 +33,9 @@ impl<'t> Parser<'t> {
                     ));
                 }
                 self.bump();
+                let token = self.peek();
                 let iri = self.iri()?;
-                ns.set_default(iri);
+                ns.set_default(iri).map_err(|e| at(token, e))?;
             } else if self.is_keyword("prefix") {
                 self.bump();
                 let name = self.prefix_name()?;
@@ -45,7 +46,11 @@ impl<'t> Parser<'t> {
                         &format!("'{}' declared twice in one scope", clip(name.local)),
                     ));
                 }
+                let token = self.peek();
                 let iri = self.iri()?;
+                if iri.is_empty() {
+                    return Err(at(token, Error::EmptyNamespace));
+                }
                 // `prov` and `xsd` are predeclared: section 3.7.4.
                 let predeclared = Namespaces::is_predeclared(name.local, iri);
                 if predeclared && !self.profile.allows(Relaxation::PredeclaredPrefix) {

@@ -19,7 +19,7 @@ fn entity_line(pairs: impl IntoIterator<Item = (QName, Value)>) -> String {
 #[test]
 fn prints_the_expected_text() {
     let mut d = Document::new();
-    d.namespaces.set_default("http://default.org/");
+    d.namespaces.set_default("http://default.org/").unwrap();
     d.namespaces.declare("ex", "http://example.org/").unwrap();
     let a = [
         (PROV_TYPE.clone(), ex("T").into()),
@@ -286,7 +286,7 @@ fn undeclared_namespaces_get_minted_prefixes_and_the_document_is_untouched() {
 #[test]
 fn default_namespace_names_mint_no_prefix() {
     let mut d = Document::new();
-    d.namespaces.set_default("http://default.org/");
+    d.namespaces.set_default("http://default.org/").unwrap();
     d.records.push(entity_in("http://default.org/", "e"));
     assert_eq!(
         provn::to_string(&d).unwrap(),
@@ -345,7 +345,7 @@ endDocument
 #[test]
 fn bundle_inherits_and_does_not_repeat_document_declarations() {
     let mut d = document(vec![]);
-    d.namespaces.set_default("http://default.org/");
+    d.namespaces.set_default("http://default.org/").unwrap();
     d.bundles
         .push(bundle("b", vec![entity_in("http://default.org/", "e")]));
     assert_eq!(
@@ -376,11 +376,20 @@ fn unrepresentable_iris_are_errors() {
     // Met while writing a declaration. The default namespace has an
     // empty prefix.
     let mut default = Document::new();
-    default.namespaces.set_default("http://x.org/>");
+    default.namespaces.set_default("http://x.org/>").unwrap();
     assert!(matches!(
         provn::to_string(&default),
         Err(Error::UnwritableNamespace { prefix, iri, .. })
             if prefix.is_empty() && iri == "http://x.org/>"
+    ));
+
+    // A prefix minted for the empty namespace would write as `<>`.
+    let mut empty = Document::new();
+    assert_eq!(empty.namespaces.ensure_prefix(""), "ns1");
+    assert!(matches!(
+        provn::to_string(&empty),
+        Err(Error::UnwritableNamespace { prefix, iri, reason })
+            if prefix == "ns1" && iri.is_empty() && reason == "the namespace IRI is empty"
     ));
 
     let mut declared = Document::new();

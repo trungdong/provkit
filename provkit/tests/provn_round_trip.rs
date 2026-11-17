@@ -31,7 +31,7 @@ fn written_reads_back(d: &Document) -> bool {
 fn every_position(local: &str) -> Document {
     let default = "http://default.org/";
     let mut d = document(vec![]);
-    d.namespaces.set_default(default);
+    d.namespaces.set_default(default).unwrap();
     for ns in ["http://example.org/", default] {
         let n = QName::new(ns, local).unwrap();
         let a = [
@@ -184,7 +184,7 @@ fn other_escapable_characters_are_written_bare_and_read_back() {
 fn bare_names_that_would_misread_take_a_prefix() {
     let with = |local: &str| {
         let mut d = Document::new();
-        d.namespaces.set_default("http://default.org/");
+        d.namespaces.set_default("http://default.org/").unwrap();
         d.records.push(element(
             Kind::Entity,
             QName::new("http://default.org/", local).unwrap(),
@@ -290,7 +290,7 @@ fn whatever_the_writer_accepts_reads_back_equal() {
         ));
         written_reads_back(&minted);
         let mut default = Document::new();
-        default.namespaces.set_default(iri.as_str());
+        default.namespaces.set_default(iri.as_str()).unwrap();
         default.records.push(element(
             Kind::Entity,
             QName::new(iri.as_str(), "e").unwrap(),

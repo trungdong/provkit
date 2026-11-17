@@ -480,7 +480,7 @@ fn typed_in_resolves_qualified_names_and_delegates_the_rest() {
 #[test]
 fn typed_in_rejects_text_that_is_not_a_qualified_name() {
     let mut with_default = example_names();
-    with_default.set_default("http://default.org/");
+    with_default.set_default("http://default.org/").unwrap();
     for datatype in [XSD_QNAME.clone(), PROV_QUALIFIED_NAME.clone()] {
         // Text no table resolves.
         for ns in [&example_names(), &with_default] {

@@ -35,6 +35,7 @@ impl QName {
     ///
     /// # Errors
     ///
+    /// [`Error::EmptyNamespace`] if `namespace` is the empty string.
     /// [`Error::InvalidQName`] if `local` holds a character that `PN_LOCAL`
     /// admits nowhere, bare or after `\`: a space or another separator, a
     /// control character, a symbol outside `PN_CHARS` such as `£` or `×`,
@@ -53,6 +54,9 @@ impl QName {
     ///
     /// As [`new`](Self::new).
     pub(crate) fn in_namespace(namespace: Arc<str>, local: &str) -> Result<Self> {
+        if namespace.is_empty() {
+            return Err(Error::EmptyNamespace);
+        }
         Self::check_local(local)?;
         Ok(QName {
             namespace,
@@ -227,6 +231,13 @@ mod tests {
         assert_eq!(a, b);
         assert_eq!(hash(&a), hash(&b));
         assert_eq!(a, QName::new("http://example.org/", "x").unwrap());
+    }
+
+    #[test]
+    fn an_empty_namespace_is_refused() {
+        assert!(matches!(QName::new("", "e"), Err(Error::EmptyNamespace)));
+        assert!(matches!(QName::new("", ""), Err(Error::EmptyNamespace)));
+        assert!(QName::new(" ", "e").is_ok());
     }
 
     #[test]

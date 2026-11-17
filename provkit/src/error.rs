@@ -125,8 +125,13 @@ pub enum Error {
         /// The character that prevents it.
         reason: String,
     },
+    /// A namespace IRI is empty. `Namespaces::declare`,
+    /// `Namespaces::set_default` and `QName::new` refuse the empty string as
+    /// a namespace IRI.
+    #[error("a namespace IRI cannot be empty")]
+    EmptyNamespace,
     /// A namespace declaration PROV-N cannot write, because the IRI holds a
-    /// character `IRI_REF` forbids.
+    /// character `IRI_REF` forbids, or is empty.
     #[error("PROV-N cannot declare {}: {reason}", declaration(.prefix, .iri))]
     #[non_exhaustive]
     UnwritableNamespace {
@@ -134,7 +139,7 @@ pub enum Error {
         prefix: String,
         /// The namespace IRI.
         iri: String,
-        /// The character that prevents it.
+        /// Why PROV-N cannot write the IRI.
         reason: String,
     },
     /// A prefix was used without a declaration.

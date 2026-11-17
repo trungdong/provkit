@@ -74,8 +74,8 @@ else.
 
 The namespace is an `Arc<str>`, a reference-counted string that many
 names share, and the local part is a `Box<str>`, one owned string per
-name. Neither field is public. `QName::new` takes two `&str`, checks
-the local part with `check_local`, and builds the name; the
+name. Neither field is public. `QName::new` takes two `&str`, refuses
+an empty namespace, checks the local part with `check_local`, and builds the name; the
 crate-private `in_namespace` takes an `Arc<str>` instead, so a name
 resolved through a namespace table shares the table's allocation rather
 than copying the IRI. The check refuses a character that no
@@ -109,7 +109,7 @@ use provkit::{Namespaces, QName, well_known};
 fn main() -> Result<(), provkit::Error> {
     let mut ns = Namespaces::new();
     ns.declare("ex", "http://example.org/")?;
-    ns.set_default("http://example.org/");
+    ns.set_default("http://example.org/")?;
     let prefixed = ns.resolve("ex:e1")?;
     let bare = ns.resolve("e1")?;
     assert_eq!(prefixed, bare);
@@ -169,14 +169,17 @@ writers' minting and `with_fallback` reach `bind` directly.
 {{#include ../../../provkit/src/namespaces/mod.rs:declare}}
 ```
 
-Two refusals come first. A prefix that `is_pn_prefix` rejects is
+Three refusals come first. A prefix that `is_pn_prefix` rejects is
 `Error::InvalidPrefix`, and that covers `_`, a prefix ending in `.`
 and anything with a space or a colon. PROV-N cannot write any other
 prefix, and a table that holds only valid prefixes writes to both
 formats ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "`Namespaces::declare` rejects a prefix"). `prov` or `xsd`
 at any IRI but its fixed one is `Error::ReservedPrefix`, which carries
-the prefix, the expected IRI and the one found. A declaration of `prov` or `xsd`
+the prefix, the expected IRI and the one found. An empty IRI is
+`Error::EmptyNamespace`, a departure from the Recommendation
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+"An empty namespace IRI"). A declaration of `prov` or `xsd`
 at the right IRI is accepted and changes nothing, so a PROV-JSON
 document that restates a predeclared binding still reads, and so does
 a PROV-N one under the `Default` profile. Everything else goes to

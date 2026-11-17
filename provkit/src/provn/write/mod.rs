@@ -151,7 +151,12 @@ fn iri_problem(iri: &str) -> Option<String> {
 /// the default namespace when `prefix` is `None`. The prefix needs no check,
 /// because `Namespaces` holds only `PN_PREFIX` prefixes.
 fn check_declaration(prefix: Option<&str>, iri: &str) -> Result<()> {
-    match iri_problem(iri) {
+    let problem = if iri.is_empty() {
+        Some("the namespace IRI is empty".to_owned())
+    } else {
+        iri_problem(iri)
+    };
+    match problem {
         Some(reason) => Err(Error::UnwritableNamespace {
             prefix: prefix.unwrap_or_default().to_owned(),
             iri: iri.to_owned(),

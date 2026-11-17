@@ -912,3 +912,25 @@ fn long_tokens_are_cut_in_messages() {
         assert!(message.len() < 300, "{} bytes", message.len());
     }
 }
+
+#[test]
+fn an_empty_namespace_iri_is_an_error_at_the_iri() {
+    for profile in [Profile::Default, Profile::Strict] {
+        for declaration in ["default <>", "prefix z <>"] {
+            let documents = [
+                format!("document\n  {declaration}\nendDocument"),
+                format!(
+                    "document\n  prefix ex <http://example.org/>\n  bundle ex:b\n    {declaration}\n  endBundle\nendDocument"
+                ),
+            ];
+            for text in documents {
+                let at = text.find("<>").unwrap();
+                let line = text[..at].matches('\n').count() + 1;
+                let column = at - text[..at].rfind('\n').unwrap();
+                let (position, inner) = located(provn::read_with(&text, profile).unwrap_err());
+                assert_eq!(position, (line, column), "{text}");
+                assert!(matches!(inner, Error::EmptyNamespace), "{text}");
+            }
+        }
+    }
+}
