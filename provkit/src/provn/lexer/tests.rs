@@ -169,7 +169,7 @@ fn local_part_accepts_the_full_grammar() {
         name("ex", "a/b@c~d&e+f*g?h#i$j!k")
     );
     assert_eq!(kinds(r"ex:a\:b\[c\]d")[0], name("ex", "a:b[c]d"));
-    // `-` and `.` continue a local part bare, though the writer escapes them.
+    // `-` and `.` continue a local part bare, as the writer writes them.
     assert_eq!(kinds("ex:a-b.c")[0], name("ex", "a-b.c"));
     // An escaped dot may end a local part; a bare one may not.
     assert_eq!(kinds(r"ex:a\.")[0], name("ex", "a."));

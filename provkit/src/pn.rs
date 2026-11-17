@@ -3,8 +3,9 @@
 //! `PN_CHARS_U` and `PN_CHARS` from SPARQL 1.0, productions [95], [96],
 //! [98] and [99]).
 
-/// `PN_CHARS_ESC` [55]: the characters that may follow `\` in a local part,
-/// and that a local part holds only after one.
+/// `PN_CHARS_ESC` [55]: the characters that may follow `\` in a local part.
+/// A local part holds most of them only after one; `-` and `.` also stand
+/// bare where `PN_LOCAL` [53] admits them.
 pub(crate) const PN_CHARS_ESC: &str = "='(),-:;[].";
 
 /// `PN_CHARS_BASE`.
@@ -89,9 +90,24 @@ pub(crate) fn hex_pair_follows(local: &str, at: usize) -> bool {
 
 /// How PROV-N writes the character `c` at byte `at` of `local`, or `None`
 /// when no `PN_LOCAL` [53] holds it there. The writer escapes every
-/// `PN_CHARS_ESC` character, so `-` and `.` are never written bare.
+/// `PN_CHARS_ESC` character except `-` after the first character and `.`
+/// between the first and the last, which `PN_LOCAL` admits bare and `ProvPy`
+/// 3.3.0 writes bare.
 pub(crate) fn local_char(local: &str, at: usize, c: char) -> Option<LocalChar> {
-    if PN_CHARS_ESC.contains(c) {
+    if c == '.' {
+        let ends_the_part = at == 0 || at + 1 == local.len();
+        Some(if ends_the_part {
+            LocalChar::Escaped
+        } else {
+            LocalChar::Bare
+        })
+    } else if c == '-' {
+        Some(if at == 0 {
+            LocalChar::Escaped
+        } else {
+            LocalChar::Bare
+        })
+    } else if PN_CHARS_ESC.contains(c) {
         Some(LocalChar::Escaped)
     } else if c == '%' {
         hex_pair_follows(local, at).then_some(LocalChar::Bare)

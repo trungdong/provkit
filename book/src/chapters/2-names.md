@@ -52,12 +52,13 @@ position.
 {{#include ../../../provkit/src/pn.rs:local_char}}
 ```
 
-Three rules sit in `local_char`. The `PN_CHARS_ESC` characters, among
-them `-`, `.` and `:`, are always written escaped, so the writer never
-has to decide whether an unescaped `-` would be read back. A `%` stands
-unescaped only when two hex digits follow, because `PERCENT` is the only place
-`%` can stand. Everything else goes through `is_bare_local_char`,
-which admits `PN_CHARS_U`, digits and the plain `PN_CHARS_OTHERS`
+Five rules sit in `local_char`. A `-` is escaped only as the first
+character, and a `.` only as the first or the last, because `PN_LOCAL` [53]
+admits both bare anywhere else. The text then matches what ProvPy 3.3.0
+writes. The other `PN_CHARS_ESC` characters, such as `:` and `=`, are always
+written escaped. A `%` stands unescaped only when two hex digits follow,
+because `PERCENT` is the only place `%` can stand. Everything else goes
+through `is_bare_local_char`, which admits `PN_CHARS_U`, digits and the plain `PN_CHARS_OTHERS`
 characters anywhere, and the rest of `PN_CHARS`, such as a combining
 mark, only after the first character. `QName::new` and the PROV-N
 writer both rely on this one function, so a name the constructor

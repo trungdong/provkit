@@ -71,7 +71,7 @@ document
   wasGeneratedBy(ex:g1; ex:e1, a1, -)
   wasGeneratedBy(ex:e1, -, -)
   mentionOf(ex:e2, ex:e1, ex:b)
-  entity(ex:e\\.2)
+  entity(ex:e.2)
   bundle ex:b
     entity(ex:e2)
   endBundle
@@ -258,12 +258,60 @@ fn a_lone_minus_or_empty_int_is_not_bare() {
     }
 }
 
+/// `PN_LOCAL` [53] admits `-` after the first character and `.` between the
+/// first and the last, so the writer leaves them bare there, as `ProvPy` 3.3.0
+/// does. Every other `PN_CHARS_ESC` character keeps its backslash.
+#[test]
+fn local_parts_escape_as_provpy_writes_them() {
+    let cases = [
+        ("-lead", "\\-lead"),
+        ("trail.", "trail\\."),
+        (".lead", "\\.lead"),
+        ("a-b.c", "a-b.c"),
+        ("a--b", "a--b"),
+        ("a..b", "a..b"),
+        ("a-", "a-"),
+        ("a=b", "a\\=b"),
+        ("a'b", "a\\'b"),
+        ("a(b)", "a\\(b\\)"),
+        ("a,b", "a\\,b"),
+        ("a:b", "a\\:b"),
+        ("a;b", "a\\;b"),
+        ("a[b]", "a\\[b\\]"),
+        ("-", "\\-"),
+        (".", "\\."),
+        ("a.-", "a.-"),
+        ("a-.", "a-\\."),
+        ("é.", "é\\."),
+    ];
+    for (local, written) in cases {
+        let mut d = document(vec![]);
+        d.records.push(entity(local));
+        let text = provn::to_string(&d).unwrap();
+        assert!(
+            text.contains(&format!("  entity(ex:{written})\n")),
+            "{local:?} in {text}"
+        );
+        assert_eq!(provn::read(&text).unwrap(), d, "{local:?} in {text}");
+    }
+}
+
+/// A default-namespace `a-b` reads back equal, bare or with a prefix.
+#[test]
+fn a_default_namespace_name_with_a_minus_reads_back_equal() {
+    let mut d = Document::new();
+    d.namespaces.set_default("http://default.org/").unwrap();
+    d.records.push(entity_in("http://default.org/", "a-b"));
+    let text = provn::to_string(&d).unwrap();
+    assert_eq!(provn::read(&text).unwrap(), d, "{text}");
+}
+
 #[test]
 fn local_parts_and_strings_escape() {
     let all = ex("a=b'c(d)e,f:g-h[i]j.k;l");
     assert_eq!(
         line(element(Kind::Entity, all, Attributes::new())),
-        "entity(ex:a\\=b\\'c\\(d\\)e\\,f\\:g\\-h\\[i\\]j\\.k\\;l)"
+        "entity(ex:a\\=b\\'c\\(d\\)e\\,f\\:g-h\\[i\\]j.k\\;l)"
     );
     assert_eq!(
         entity_line([(ex("s"), "q\" b\\ n\n r\r t\t".into())]),
