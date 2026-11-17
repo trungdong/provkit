@@ -280,9 +280,10 @@ zoned value against an unzoned one is found by imputing offsets of
 incomparable because the two imputations disagree. Rust's `Ord`
 promises a total order, so `DateTime` implements `PartialOrd` and not
 `Ord`. `partial_cmp` returns `None`
-for every zoned and unzoned pair, which is a simpler rule than XSD's.
-It leaves incomparable every pair XSD does, and also the pairs far
-enough apart for both imputations to agree. `Eq` still holds, because
+for every pair of one zoned and one unzoned value, a simpler rule than
+XSD's. Every pair that XSD leaves unordered stays unordered here. So do
+the pairs that XSD can order because they are far enough apart for
+both imputed offsets to agree. `Eq` still holds, because
 equality is reflexive where order is undefined.
 
 ### Why an `Arc` with copy on write around the attribute set?

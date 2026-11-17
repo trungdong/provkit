@@ -125,9 +125,10 @@ it. An invalid value is a variant rather than an error, because an
 error raised inside the visitor would be placed where the outer parser
 stands, past the whole value, and would not name its record. The value
 is carried to the reader instead, which places it and wraps it in the
-record. A key given twice in a record that
-holds no invalid value yet becomes an `Invalid` value the same way,
-placed after its second value. The
+record. The wire layer treats a key given
+twice in a record the same way when the record holds no invalid value
+yet. The repeat becomes an `Invalid` value, placed after the key's
+second value. The
 `Serialize` impl at the end of the file writes each variant back, a
 `Number` through `RawValue::from_string` so its text reaches the
 output unchanged.
@@ -257,11 +258,11 @@ fn main() -> Result<(), provkit::Error> {
 value, and the writers never emit raw numbers, so the value is typed
 from its token and no digit is lost ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "A JSON number keeps its text"). The serde visitor hands a number over
-as `i64`, `u64` or `f64`, so a reader built on those turns `-0` and
-any integer beyond `u64` into an `xsd:double` with re-rendered text,
-refuses `1e400` as out of range, drops the trailing zero of `1.50`,
-and disagrees with the PROV-N reader, which types an unquoted integer by
-its text, on the same number. A dependant that enables the
+as an `i64`, `u64` or `f64`. A reader built on those types would turn
+`-0`, and any integer beyond `u64`, into an `xsd:double` with
+re-rendered text. It would refuse `1e400` as out of range and drop the
+trailing zero of `1.50`. It would also disagree on the same number with
+the PROV-N reader, which types an unquoted integer by its text. A dependant that enables the
 `arbitrary_precision` feature of `serde_json` changes how numbers
 arrive, and the raw text is the same under both feature sets.
 
@@ -291,11 +292,11 @@ a record carries no position, and `Error::InRecord` names the section
 and the key of the record instead
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Every error from the PROV-N reader carries a line and a column"). The
-reader raises some errors itself, a value it could not decode or a key
-given twice in a record, after `serde_json` has accepted the text, and
-each is placed where `serde_json` gives the same error when it reads
-the document in one pass, so an error from either source reads the
-same way. For a value that is the line and column of
+reader raises some errors itself after `serde_json` has accepted the
+text, for a value it could not decode or a key given twice in a
+record. It places each one where `serde_json` gives the same error when
+it reads the document in one pass. An error from either source
+therefore reads the same way. For a value that is the line and column of
 its token. For a refused key it is past the value, past the white
 space after it and past a closing brace that follows, because that is
 where `serde_json` stands when a map visitor returns an error after

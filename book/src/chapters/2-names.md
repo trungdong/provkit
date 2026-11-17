@@ -28,8 +28,8 @@ file in this chapter.
 `prefix_len` measures a `PN_PREFIX` at the front of a string. The
 first character must be in `PN_CHARS_BASE`, which holds letters and
 the Unicode ranges SPARQL lists, and no `_` or digit. Later characters
-may be any `PN_CHARS`, or a `.` so long as something follows it, which
-is why `end` only moves on a `PN_CHARS` character and the loop steps
+may be any `PN_CHARS`, and a `.` may appear when something follows it.
+So the loop moves `end` only past a `PN_CHARS` character, and it steps
 over a `.` without extending the result. The book shows this span and
 those that follow as they stand in the files, and compiles none of
 them.
