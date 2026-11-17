@@ -17,7 +17,8 @@ attestations fail in a private repository on a free personal account.
 2. Run the main checks CI runs: `cargo fmt --check`, `cargo clippy --workspace
    --all-targets --all-features -- -D warnings`, `cargo test --workspace
    --all-features`, `cargo doc --workspace --no-deps` with
-   `RUSTDOCFLAGS=-D warnings`, `cargo deny check` and `typos`. Then run
+   `RUSTDOCFLAGS=-D warnings`, `cargo deny check`, `typos` and
+   `sh book/build.sh`. Then run
    `cargo clean` and `cargo package --workspace`. Cargo reuses an earlier
    packaged build of the same version, and the verify step then fails on stale
    code.
@@ -57,5 +58,5 @@ from step 1. The `provkit` version already on crates.io stays, and the new
 ## Moving the toolchain
 
 The pinned toolchain appears in `ci.yml`, `release.yml`, `pages.yml`,
-`rust-version` in `Cargo.toml` and the minimum supported Rust version in both
-READMEs. Move them together. A higher minimum is a minor release.
+`rust-version` in `Cargo.toml`, the minimum supported Rust version in both
+READMEs and chapter 1 of the book. Move them together. A higher minimum is a minor release.

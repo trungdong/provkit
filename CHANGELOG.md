@@ -23,12 +23,11 @@ The first release.
     writers and `unified()`. Under `Strict`, `prov:mentionOf` with `-` for any
     of its three arguments is refused, with or without an identifier.
   - A PROV-N `\U` escape below U+10000 decodes. A surrogate or a value above
-    U+10FFFF stays a syntax error.
+    U+10FFFF is a syntax error.
   - A namespace IRI that is empty or all whitespace is an error.
     `Namespaces::declare`, `Namespaces::set_default`,
     `Namespaces::ensure_prefix` and `QName::new` refuse it, and both readers
     refuse `prefix z <>`, `default <>` and a PROV-JSON `""` or `" "`.
-    `set_default` and `ensure_prefix` return a `Result`, and
     `Error::EmptyNamespace` names the prefix or the default namespace at
     fault.
 - `provkit-cli`, the `provkit` command: `convert` between the two formats and
