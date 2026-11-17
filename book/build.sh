@@ -18,9 +18,28 @@ copies = re.findall(r'r#"(.*?)"#', open(sys.argv[1], encoding="utf-8").read(), r
 files = [open(p, encoding="utf-8").read() for p in sys.argv[2:]]
 sys.exit(0 if copies == files else "three-views.md: a raw string differs from its file under book/examples")
 EOF
-cargo build -p provkit --target-dir book/target
+# Cargo reports every file it builds as a JSON message. The library files
+# among them are copied into one directory for `mdbook test -L`, so the
+# doctests do not depend on where Cargo keeps them under the target directory.
+# A metadata file is left out, because rustc can pick it over the `.rlib` of
+# the same crate, and a doctest cannot link against metadata alone.
+mkdir -p book/target
+cargo build -p provkit --target-dir book/target --message-format=json-render-diagnostics > book/target/artifacts.json
+python3 -I - book/target/artifacts.json book/target/doctest-libs <<'EOF'
+import json, shutil, sys
+from pathlib import Path
+libs = Path(sys.argv[2])
+shutil.rmtree(libs, ignore_errors=True)
+libs.mkdir(parents=True)
+for line in open(sys.argv[1], encoding="utf-8"):
+    message = json.loads(line)
+    if message.get("reason") == "compiler-artifact" and "custom-build" not in message["target"]["kind"]:
+        for file in message["filenames"]:
+            if not file.endswith(".rmeta"):
+                shutil.copy2(file, libs)
+EOF
 cargo doc -p provkit --no-deps --target-dir book/target
 rm -rf book/src/api
 cp -R book/target/doc book/src/api
 mdbook build book
-mdbook test book -L book/target/debug/deps
+mdbook test book -L book/target/doctest-libs

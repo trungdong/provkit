@@ -89,8 +89,8 @@ Each integration test target names the features it needs.
 ```
 
 Cargo skips a `[[test]]` target whose `required-features` are off
-instead of failing to compile it. `cargo test --no-default-features
---features provn` therefore builds the unit tests, the doctests and the
+instead of failing to compile it. `cargo test -p provkit
+--no-default-features --features provn` therefore builds the unit tests, the doctests and the
 three `provn` targets, and leaves `corpus_json` and `corpus_twins` out.
 
 ### Cargo.toml

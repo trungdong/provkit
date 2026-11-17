@@ -412,7 +412,7 @@ key as no identifier, and `sections` writes a fresh one.
 - **`collect` into `Result<Vec<_>, _>`**. `Result` implements
   `FromIterator`, so collecting an iterator of results in
   `records_from` gives the first `Err` or a `Vec` of every `Ok`.
-  [FromIterator for Result](https://doc.rust-lang.org/std/iter/trait.FromIterator.html#impl-FromIterator%3CResult%3CA,+E%3E%3E-for-Result%3CV,+E%3E)
+  [FromIterator for Result](https://doc.rust-lang.org/std/iter/trait.FromIterator.html#impl-FromIterator%3CResult%3CT,+E%3E%3E-for-Result%3CV,+E%3E)
 - **`&mut *out` reborrowing**. Dereferencing a `&mut` and borrowing it
   again lends the writer for one call without moving the reference, so
   the next line of `write` can use `out`.
@@ -531,7 +531,7 @@ unannounced.
 - `generic newtypes`: https://doc.rust-lang.org/book/ch20-02-advanced-traits.html#using-the-newtype-pattern-to-implement-external-traits-on-external-types
 - `IndexMap Entry matched by variant`: https://docs.rs/indexmap/latest/indexmap/map/enum.Entry.html
 - `Vec::with_capacity`: https://doc.rust-lang.org/std/vec/struct.Vec.html#method.with_capacity
-- `collect into Result<Vec<_>, _>`: https://doc.rust-lang.org/std/iter/trait.FromIterator.html#impl-FromIterator%3CResult%3CA,+E%3E%3E-for-Result%3CV,+E%3E
+- `collect into Result<Vec<_>, _>`: https://doc.rust-lang.org/std/iter/trait.FromIterator.html#impl-FromIterator%3CResult%3CT,+E%3E%3E-for-Result%3CV,+E%3E
 - `&mut *out reborrowing`: https://doc.rust-lang.org/reference/expressions/operator-expr.html#borrow-operators
 - `String::from_utf8(..).expect(..) with a reason`: https://doc.rust-lang.org/std/string/struct.String.html#method.from_utf8
 - `Result<&QName, String> as either-or`: https://doc.rust-lang.org/std/result/enum.Result.html

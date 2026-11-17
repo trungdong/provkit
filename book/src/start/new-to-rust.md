@@ -82,7 +82,7 @@ PROV use differently.
 | `generic newtypes` | [Chapter 5](../chapters/5-json.md) | [Rust book](https://doc.rust-lang.org/book/ch20-02-advanced-traits.html#using-the-newtype-pattern-to-implement-external-traits-on-external-types) |
 | `IndexMap Entry matched by variant` | [Chapter 5](../chapters/5-json.md) | [docs.rs](https://docs.rs/indexmap/latest/indexmap/map/enum.Entry.html) |
 | `Vec::with_capacity` | [Chapter 5](../chapters/5-json.md) | [std](https://doc.rust-lang.org/std/vec/struct.Vec.html#method.with_capacity) |
-| `collect into Result<Vec<_>, _>` | [Chapter 5](../chapters/5-json.md) | [std](https://doc.rust-lang.org/std/iter/trait.FromIterator.html#impl-FromIterator%3CResult%3CA,+E%3E%3E-for-Result%3CV,+E%3E) |
+| `collect into Result<Vec<_>, _>` | [Chapter 5](../chapters/5-json.md) | [std](https://doc.rust-lang.org/std/iter/trait.FromIterator.html#impl-FromIterator%3CResult%3CT,+E%3E%3E-for-Result%3CV,+E%3E) |
 | `&mut *out reborrowing` | [Chapter 5](../chapters/5-json.md) | [Rust reference](https://doc.rust-lang.org/reference/expressions/operator-expr.html#borrow-operators) |
 | `String::from_utf8(..).expect(..) with a reason` | [Chapter 5](../chapters/5-json.md) | [std](https://doc.rust-lang.org/std/string/struct.String.html#method.from_utf8) |
 | `Result<&QName, String> as either-or` | [Chapter 5](../chapters/5-json.md) | [std](https://doc.rust-lang.org/std/result/enum.Result.html) |
