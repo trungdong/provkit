@@ -43,7 +43,7 @@ pub enum Profile {
     /// `PN_PREFIX`, and every other text the grammar rejects.
     Strict,
     /// The grammar plus six extensions that `Strict` rejects and the `default`
-    /// profile of `ProvPy` 3.3.0 also reads, which
+    /// profile of [Python `prov`](https://github.com/trungdong/prov) 3.3.0 also reads, which
     /// [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
     /// lists. `prov:mentionOf` with an identifier, or with `-` for its bundle,
     /// is a mention under `Default`, as bare `mentionOf` is. `-` for a

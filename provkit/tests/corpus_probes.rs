@@ -63,7 +63,7 @@ fn expected(report: &mut Report) -> BTreeMap<String, Expected> {
     let mut by_name = BTreeMap::new();
     for row in rows {
         // The last column is empty, and may be absent, for a probe on which
-        // ProvPy agrees.
+        // Python `prov` agrees.
         let ([name, strict, default, rule] | [name, strict, default, rule, _]) = row.as_slice()
         else {
             let name = row.first().map_or("", String::as_str);

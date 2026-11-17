@@ -1,6 +1,12 @@
 # provkit
 
-W3C PROV data model in Rust, with PROV-JSON and PROV-N read and write, and a
+W3C
+[PROV data model](https://www.w3.org/TR/2013/REC-prov-dm-20130430/)
+in Rust, with
+[PROV-JSON](https://www.w3.org/Submission/2013/SUBM-prov-json-20130424/)
+and
+[PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/)
+read and write, and a
 `provkit` command-line tool to convert and compare documents.
 [PROV](https://www.w3.org/TR/prov-overview/) is the W3C family of documents
 for the interchange of provenance, which is information about the entities,
@@ -109,14 +115,17 @@ fn main() -> Result<(), provkit::Error> {
 
 Document equality is set-based. `Document::unified()` merges records that
 share an identifier and kind, keeps each record once, and fails where
-PROV-CONSTRAINTS 53 to 55 forbid the sharing, where formal attributes
+[PROV-CONSTRAINTS](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/)
+53 to 55 forbid the sharing, where formal attributes
 conflict, or where an absent value in one of the four non-expandable positions
 of PROV-CONSTRAINTS Table 3 meets a present one. `provn::read_with` takes a
 `provn::Profile`. `Strict` accepts the whole PROV-N grammar and the MUST
 statements of its prose, with the departures
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 records, and `Default` (the profile `provn::read` uses) adds six
-extensions that ProvPy 3.3.0's `default` profile also reads, which that file
+extensions that
+[Python `prov`](https://github.com/trungdong/prov)
+3.3.0's `default` profile also reads, which that file
 lists.
 `provn::read_report` returns a `ReadReport` with the document and the
 expressions left out. The API reference is on
@@ -127,8 +136,9 @@ it locally.
 
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 lists where provkit departs from the PROV Recommendations, where it differs
-from ProvPy 3.3.0 (with the ProvPy issue number where one is filed) and from
-ProvToolbox 2.5.0, and its implementation limits, each with its reason and
+from Python `prov` 3.3.0 (with its issue number where one is filed) and from
+[ProvToolbox](https://lucmoreau.github.io/ProvToolbox/)
+2.5.0, and its implementation limits, each with its reason and
 test.
 [CHANGELOG.md](https://github.com/trungdong/provkit/blob/main/CHANGELOG.md)
 lists the releases.
@@ -164,5 +174,7 @@ The last four need tools that Cargo does not ship. Install `cargo-deny` and
 
 ## Licence
 
-MIT OR Apache-2.0, at your option. See [LICENSE-MIT](https://github.com/trungdong/provkit/blob/main/LICENSE-MIT) and
+MIT OR Apache-2.0, at your option. See
+[LICENSE-MIT](https://github.com/trungdong/provkit/blob/main/LICENSE-MIT)
+and
 [LICENSE-APACHE](https://github.com/trungdong/provkit/blob/main/LICENSE-APACHE).

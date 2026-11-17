@@ -197,7 +197,9 @@ reads the table through `tsv`, asserts the header, and turns each row
 into an `Expected` keyed by name. Its pattern
 `([name, strict, default, rule] | [name, strict, default, rule, _])`
 accepts a row of four or five columns, because the `provpy` column is
-empty for a probe on which ProvPy agrees and a trailing empty column
+empty for a probe on which
+[Python `prov`](https://github.com/trungdong/prov)
+agrees and a trailing empty column
 may be absent. A row with another width, a
 result that is not `accept` or `reject`, an empty `rule` column or a
 name listed twice is recorded as a failure, so the table itself is
@@ -306,10 +308,10 @@ the end-to-end tests read the corpus too.
 
 ## Why this shape
 
-### Why test on the documents ProvPy tests on?
+### Why test on the documents Python `prov` tests on?
 
-provkit does not deviate from ProvPy without a CONFORMANCE.md row
-giving the reason and the issue number where one is filed. ProvPy 3.3.0's own tests read
+provkit does not deviate from Python `prov` without a CONFORMANCE.md row
+giving the reason and the issue number where one is filed. Python `prov` 3.3.0's own tests read
 copies of the corpus's PROV-JSON documents, specification examples and
 ProvToolbox files, so the two libraries are tested on nearly the same
 documents

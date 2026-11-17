@@ -167,11 +167,11 @@ A bundle is itself an entity, so other records can name it. A prefix
 declared inside a bundle applies only there, as
 [Chapter 2](../chapters/2-names.md) describes.
 
-## ProvPy and ProvToolbox are the libraries provkit is compared with
+## Python `prov` and ProvToolbox are the libraries provkit is compared with
 
-[ProvPy](https://github.com/trungdong/prov) is a Python implementation
+[Python `prov`](https://github.com/trungdong/prov) is a Python implementation
 of PROV-DM, published on PyPI as `prov`. The book compares provkit
-with ProvPy 3.3.0.
+with Python `prov` 3.3.0.
 
 [ProvToolbox](https://lucmoreau.github.io/ProvToolbox/) is a Java
 library for PROV-DM. Its command-line tool is `provconvert`, and the

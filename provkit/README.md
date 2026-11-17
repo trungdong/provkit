@@ -1,9 +1,14 @@
 # provkit
 
 A Rust library for the [W3C PROV](https://www.w3.org/TR/prov-overview/) data
-model, with readers and writers for PROV-JSON and PROV-N.
+model, with readers and writers for
+[PROV-JSON](https://www.w3.org/Submission/2013/SUBM-prov-json-20130424/)
+and
+[PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/).
 
-A `Document` holds `Record`s, one enum variant per PROV-DM type, and named
+A `Document` holds `Record`s, one enum variant per
+[PROV-DM](https://www.w3.org/TR/2013/REC-prov-dm-20130430/)
+type, and named
 `Bundle`s. Readers and writers are free functions in the `json` and `provn`
 modules. Readers take `&str` and writers take `&mut impl std::io::Write`, so
 the library never opens a file.
@@ -30,13 +35,17 @@ fn main() -> Result<(), provkit::Error> {
 namespace tables, blank-node labels and the spelling of a number, boolean or
 `dateTime`.
 `Document::unified()` merges records that share an identifier and kind, keeps
-each record once, and fails where PROV-CONSTRAINTS 53 to 55 forbid the
+each record once, and fails where
+[PROV-CONSTRAINTS](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/)
+53 to 55 forbid the
 sharing, where formal attributes conflict, or where an absent value in one of
 the four non-expandable positions of PROV-CONSTRAINTS Table 3 meets a present
 one. `provn::read_with` takes a `provn::Profile`. `Strict` accepts the whole
 PROV-N grammar and the MUST statements of its prose, with the departures
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-records, and `Default` adds six extensions that ProvPy 3.3.0's `default`
+records, and `Default` adds six extensions that
+[Python `prov`](https://github.com/trungdong/prov)
+3.3.0's `default`
 profile also reads, which that file lists.
 
 ## Features

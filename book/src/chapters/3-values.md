@@ -224,7 +224,9 @@ one datatype, so `"5"`, `" 5 "`, `"+5"` and `"005"` are one `xsd:int`
 and `"1e999"` equals `"INF"` as an `xsd:double`
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "A typed literal is never rejected for its text"). Equal values under
-one datatype are one value, and ProvPy 3.3.0 compares the numeric and
+one datatype are one value, and
+[Python `prov`](https://github.com/trungdong/prov)
+3.3.0 compares the numeric and
 boolean datatypes by value too, except that it finds two `xsd:float`
 values unequal that differ only beyond single precision ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Values of the numeric and boolean datatypes compare by value"). Two

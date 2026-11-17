@@ -325,7 +325,7 @@ fn string(s: &str) -> String {
 /// `INT_LITERAL` (an optional minus sign and at least one digit) and reading
 /// that text back gives `xsd:int`. Every other integer is quoted with its
 /// datatype, a form every reader accepts. A bare integer above the 32-bit
-/// range is typed by range here and in `ProvPy`, and `ProvToolbox` refuses
+/// range is typed by range here and in Python `prov`, and `ProvToolbox` refuses
 /// it.
 fn bare_int(lexical: &str, datatype: &QName) -> bool {
     *datatype == *XSD_INT && is_int_literal(lexical) && integer_datatype(lexical) == datatype

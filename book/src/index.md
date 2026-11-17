@@ -8,7 +8,9 @@ not a user guide.
 To install and run `provkit`, read the
 [README](https://github.com/trungdong/provkit/blob/main/README.md); for
 the library's API, the [reference](api/provkit/index.html); for where
-provkit departs from the Recommendations or differs from ProvPy and
+provkit departs from the Recommendations or differs from
+[Python `prov`](https://github.com/trungdong/prov)
+and
 ProvToolbox,
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md).
 The book describes the source on `main`.

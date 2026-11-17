@@ -54,7 +54,9 @@ position.
 
 Five rules sit in `local_char`. A `-` is escaped only as the first
 character, and a `.` only as the first or the last, because `PN_LOCAL` [53]
-admits both bare anywhere else. The text then matches what ProvPy 3.3.0
+admits both bare anywhere else. The text then matches what
+[Python `prov`](https://github.com/trungdong/prov)
+3.3.0
 writes. The other `PN_CHARS_ESC` characters, such as `:` and `=`, are always
 written escaped. A `%` stands unescaped only when two hex digits follow,
 because `PERCENT` is the only place `%` can stand. Everything else goes
@@ -249,7 +251,7 @@ says a namespace declaration must not declare the prefixes `prov` and
 therefore `Error::ReservedPrefix`. Table 1 of PROV-N, the prefix table
 of PROV-DM and the PROV-JSON submission all print
 `http://www.w3.org/2000/10/XMLSchema#`, but the 2001 IRI is the XML
-Schema namespace and ProvPy uses it, so `well_known::XSD` holds the
+Schema namespace and Python `prov` uses it, so `well_known::XSD` holds the
 2001 IRI and `declare("xsd", ...)` accepts only that one
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "`xsd` is `http://www.w3.org/2001/XMLSchema#`").

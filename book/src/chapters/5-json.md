@@ -269,7 +269,9 @@ The rule applies in a namespace table, among the sections of a
 document or bundle, among the records of a section, among the
 attributes of a record and among the members of a value object
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"A key given twice in one PROV-JSON object is an error"). ProvPy 3.3.0
+"A key given twice in one PROV-JSON object is an error").
+[Python `prov`](https://github.com/trungdong/prov)
+3.3.0
 refuses a repeated key as well. A reader that keeps the last value
 drops a namespace, a record, a section, a bundle or a value without a
 message. RFC 8259
@@ -310,7 +312,7 @@ A `hadMember` with N members reads as N records that share their
 attributes, because the ProvToolbox shared corpus writes the members
 of a
 [collection](../reference/glossary.md#collection-and-membership-prov)
-as an array under `prov:entity`, ProvPy reads that form, the
+as an array under `prov:entity`, Python `prov` reads that form, the
 submission's schema does not define it, and PROV-DM holds one member
 per relation ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "A PROV-JSON `hadMember` with an empty `prov:entity` array is an error"). Section
@@ -319,7 +321,7 @@ per relation ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CO
 writes three memberships on one collection as three objects under
 `hadMember`, each with one `prov:entity`, which is the model the
 fan-out produces, one membership per member. Every record gets the
-identifier and the attributes, as in ProvPy 3.3.0, because the
+identifier and the attributes, as in Python `prov` 3.3.0, because the
 records are alike except for the member, and
 which member comes first should not decide which record carries the
 identifier ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
@@ -328,7 +330,7 @@ and the attributes").
 
 ### Why accept an array of objects under one identifier?
 
-The submission's schema does not define the form, and ProvPy reads
+The submission's schema does not define the form, and Python `prov` reads
 and writes it. Two records of one kind can share an identifier, and a
 JSON object holds a key once ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "The PROV-JSON reader and writer take an array of record objects under

@@ -1,4 +1,10 @@
-//! W3C PROV data model with PROV-JSON and PROV-N read and write.
+//! W3C
+//! [PROV data model](https://www.w3.org/TR/2013/REC-prov-dm-20130430/)
+//! with
+//! [PROV-JSON](https://www.w3.org/Submission/2013/SUBM-prov-json-20130424/)
+//! and
+//! [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/)
+//! read and write.
 //!
 //! A [`Document`] holds [`Record`]s, one enum variant per PROV-DM type, and
 //! named [`Bundle`]s. Readers and writers are free functions in [`json`] and
@@ -32,18 +38,22 @@
 //! - [`Document::unified`] merges records that share an identifier and kind,
 //!   keeps each record once, and returns [`Error::Unification`] when their
 //!   formal attributes conflict, when an absent value in one of the four
-//!   non-expandable positions of PROV-CONSTRAINTS Table 3 meets a present
+//!   non-expandable positions of
+//!   [PROV-CONSTRAINTS](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/)
+//!   Table 3 meets a present
 //!   one, or when PROV-CONSTRAINTS 53 to 55 forbid the sharing.
 //! - [`provn::Profile`] selects how strictly PROV-N input is checked.
 //!   `Strict` reads the whole grammar and the MUST statements of its prose,
 //!   with the departures
 //!   [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 //!   records, and `Default` adds six extensions that the
-//!   `default` profile of `ProvPy` 3.3.0 also reads, which that file lists.
+//!   `default` profile of
+//!   [Python `prov`](https://github.com/trungdong/prov)
+//!   3.3.0 also reads, which that file lists.
 //!
 //! [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 //! in the repository lists where provkit departs from the PROV
-//! Recommendations, where it differs from `ProvPy` 3.3.0 and from
+//! Recommendations, where it differs from Python `prov` 3.3.0 and from
 //! `ProvToolbox` 2.5.0, and its implementation limits.
 //!
 //! # Features

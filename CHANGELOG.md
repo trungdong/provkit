@@ -8,15 +8,27 @@ follows [Semantic Versioning](https://semver.org/).
 
 The first release.
 
-- `provkit`, a library for the W3C PROV data model: a `Document` of `Record`s
-  and named `Bundle`s, readers and writers for PROV-JSON and PROV-N (the
+- `provkit`, a library for the W3C
+  [PROV data model](https://www.w3.org/TR/2013/REC-prov-dm-20130430/):
+  a `Document` of `Record`s
+  and named `Bundle`s, readers and writers for
+  [PROV-JSON](https://www.w3.org/Submission/2013/SUBM-prov-json-20130424/)
+  and
+  [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/)
+  (the
   `json` and `provn` modules, each behind a default feature), set-based
   document equality, and `Document::unified()`, which merges records that
-  share an identifier and kind under PROV-CONSTRAINTS and keeps each record
+  share an identifier and kind under
+  [PROV-CONSTRAINTS](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/)
+  and keeps each record
   once. The API reference is on [docs.rs](https://docs.rs/provkit/0.1.0);
   [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
   lists where the library departs from the Recommendations, where it differs
-  from ProvPy 3.3.0 and ProvToolbox 2.5.0, and its implementation limits,
+  from
+  [Python `prov`](https://github.com/trungdong/prov)
+  3.3.0 and
+  [ProvToolbox](https://lucmoreau.github.io/ProvToolbox/)
+  2.5.0, and its implementation limits,
   each with its reason and test.
 - `provkit-cli`, the `provkit` command: `convert` between the two formats and
   `compare` two documents, with prebuilt binaries for macOS, Linux and

@@ -381,7 +381,8 @@ A bundle identifier names one bundle, so both readers refuse a second
 bundle with the same identifier, although the PROV-N grammar accepts
 one ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Two bundles with one identifier are `Error::DuplicateBundle`"). In
-PROV-JSON a bundle key given twice counts as such a repeat. ProvPy
+PROV-JSON a bundle key given twice counts as such a repeat.
+[Python `prov`](https://github.com/trungdong/prov)
 rejects them too in PROV-N. The fields of `Document` are public, so
 nothing stops a program from pushing two bundles with one identifier,
 and they then count as one

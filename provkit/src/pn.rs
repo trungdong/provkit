@@ -91,7 +91,7 @@ pub(crate) fn hex_pair_follows(local: &str, at: usize) -> bool {
 /// How PROV-N writes the character `c` at byte `at` of `local`, or `None`
 /// when no `PN_LOCAL` [53] holds it there. The writer escapes every
 /// `PN_CHARS_ESC` character except `-` after the first character and `.`
-/// between the first and the last, which `PN_LOCAL` admits bare and `ProvPy`
+/// between the first and the last, which `PN_LOCAL` admits bare and Python `prov`
 /// 3.3.0 writes bare.
 pub(crate) fn local_char(local: &str, at: usize, c: char) -> Option<LocalChar> {
     if c == '.' {
