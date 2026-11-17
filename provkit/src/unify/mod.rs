@@ -90,9 +90,11 @@ impl Document {
 
 fn unify_records(records: &[Record]) -> Result<Vec<Record>> {
     // A hand-built record can carry an attribute named after one of its own
-    // formals. The readers and the writers refuse it, and so does this.
+    // formals, or lack a mandatory party. The readers and the writers refuse
+    // both, and so does this.
     for record in records {
         record.check_attributes()?;
+        record.check_parties()?;
     }
 
     // Positions per identifier, groups in first-seen order. PROV-DM gives a

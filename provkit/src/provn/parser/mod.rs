@@ -324,13 +324,13 @@ impl<'t> Parser<'t> {
 
     /// Whether the tokens after the current `prov:mentionOf` have the shape
     /// of a mention (PROV-LINKS): `(`, three names separated by `,`, then
-    /// `)` or `, [`. [`Profile::Default`] also takes an `identifierOrMarker`
-    /// and `;` before the names, and `-` for a name, as it does for bare
+    /// `)` or `, [`. A `-` counts as a name, so that `formals` refuses it
+    /// where a party is mandatory. [`Profile::Default`] also takes an
+    /// `identifierOrMarker` and `;` before the names, as it does for bare
     /// `mentionOf`. Any other shape is an extensibility expression under
     /// production [49].
     fn mention_shape_follows(&self) -> bool {
         let kind = |i: usize| self.tokens.get(self.pos + i).map(|t| &t.kind);
-        let markers = self.profile.allows(Relaxation::MarkerInRequiredPosition);
         let identifier = self
             .profile
             .allows(Relaxation::IdentifierOrAttributesOnBareKind);
@@ -338,7 +338,7 @@ impl<'t> Parser<'t> {
             kind(i).is_some_and(|k| {
                 matches!(k, TokenKind::Name { .. })
                     || k.digit_name().is_some()
-                    || (markers && *k == TokenKind::Marker)
+                    || *k == TokenKind::Marker
             })
         };
         if kind(1) != Some(&TokenKind::LParen) {
@@ -506,8 +506,9 @@ impl<'t> Parser<'t> {
     }
 
     /// Match positional arguments to the kind's formals; `-` is absent.
-    /// Under [`Profile::Strict`], `-` in the first `min(arities)` positions
-    /// is an error, because the grammar has a plain identifier there.
+    /// Under both profiles, `-` for a mandatory party is an error. Under
+    /// [`Profile::Strict`], `-` in the first `min(arities)` positions is an
+    /// error, because the grammar has a plain identifier there.
     fn formals(&self, kind: Kind, args: Vec<Positional<'_>>) -> Result<Vec<(FormalAttr, Formal)>> {
         let required = kind.arities().iter().copied().min().unwrap_or(0);
         let mut out = Vec::new();
@@ -518,6 +519,12 @@ impl<'t> Parser<'t> {
                 "an identifier or '-'"
             };
             match arg {
+                Arg::Marker if kind.mandatory_parties().contains(attr) => {
+                    return Err(Self::expected_at(
+                        token,
+                        &format!("an identifier for argument {} of {}", i + 1, kind.name()),
+                    ));
+                }
                 Arg::Marker
                     if !self.profile.allows(Relaxation::MarkerInRequiredPosition)
                         && i < required =>

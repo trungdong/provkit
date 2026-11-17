@@ -2,7 +2,7 @@ use crate::test_util::{agent, bundle, document, entity, ex, prov, relation};
 use crate::well_known::PROV_LABEL;
 use crate::{
     Attributes, Bundle, DateTime, Document, Error, Formal, FormalAttr as F, Generation, Kind,
-    Namespaces, QName, Record, UnificationCause,
+    Membership, Mention, Namespaces, QName, Record, UnificationCause,
 };
 
 fn rec(kind: Kind, id: &str, formals: Vec<(F, Formal)>, label: Option<&str>) -> Record {
@@ -458,9 +458,18 @@ fn identifier_less_kinds_are_never_merged_or_checked() {
                 Kind::Alternate,
                 vec![(F::Alternate1, name(a1)), (F::Alternate2, name(a2))],
             ),
-            with(Kind::Specialization, vec![(F::SpecificEntity, name(a1))]),
-            with(Kind::Mention, vec![(F::SpecificEntity, name(a1))]),
-            with(Kind::Membership, vec![(F::Collection, name(a1))]),
+            with(
+                Kind::Specialization,
+                vec![(F::SpecificEntity, name(a1)), (F::GeneralEntity, name(a2))],
+            ),
+            with(
+                Kind::Mention,
+                vec![(F::SpecificEntity, name(a1)), (F::GeneralEntity, name(a2))],
+            ),
+            with(
+                Kind::Membership,
+                vec![(F::Collection, name(a1)), (F::Entity, name(a2))],
+            ),
         ]);
     }
     // None of the eight clashes with the entity under the same identifier,
@@ -469,6 +478,49 @@ fn identifier_less_kinds_are_never_merged_or_checked() {
     let d = document(records);
     let u = d.unified().unwrap();
     assert_eq!(u.records, d.records);
+}
+
+#[test]
+fn a_hand_built_relation_without_a_party_is_refused_but_a_mention_needs_no_bundle() {
+    let membership = Record::Membership(Membership {
+        id: None,
+        collection: None,
+        entity: Some(ex("e")),
+        attributes: Attributes::new(),
+    });
+    let mention = |general_entity| {
+        Record::Mention(Mention {
+            id: None,
+            specific_entity: Some(ex("s")),
+            general_entity,
+            bundle: None,
+            attributes: Attributes::new(),
+        })
+    };
+    let e = document(vec![membership]).unified().unwrap_err();
+    assert!(
+        matches!(
+            e,
+            Error::InvalidRecord {
+                kind: Kind::Membership,
+                ..
+            }
+        ),
+        "{e:?}"
+    );
+    let d = document(vec![mention(Some(ex("g")))]);
+    assert_eq!(d.unified().unwrap().records, d.records);
+    let e = document(vec![mention(None)]).unified().unwrap_err();
+    assert!(
+        matches!(
+            e,
+            Error::InvalidRecord {
+                kind: Kind::Mention,
+                ..
+            }
+        ),
+        "{e:?}"
+    );
 }
 
 #[test]

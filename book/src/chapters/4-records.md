@@ -58,7 +58,9 @@ appears once. `Kind::check_attributes` refuses an attribute named `prov:` plus
 the local name of one of the kind's formals, because that value
 belongs in the positional argument. Then `assemble` takes each field
 out of the checked list, and `@new_id` turns a missing identifier on
-an element into `Error::InvalidRecord`. Both readers call
+an element into `Error::InvalidRecord`. Last, `check_parties` refuses
+a `hadMember`, `alternateOf`, `specializationOf` or `mentionOf`
+without the formals that name its parties. Both readers call
 `from_parts`, so every record they produce has passed these checks.
 `Record::formals` is the inverse, the present formals in
 `Kind::formals` order, and `formals_round_trip_through_from_parts_for_every_kind`
@@ -168,10 +170,10 @@ is short. It walks `merged_bundles`, so two bundles sharing an
 identifier are one before anything merges, runs `unify_records` on
 each bundle and on the top level, and returns a new document, with
 `?` passing the first error out of the loop. `unify_records`, below
-the span, first calls `check_attributes` on every record, because a
-hand-built record can carry an attribute named after one of its own
-formals. It then groups positions by identifier in an `IndexMap`,
-skipping records with no identifier and the four [bare kinds](../reference/glossary.md#bare-kind-provkit), whose
+the span, first calls `check_attributes` and `check_parties` on every
+record, because a hand-built record can carry an attribute named after
+one of its own formals or lack a mandatory party. It then groups
+positions by identifier in an `IndexMap`, skipping records with no identifier and the four [bare kinds](../reference/glossary.md#bare-kind-provkit), whose
 identifier is a PROV-JSON grouping key and nothing more. Within a
 group it splits by kind, and `check_kinds` refuses the pairs of kinds
 that Constraints 53 to 55 keep apart, through
@@ -344,10 +346,12 @@ PROV-CONSTRAINTS names the kind, an entry in the constraint tables of
 
 ### Why is every formal an `Option`?
 
-A document with a missing mandatory formal still reads. The PROV-JSON
-reader does not check that a mandatory formal is present. In PROV-N,
-`Strict` rejects `-` in a required argument of a relation, because the
-grammar does, but `Default` reads such a document
+Most relations read with an argument missing. `Strict` rejects `-` in
+a required argument of a relation, because the grammar does, and
+`Default` reads it. A `hadMember`, `alternateOf`, `specializationOf` or
+`mentionOf` is the exception, because it names its parties. A missing
+party is an error in `Record::from_parts`, in both readers, in both
+writers and in `unified()`, under either profile
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Every formal attribute is an `Option`"). Section 2.4 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prov-n-optionals)

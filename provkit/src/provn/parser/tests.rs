@@ -119,6 +119,96 @@ fn profiles() {
     );
     // Beyond the leading required positions, `-` is fine under Strict.
     assert!(read("wasDerivedFrom(ex:a, ex:b, -, -, -)", Profile::Strict).is_ok());
+    // A relation with no mandatory party reads under Default and is refused
+    // under Strict, with the strict-profile message.
+    for body in [
+        "used(-, ex:e, -)",
+        "wasGeneratedBy(-, ex:a, -)",
+        "wasDerivedFrom(-, ex:e)",
+        "wasAttributedTo(ex:e, -)",
+        "wasInformedBy(-, ex:a)",
+        "wasInfluencedBy(-, ex:a)",
+    ] {
+        assert!(read(body, Profile::Default).is_ok(), "{body}");
+        let (position, message) = syntax(err(body, Profile::Strict));
+        assert_eq!(position, (4, body.find('-').unwrap() + 1), "{body}");
+        assert!(
+            message.ends_with("under the strict profile, found '-'"),
+            "{body}: {message}"
+        );
+    }
+    // A missing mandatory party is refused under both profiles, at the `-`.
+    // Bare `mentionOf` under Strict is refused at the keyword instead.
+    let refused = |body: &str, argument: usize, kind: &str| {
+        (
+            (4, body.find('-').unwrap() + 1),
+            format!("expected an identifier for argument {argument} of {kind}, found '-'"),
+        )
+    };
+    for (body, argument, kind, strict_at_keyword) in [
+        ("hadMember(-, ex:e)", 1, "hadMember", false),
+        ("hadMember(ex:c, -)", 2, "hadMember", false),
+        ("alternateOf(-, ex:e)", 1, "alternateOf", false),
+        ("alternateOf(ex:e, -)", 2, "alternateOf", false),
+        ("specializationOf(-, ex:e)", 1, "specializationOf", false),
+        ("specializationOf(ex:e, -)", 2, "specializationOf", false),
+        ("hadMember(ex:i; ex:c, -)", 2, "hadMember", false),
+        ("mentionOf(-, ex:e1, ex:b)", 1, "mentionOf", true),
+        ("mentionOf(ex:e2, -, ex:b)", 2, "mentionOf", true),
+        ("prov:mentionOf(-, ex:e1, ex:b)", 1, "mentionOf", false),
+        ("prov:mentionOf(ex:e2, -, ex:b)", 2, "mentionOf", false),
+        (
+            "prov:mentionOf(ex:i; -, ex:e1, ex:b)",
+            1,
+            "mentionOf",
+            false,
+        ),
+    ] {
+        let want = refused(body, argument, kind);
+        let identifier_form = body.contains("ex:i;");
+        if identifier_form {
+            // The identifier makes the statement an error or an extension
+            // under Strict, so only Default reaches the missing party.
+            if body.starts_with("hadMember") {
+                // The identifier is the first token the strict grammar refuses.
+                let (position, _) = syntax(err(body, Profile::Strict));
+                assert_eq!(position, (4, body.find("ex:i").unwrap() + 1), "{body}");
+            } else {
+                let (doc, ignored) = report(body, Profile::Strict);
+                assert!(doc.records.is_empty() && ignored.len() == 1, "{body}");
+            }
+        } else if strict_at_keyword {
+            assert_eq!(
+                syntax(err(body, Profile::Strict)),
+                (
+                    (4, 1),
+                    "expected 'prov:mentionOf' under the strict profile, found 'mentionOf'"
+                        .to_owned()
+                ),
+                "{body}"
+            );
+        } else {
+            assert_eq!(syntax(err(body, Profile::Strict)), want, "{body}");
+        }
+        assert_eq!(syntax(err(body, Profile::Default)), want, "{body}");
+    }
+    // The bundle of a mention is optional under Default, and refused under
+    // Strict where the grammar has an identifier.
+    assert!(
+        matches!(&doc("mentionOf(ex:e2, ex:e1, -)", Profile::Default).records[0], Record::Mention(m) if m.bundle.is_none())
+    );
+    syntax(err("mentionOf(ex:e2, ex:e1, -)", Profile::Strict));
+    let (position, message) = syntax(err("prov:mentionOf(ex:e2, ex:e1, -)", Profile::Strict));
+    assert_eq!(position, (4, 30));
+    assert!(message.contains("under the strict profile"), "{message}");
+    // Two arguments is an extensibility expression under both profiles.
+    for profile in [Profile::Strict, Profile::Default] {
+        let (doc, ignored) = report("prov:mentionOf(-, ex:e1)", profile);
+        assert!(doc.records.is_empty() && ignored.len() == 1, "{profile:?}");
+    }
+    // An identifier on a bare relation, with every party present, reads as
+    // it did.
+    assert!(read("hadMember(ex:i; ex:c, ex:e)", Profile::Default).is_ok());
 }
 
 #[test]
@@ -187,25 +277,27 @@ fn prov_mention_of_is_a_statement_only_in_its_own_shape() {
     }
 }
 
-/// Under `Strict` a `-` in `prov:mentionOf` is outside the mention shape,
-/// so the statement is an extensibility expression.
+/// A `-` for either entity of `prov:mentionOf` is refused at the `-` under
+/// both profiles, and `Default` reads a `-` for the bundle.
 #[test]
-fn prov_mention_of_with_a_marker_is_an_extension_under_strict() {
-    let (doc, ignored) = report("prov:mentionOf(ex:e2, ex:e1, -)", Profile::Strict);
-    assert!(doc.records.is_empty(), "{:?}", doc.records);
-    assert_eq!(ignored.len(), 1);
-    assert_eq!(ignored[0].name, "prov:mentionOf");
-    syntax(err("mentionOf(ex:e2, ex:e1, -)", Profile::Strict));
-}
-
-/// `Default` reads `-` in a required position of `prov:mentionOf` as it
-/// does for bare `mentionOf`: a mention with that formal absent.
-#[test]
-fn prov_mention_of_with_a_marker_is_a_mention_under_default() {
+fn prov_mention_of_with_a_marker_for_an_entity_is_refused() {
+    for profile in [Profile::Strict, Profile::Default] {
+        for (body, column) in [
+            ("prov:mentionOf(-, ex:e1, ex:b)", 16),
+            ("prov:mentionOf(ex:e2, -, ex:b)", 23),
+            ("prov:mentionOf(-, -, -)", 16),
+        ] {
+            let (position, message) = syntax(err(body, profile));
+            assert_eq!(position, (4, column), "{body} {profile:?}");
+            assert!(
+                message.starts_with("expected an identifier for argument"),
+                "{message}"
+            );
+        }
+    }
     for body in [
         "prov:mentionOf(ex:e2, ex:e1, -)",
         "mentionOf(ex:e2, ex:e1, -)",
-        "prov:mentionOf(-, -, -)",
     ] {
         let (doc, ignored) = report(body, Profile::Default);
         assert!(ignored.is_empty(), "{body}");

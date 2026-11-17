@@ -170,11 +170,12 @@ which reads a time from a string or an `xsd:dateTime` object and a name
 from a string or an `xsd:QName` or `prov:QUALIFIED_NAME` object, and
 any other value goes through `decode_value` into chapter 3's `Value`, one
 attribute per element of an array. The `prov:entity` of a `hadMember`
-is the exception. Its elements are gathered as `members`, and when
-there are any the function returns one record per member, each with a
-clone of the identifier, the other formals and the attributes, by
-mapping the members through `from_parts` and collecting the results
-into one `Result`. `number`, the last function in the file, types a
+is the exception. Its elements are gathered as `members`. An empty
+array is an error naming `prov:entity`, and when there are any members
+the function returns one record per member, each with a clone of the
+identifier, the other formals and the attributes, by mapping the
+members through `from_parts` and collecting the results into one
+`Result`. `number`, the last function in the file, types a
 raw JSON number from its text, an integer by range and anything else
 as `xsd:double`, keeping the text as written.
 
@@ -312,7 +313,7 @@ of a
 as an array under `prov:entity`, ProvPy reads that form, the
 submission's schema does not define it, and PROV-DM holds one member
 per relation ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"A PROV-JSON `hadMember` with an empty `prov:entity` array"). Section
+"A PROV-JSON `hadMember` with an empty `prov:entity` array is an error"). Section
 3.2.14 of
 [PROV-JSON](https://www.w3.org/Submission/2013/SUBM-prov-json-20130424/#term-membership)
 writes three memberships on one collection as three objects under

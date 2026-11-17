@@ -18,6 +18,10 @@ The first release.
   lists where the library departs from the Recommendations, where it differs
   from ProvPy 3.2.2 and ProvToolbox 2.2.5, and its implementation limits,
   each with its reason and test.
+  - A `hadMember`, `alternateOf`, `specializationOf` or `mentionOf` without a
+    mandatory party is an error in `Record::from_parts`, both readers, both
+    writers and `unified()`. Under `Strict`, `prov:mentionOf` with `-` for any
+    of its three arguments is refused.
 - `provkit-cli`, the `provkit` command: `convert` between the two formats and
   `compare` two documents, with prebuilt binaries for macOS, Linux and
   Windows on each release. The command reference is in the

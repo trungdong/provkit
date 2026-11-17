@@ -22,7 +22,9 @@ pub enum Profile {
     /// records. `Strict` rejects:
     ///
     /// - `mentionOf` without the `prov:` prefix.
-    /// - `-` in a required position of a relation.
+    /// - `-` in a required position of a relation other than a mandatory
+    ///   party of `hadMember`, `alternateOf`, `specializationOf` or
+    ///   `mentionOf`, which both profiles refuse.
     /// - `default` after a `prefix` (production \[45\]).
     /// - A statement after a bundle at document level (production \[1\]).
     /// - An identifier or attributes on `alternateOf`, `specializationOf` and
@@ -33,8 +35,9 @@ pub enum Profile {
     ///
     /// `prov:mentionOf` (PROV-LINKS) is a mention only when three names
     /// follow it, with or without an attribute block. Under `Strict` an
-    /// identifier, a `-` or any other argument makes it an extensibility
-    /// expression (production \[49\]), parsed and left out of the document.
+    /// identifier makes it an extensibility expression (production
+    /// \[49\]), parsed and left out of the document, and a `-` for any of
+    /// the three names is refused.
     ///
     /// Both profiles reject a repeated `default`, a prefix that is not a
     /// `PN_PREFIX`, and every other text the grammar rejects.
@@ -42,8 +45,9 @@ pub enum Profile {
     /// The grammar plus the six extensions that `Strict` rejects, which
     /// `ProvPy` and `ProvToolbox` write, with the exceptions that
     /// [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-    /// lists. `prov:mentionOf` with an identifier or with `-` for a name is a
-    /// mention under `Default`, as bare `mentionOf` is.
+    /// lists. `prov:mentionOf` with an identifier, or with `-` for its bundle,
+    /// is a mention under `Default`, as bare `mentionOf` is. `-` for a
+    /// mandatory party of the four kinds is refused under both profiles.
     #[default]
     Default,
 }
@@ -55,7 +59,9 @@ pub enum Profile {
 pub(crate) enum Relaxation {
     /// `mentionOf` without the `prov:` prefix.
     BareMentionOf,
-    /// `-` in a required position of a relation.
+    /// `-` in a required position of a relation, other than a mandatory
+    /// party of `hadMember`, `alternateOf`, `specializationOf` or
+    /// `mentionOf`.
     MarkerInRequiredPosition,
     /// `default` after a `prefix`.
     DefaultAfterPrefix,

@@ -14,7 +14,10 @@ impl Record {
     /// Build a record of `kind` from its parts. Elements need an identifier;
     /// formals must belong to the kind, have the right value type, and appear
     /// at most once. No attribute may be named `prov:` plus the local name of
-    /// one of the kind's formals (`prov:activity` on `wasGeneratedBy`).
+    /// one of the kind's formals (`prov:activity` on `wasGeneratedBy`). A
+    /// `hadMember`, `alternateOf`, `specializationOf` or `mentionOf` record
+    /// needs the formals that name its parties. That is both formals for the
+    /// first three, and the specific and general entity for `mentionOf`.
     ///
     /// # Errors
     ///
@@ -28,7 +31,9 @@ impl Record {
     ) -> Result<Record> {
         let formals = Formals::new(kind, formals)?;
         kind.check_attributes(&attributes)?;
-        Record::assemble(kind, id, formals, attributes)
+        let record = Record::assemble(kind, id, formals, attributes)?;
+        record.check_parties()?;
+        Ok(record)
     }
 
     /// The formal attributes that are present, in the order of
@@ -41,6 +46,19 @@ impl Record {
     /// An error if an attribute is named after one of this record's own formals.
     pub(crate) fn check_attributes(&self) -> Result<()> {
         self.kind().check_attributes(self.attributes())
+    }
+
+    /// Refuses a record that lacks a mandatory party.
+    pub(crate) fn check_parties(&self) -> Result<()> {
+        let kind = self.kind();
+        match kind
+            .mandatory_parties()
+            .iter()
+            .find(|&&attr| self.formal(attr).is_none())
+        {
+            Some(attr) => Err(invalid(kind, format!("needs {attr}"))),
+            None => Ok(()),
+        }
     }
 }
 
@@ -335,6 +353,21 @@ records! {
 // ANCHOR_END: records_table
 
 impl Kind {
+    /// The formals a record of this kind cannot lack. PROV-DM names both
+    /// parties of `hadMember`, `alternateOf` and `specializationOf`, and
+    /// PROV-LINKS names both entities of `mentionOf`. The bundle of a
+    /// mention is optional.
+    pub(crate) fn mandatory_parties(self) -> &'static [FormalAttr] {
+        match self {
+            Kind::Membership => &[FormalAttr::Collection, FormalAttr::Entity],
+            Kind::Alternate => &[FormalAttr::Alternate1, FormalAttr::Alternate2],
+            Kind::Specialization | Kind::Mention => {
+                &[FormalAttr::SpecificEntity, FormalAttr::GeneralEntity]
+            }
+            _ => &[],
+        }
+    }
+
     /// An error if `attributes` holds a name that spells one of this kind's
     /// formals (`prov:activity` on `wasGeneratedBy`).
     fn check_attributes(self, attributes: &Attributes) -> Result<()> {

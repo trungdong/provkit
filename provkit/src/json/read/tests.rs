@@ -674,19 +674,58 @@ fn a_formal_object_of_the_wrong_shape_names_the_formal() {
 }
 
 #[test]
-fn an_empty_member_array_reads_as_one_membership_with_no_entity() {
-    let d = doc(&record(
-        "hadMember",
-        "ex:m",
-        r#""prov:collection": "ex:c", "prov:entity": []"#,
-    ));
-    assert_eq!(d.records.len(), 1);
-    let Record::Membership(m) = &d.records[0] else {
-        panic!("{:?}", d.records[0])
+fn an_empty_member_array_is_refused_and_one_or_many_members_read() {
+    let members = |entity: &str| {
+        record(
+            "hadMember",
+            "ex:m",
+            &format!(r#""prov:collection": "ex:c", "prov:entity": {entity}"#),
+        )
     };
-    assert_eq!(m.id, Some(ex("m")));
-    assert_eq!(m.collection, Some(ex("c")));
-    assert_eq!(m.entity, None);
+    let (section, key, error) = record_error(&members("[]"));
+    assert_eq!((section.as_str(), key.as_str()), ("hadMember", "ex:m"));
+    assert!(
+        matches!(&error, Error::InvalidRecord { kind: Kind::Membership, message } if message == "prov:entity is an empty array"),
+        "{error:?}"
+    );
+    assert_eq!(doc(&members(r#"["ex:a"]"#)).records.len(), 1);
+    assert_eq!(
+        doc(&members(r#"["ex:a", "ex:b", "ex:d"]"#)).records.len(),
+        3
+    );
+}
+
+#[test]
+fn a_relation_without_a_mandatory_party_is_refused() {
+    let cases = [
+        ("hadMember", "prov:collection", "prov:entity"),
+        ("alternateOf", "prov:alternate1", "prov:alternate2"),
+        (
+            "specializationOf",
+            "prov:specificEntity",
+            "prov:generalEntity",
+        ),
+        ("mentionOf", "prov:specificEntity", "prov:generalEntity"),
+    ];
+    for (section, first, second) in cases {
+        for (absent, given) in [(first, second), (second, first)] {
+            let body = format!(r#""{given}": "ex:p""#);
+            let (found, _, error) = record_error(&record(section, "ex:r", &body));
+            assert_eq!(found, section);
+            assert!(
+                matches!(&error, Error::InvalidRecord { message, .. } if *message == format!("needs {absent}")),
+                "{section} {absent}: {error:?}"
+            );
+        }
+        let (_, _, error) = record_error(&record(section, "ex:r", ""));
+        assert!(
+            matches!(&error, Error::InvalidRecord { message, .. } if *message == format!("needs {first}")),
+            "{section}: {error:?}"
+        );
+    }
+    // A mention needs no bundle.
+    let body = r#""prov:specificEntity": "ex:s", "prov:generalEntity": "ex:g""#;
+    assert_eq!(doc(&record("mentionOf", "ex:r", body)).records.len(), 1);
 }
 
 #[test]

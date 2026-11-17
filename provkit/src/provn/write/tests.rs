@@ -1,8 +1,8 @@
 use crate::test_util::{Broken, bundle, document, dt, element, entity, entity_in, ex, relation};
 use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT, XSD_INTEGER, XSD_LONG};
 use crate::{
-    Attributes, Bundle, Document, Error, Formal, FormalAttr as F, Kind, LangStr, Namespaces, QName,
-    Record, Value, provn,
+    Attributes, Bundle, Document, Error, Formal, FormalAttr as F, Kind, LangStr, Membership,
+    Mention, Namespaces, QName, Record, Value, provn,
 };
 
 /// The single statement line of a one-record document.
@@ -155,9 +155,46 @@ fn mention_is_written_bare() {
     let r = relation(
         Kind::Mention,
         None,
-        vec![(F::SpecificEntity, Formal::Name(ex("s")))],
+        vec![
+            (F::SpecificEntity, Formal::Name(ex("s"))),
+            (F::GeneralEntity, Formal::Name(ex("g"))),
+        ],
     );
-    assert_eq!(line(r), "mentionOf(ex:s, -, -)");
+    assert_eq!(line(r), "mentionOf(ex:s, ex:g, -)");
+}
+
+#[test]
+fn a_hand_built_relation_without_a_party_is_refused() {
+    let membership = |collection, entity| {
+        Record::Membership(Membership {
+            id: None,
+            collection,
+            entity,
+            attributes: Attributes::new(),
+        })
+    };
+    let mention = |specific_entity, general_entity| {
+        Record::Mention(Mention {
+            id: None,
+            specific_entity,
+            general_entity,
+            bundle: Some(ex("b")),
+            attributes: Attributes::new(),
+        })
+    };
+    for record in [
+        membership(None, Some(ex("e"))),
+        membership(Some(ex("c")), None),
+        mention(Some(ex("s")), None),
+        mention(None, Some(ex("g"))),
+    ] {
+        let kind = record.kind();
+        let e = provn::to_string(&document(vec![record])).unwrap_err();
+        assert!(
+            matches!(e, Error::InvalidRecord { kind: k, .. } if k == kind),
+            "{e:?}"
+        );
+    }
 }
 
 #[test]

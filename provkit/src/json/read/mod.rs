@@ -233,12 +233,14 @@ fn records_from(
 ) -> Result<Vec<Record>> {
     let mut formals: Vec<(FormalAttr, Formal)> = Vec::new();
     let mut members: Vec<Formal> = Vec::new();
+    let mut saw_members = false;
     let mut attributes = Attributes::new();
     for (key, value) in body {
         let name = scope.resolve(key)?;
         let formal = crate::record::formal_named(kind, &name);
         match formal {
             Some(FormalAttr::Entity) if kind == Kind::Membership => {
+                saw_members = true;
                 for v in value.items() {
                     members.push(formal_value(v, key, false, scope)?);
                 }
@@ -250,6 +252,12 @@ fn records_from(
                 }
             }
         }
+    }
+    if kind == Kind::Membership && saw_members && members.is_empty() {
+        return Err(Error::InvalidRecord {
+            kind,
+            message: "prov:entity is an empty array".to_owned(),
+        });
     }
     if kind == Kind::Membership && !members.is_empty() {
         return members

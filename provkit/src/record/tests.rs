@@ -2,7 +2,7 @@
 
 use super::FormalAttr as F;
 use super::*;
-use crate::test_util::{dt, entity, ex, hash, prov, relation};
+use crate::test_util::{dt, entity, ex, hash, parties, prov, relation};
 use crate::{Attributes, Value};
 
 /// The generation of `ex:e1` at [`dt`].
@@ -176,7 +176,10 @@ fn from_parts_builds_a_generation() {
 
 #[test]
 fn from_parts_builds_every_kind_empty() {
-    for &kind in Kind::ALL {
+    for &kind in Kind::ALL
+        .iter()
+        .filter(|k| k.mandatory_parties().is_empty())
+    {
         let id = kind.is_element().then(|| ex("x"));
         let r = Record::from_parts(kind, id.clone(), vec![], Attributes::new()).unwrap();
         assert_eq!(r.kind(), kind);
@@ -184,6 +187,16 @@ fn from_parts_builds_every_kind_empty() {
         assert!(r.formals().is_empty(), "{:?}", r.formals());
         assert!(r.attributes().is_empty());
     }
+    // A mention needs only its two entities.
+    let mention = relation(
+        Kind::Mention,
+        None,
+        vec![
+            (FormalAttr::SpecificEntity, Formal::Name(ex("s"))),
+            (FormalAttr::GeneralEntity, Formal::Name(ex("g"))),
+        ],
+    );
+    assert_eq!(mention.formal(FormalAttr::Bundle), None);
 }
 
 #[test]
@@ -285,6 +298,41 @@ fn from_parts_rejects_bad_parts() {
 }
 
 #[test]
+fn from_parts_refuses_each_absent_mandatory_party() {
+    for &kind in Kind::ALL {
+        let parties = kind.mandatory_parties();
+        for &absent in parties {
+            let given: Vec<_> = parties
+                .iter()
+                .filter(|&&a| a != absent)
+                .map(|&a| (a, Formal::Name(ex("p"))))
+                .collect();
+            let mut attributes = Attributes::new();
+            attributes.insert(ex("label"), Value::from("x"));
+            // An identifier and attributes do not excuse the missing party.
+            for (id, attributes) in [
+                (None, Attributes::new()),
+                (Some(ex("r")), Attributes::new()),
+                (Some(ex("r")), attributes),
+            ] {
+                let e = Record::from_parts(kind, id, given.clone(), attributes).unwrap_err();
+                assert!(
+                    matches!(
+                        &e,
+                        Error::InvalidRecord { kind: k, message }
+                            if *k == kind && *message == format!("needs {absent}")
+                    ),
+                    "{kind:?} {absent:?}: {e:?}"
+                );
+            }
+        }
+    }
+    // The first missing formal in formal order is the one named.
+    let e = Record::from_parts(Kind::Membership, None, vec![], Attributes::new()).unwrap_err();
+    assert_eq!(e.to_string(), "hadMember: needs prov:collection");
+}
+
+#[test]
 fn attribute_named_after_an_own_formal_is_rejected() {
     let mut clash = Attributes::new();
     clash.insert(prov("activity"), Value::QName(ex("a2")));
@@ -343,7 +391,8 @@ fn records_compare_and_hash_by_value() {
 #[test]
 fn attributes_mut_edits_every_variant() {
     for &kind in Kind::ALL {
-        let mut r = Record::from_parts(kind, Some(ex("x")), vec![], Attributes::new()).unwrap();
+        let mut r =
+            Record::from_parts(kind, Some(ex("x")), parties(kind), Attributes::new()).unwrap();
         assert!(r.attributes_mut().insert(ex("label"), Value::from("x")));
         assert_eq!(r.attributes().iter().count(), 1, "{kind:?}");
     }

@@ -178,9 +178,10 @@ bundle's name in the bundle's own scope, and refuses `bundle` and
 statement or a syntax error. A prefixed name starts an extensibility
 expression, except `prov:mentionOf` when `mention_shape_follows`, which
 looks ahead without consuming for `(`, three names separated by
-commas, and `)` or `, [`, with the identifier and `-` forms the
-default profile adds. A PROV statement goes through `expression`,
-below the span, and the record it returns goes to the builder.
+commas, and `)` or `, [`. A `-` counts as a name under both profiles,
+and the identifier form is `Default` only. A PROV statement goes
+through `expression`, below the span, and the record it returns goes
+to the builder.
 `expression` reads every PROV statement with one method, where the
 grammar has one production per kind. `keyword_kind` turns the keyword into
 a `Kind` through `classify`, which reads `mentionOf` bare only when
@@ -188,8 +189,10 @@ the profile allows it, `identifier_and_first_argument` reads an
 element's mandatory identifier or a relation's first argument and the
 `id;` form when `;` follows, `remaining_arguments` loops on `,` until
 the [attribute](../reference/glossary.md#attribute-prov) block or `)`, `check_arity` compares the count with the
-kind's arities, `formals` matches each argument to a formal in table
-order and refuses `-` in a required position under `Strict`, and
+kind's arities, and `formals` matches each argument to a formal in table
+order. It refuses `-` for a mandatory party of `hadMember`,
+`alternateOf`, `specializationOf` or `mentionOf` under both profiles,
+and `-` in any other required position under `Strict`.
 `Record::from_parts` checks the record. The attribute block is read
 by `attribute_block`, which takes a closure for the part of each pair
 after its name, so the same loop serves both PROV statements and
@@ -294,8 +297,9 @@ reads back as exactly one bare name with the same local part.
 ```
 
 `expression` writes one record. `check_attributes` refuses an
-attribute that spells one of the record's own formals, because the
-reader would refuse it too. An element writes its identifier, then all
+attribute that spells one of the record's own formals, and
+`check_parties` refuses a relation without a mandatory party, because
+the reader would refuse both. An element writes its identifier, then all
 of its formals if it has any, so an [activity](../reference/glossary.md#activity-prov) writes both times or
 neither. A relation writes `id;` only when it has an identifier, and
 then every formal in table order, with `formal` giving `-` for an
@@ -328,13 +332,14 @@ to it.
 
 ### Why does the writer write every argument?
 
-Every relation is written with `-` for an absent argument, a
-mandatory one included, `activity` writes both times or neither, and
-an identifier on `alternateOf`, `specializationOf`, `hadMember` or
-`mentionOf` is written as `id;` before the arguments
+Every relation is written with `-` for an absent argument, except a
+mandatory party of `hadMember`, `alternateOf`, `specializationOf` or
+`mentionOf`, which the writer refuses. `activity` writes both times or
+neither, and an identifier on `alternateOf`, `specializationOf`,
+`hadMember` or `mentionOf` is written as `id;` before the arguments
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "The PROV-N writer writes every relation at full arity"). One rule
-serves every relation, and a document with missing data still
+serves every relation that has its mandatory parties, and a document with missing data still
 round-trips. The cost is that `Strict` rejects that output when a
 required argument is `-` or a bare kind carries an identifier, while
 `Default` accepts it, so a kept identifier reads back equal under

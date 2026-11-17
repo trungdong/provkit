@@ -164,9 +164,13 @@ against a constant list and counts the ones that fail on a time, and
 checks that every other document unifies, that unifying twice gives
 the same result and that unification never adds a record. The
 constraints test calls `unified` on every file of
-`corpus/constraints` and checks which files fail, with one
+`corpus/constraints` except five, which the reader refuses and so never
+reach `unified`. It checks which files fail, with one
 constant list of the files whose failing formal is present on one
 side only and another pairing each other failing file with its cause.
+Those five files hold a relation without a mandatory party. They are
+listed in `excluded_constraints.tsv`, and the test checks that each
+fails to read.
 The last test in the file reads the first Rust block of both READMEs
 with `include_str!` and asserts they are the same text, and lives in
 this file because the root README is not in the packaged crate. The
@@ -218,18 +222,18 @@ decide (`corpus/provn/probes/README.md`).
 
 ### provkit/tests/data
 
-Three tab-separated files list every excluded file and known
-difference. Each
-row is a file name, a tab and a reason or a category, and the names
-and reasons follow `corpus/provn/README.md`. The shortest is included
-whole.
+Four tab-separated files list every excluded file and known
+difference. Each row is a file name, a tab and a reason or a category,
+and the names and reasons follow `corpus/provn/README.md`, except in
+`excluded_constraints.tsv`. The shortest is included whole.
 
 ```text
 {{#include ../../../provkit/tests/data/excluded_provtoolbox_documents.tsv}}
 ```
 
-`excluded_provtoolbox_documents.tsv` is read by
-`provtoolbox_files_parse_under_default` in `corpus_provn.rs`, which
+`excluded_constraints.tsv` is read by the constraints test and gives the
+reason for each of its five files. `excluded_provtoolbox_documents.tsv`
+is read by `provtoolbox_files_parse_under_default` in `corpus_provn.rs`, which
 reads every file in `corpus/provn/provtoolbox` under
 `Profile::Default`, fails when a listed file is accepted, and counts
 only the files that are not listed. `excluded_spec_examples.tsv` lists

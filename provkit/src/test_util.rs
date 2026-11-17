@@ -75,6 +75,12 @@ pub(crate) fn relation(
     Record::from_parts(kind, id, formals, Attributes::new()).unwrap()
 }
 
+/// The mandatory parties of `kind`, each named `ex:p`.
+pub(crate) fn parties(kind: Kind) -> Vec<(FormalAttr, Formal)> {
+    let given = |&attr| (attr, Formal::Name(ex("p")));
+    kind.mandatory_parties().iter().map(given).collect()
+}
+
 /// A document in `http://example.org/` under `ex`, holding `records`.
 pub(crate) fn document(records: Vec<Record>) -> Document {
     let mut d = Document::new();

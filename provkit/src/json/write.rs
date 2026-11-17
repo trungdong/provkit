@@ -205,9 +205,11 @@ fn sections(
 // ANCHOR_END: sections
 
 /// A record's body. An attribute spelling one of the record's own formals
-/// would overwrite or pose as that formal, so it is an error.
+/// would overwrite or pose as that formal, so it is an error. So is a
+/// relation without a mandatory party.
 fn record_wire(record: &Record, names: &mut WriteScope<'_>) -> Result<JsonRecord> {
     record.check_attributes()?;
+    record.check_parties()?;
     let mut body = JsonRecord::new();
     for (attr, value) in record.formals() {
         let text = match value {
@@ -271,12 +273,42 @@ fn typed(value: String, datatype: &QName, names: &mut WriteScope<'_>) -> JsonVal
 #[cfg(test)]
 mod tests {
     use crate::test_util::{
-        Broken, bundle, document, element, entity, entity_in, ex, relation, round_trip, written,
+        Broken, bundle, document, element, entity, entity_in, ex, parties, relation, round_trip,
+        written,
     };
     use crate::{
-        Attributes, Bundle, Document, Formal, FormalAttr, Generation, Kind, LangStr, Namespaces,
-        QName, Record, json,
+        Attributes, Bundle, Document, Formal, FormalAttr, Generation, Kind, LangStr, Membership,
+        Mention, Namespaces, QName, Record, json,
     };
+
+    #[test]
+    fn a_hand_built_relation_without_a_party_is_refused() {
+        let membership = Record::Membership(Membership {
+            id: None,
+            collection: None,
+            entity: Some(ex("e")),
+            attributes: Attributes::new(),
+        });
+        let mention = |general_entity| {
+            Record::Mention(Mention {
+                id: None,
+                specific_entity: Some(ex("s")),
+                general_entity,
+                bundle: None,
+                attributes: Attributes::new(),
+            })
+        };
+        for record in [membership, mention(None)] {
+            let kind = record.kind();
+            let e = json::to_string(&document(vec![record])).unwrap_err();
+            assert!(
+                matches!(e, crate::Error::InvalidRecord { kind: k, .. } if k == kind),
+                "{e:?}"
+            );
+        }
+        // A mention with no bundle writes.
+        assert!(json::to_string(&document(vec![mention(Some(ex("g")))])).is_ok());
+    }
 
     /// A `wasGeneratedBy` of `ex:e` with no identifier.
     fn blank_generation() -> Record {
@@ -470,7 +502,7 @@ mod tests {
         let mut d = document(vec![element(Kind::Entity, ex("e"), a)]);
         for &kind in Kind::ALL {
             d.records
-                .push(relation(kind, Some(ex(kind.name())), vec![]));
+                .push(relation(kind, Some(ex(kind.name())), parties(kind)));
         }
         let (text, v) = round_trip(&d);
         let body = &v["entity"]["ex:e"];

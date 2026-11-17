@@ -2,7 +2,7 @@
 
 mod common;
 
-use common::{JSON_CORPUS_SIZE, Report, corpus_dir, files, only};
+use common::{JSON_CORPUS_SIZE, Report, corpus_dir, files, only, pairs};
 
 // ANCHOR: reads_all
 #[test]
@@ -112,9 +112,17 @@ const NONE_POSITION_FAILURES: [&str; 6] = [
     "derivation-fail4.json",
 ];
 
+/// Constraints files that lack a mandatory party, from
+/// `tests/data/excluded_constraints.tsv` (file name, tab, reason). Each fails
+/// to read, so none reaches `unified()`.
+fn excluded_constraints() -> Vec<(String, String)> {
+    pairs("excluded_constraints.tsv")
+}
+
 /// Every other constraints file that fails `unified()`, with its cause: the
 /// formal two present values disagree on, or `kinds` for a clash of kinds
-/// under one identifier. All other constraints files unify.
+/// under one identifier. All other constraints files unify, except those in
+/// `excluded_constraints.tsv`, which never reach `unified()`.
 const OTHER_FAILURES: [(&str, &str); 33] = [
     ("association-fail1.json", "prov:agent"),
     ("association-fail2.json", "prov:activity"),
@@ -156,8 +164,24 @@ fn constraints_corpus_fails_to_unify_where_a_none_position_differs() {
     let mut report = Report::default();
     let mut none_failures = Vec::new();
     let mut others = Vec::new();
+    let excluded = excluded_constraints();
+    let mut refused = 0;
     for (name, text) in files(&corpus_dir("constraints"), "json") {
         report.checked += 1;
+        if let Some((_, why)) = excluded.iter().find(|(n, _)| *n == name) {
+            match provkit::json::read(&text) {
+                Err(provkit::Error::InRecord { error, .. })
+                    if matches!(*error, provkit::Error::InvalidRecord { .. }) =>
+                {
+                    refused += 1;
+                }
+                other => report.fail(
+                    &name,
+                    format!("excluded as {why}, but read gave: {other:?}"),
+                ),
+            }
+            continue;
+        }
         let Some(d) = report.read_json(&name, &text) else {
             continue;
         };
@@ -193,6 +217,12 @@ fn constraints_corpus_fails_to_unify_where_a_none_position_differs() {
     }
     // The filter narrows the set, so the lists are checked only without it.
     if only().is_none() {
+        if refused != excluded.len() {
+            report.fail(
+                "constraints",
+                format!("{refused} files refused, expected {}", excluded.len()),
+            );
+        }
         if none_failures != NONE_POSITION_FAILURES {
             report.fail(
                 "constraints",

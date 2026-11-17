@@ -210,8 +210,10 @@ fn write_bundle(bundle: &Bundle, outer: &Namespaces, s: &mut String) -> Result<(
 
 // ANCHOR: expression
 fn expression(r: &Record, names: &mut WriteScope<'_>, s: &mut String) -> Result<()> {
-    // The reader would reject such an attribute, so the writer does too.
+    // The reader would reject such an attribute, or a relation without a
+    // mandatory party, so the writer does too.
     r.check_attributes()?;
+    r.check_parties()?;
     let kind = r.kind();
     let mut parts: Vec<String> = Vec::new();
 
