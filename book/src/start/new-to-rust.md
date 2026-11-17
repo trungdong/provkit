@@ -1,14 +1,41 @@
 # New to Rust
 
-Read the chapters in order. Each Rust idiom is named the first time it
-appears, with a link to the Rust book, the reference, the standard
-library or the crate that documents it. The table lists the idioms in
-that order, so you can see what each chapter asks of you before you start
-it. Three chapters of the Rust book cover most of what this book's chapters ask:
-ownership (chapter 4), enums and pattern matching (chapter 6), and
-traits, generics and lifetimes (chapter 10). The
+Read the chapters in order. Each chapter names the Rust idioms it
+explains, with a link to the Rust book, the reference, the standard
+library or the crate that documents it. The table at the end of this
+page lists the idioms in that order, so you can see what each chapter
+asks of you before you start it. The
 [glossary](../reference/glossary.md) explains the words that Rust and
 PROV use differently.
+
+## Reading order
+
+Before [Chapter 1](../chapters/1-orientation.md), read chapters 3, 5
+and 7 of the [Rust book](https://doc.rust-lang.org/book/), on common
+concepts, structs, and packages, crates and modules. Chapter 1 adds
+Cargo features, doc comments and doctests.
+
+[Chapter 2](../chapters/2-names.md) is the steepest step. Read Rust
+book chapters 4, 6, 8 and 9 first, on ownership, enums and pattern
+matching, collections, and errors. Then read sections 10.2 and 10.3 on
+traits and lifetimes, 13.1 on closures, 13.2 on iterators and 20.5 on
+macros. Chapter 2's code also uses `.into()`, `map_err`, `ok_or_else`
+and enum variants that carry data. The table places these under
+Chapter 3, which explains them, so follow its links for them when
+Chapter 2 shows them.
+
+[Chapter 3](../chapters/3-values.md) adds conversions with `From` and
+`Into`, arguments bounded by a trait, and types that implement the
+iterator traits. [Chapter 4](../chapters/4-records.md) adds macros that
+write types, `Cow` and an error enum, with Rust book chapter 15 on
+smart pointers. [Chapter 5](../chapters/5-json.md) adds serde for
+PROV-JSON, and [Chapter 6](../chapters/6-provn.md) a parser written by
+hand for PROV-N. [Chapter 7](../chapters/7-cli.md) adds the
+command-line crates clap and anyhow, [Chapter 8](../chapters/8-tests.md)
+the test tools, and [Chapter 9](../chapters/9-build.md) Cargo
+profiles and the build and release tools.
+
+## Idioms by chapter
 
 | Idiom | First seen | Read |
 |---|---|---|
