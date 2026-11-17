@@ -9,8 +9,10 @@ edition = "2024"
 rust-version = "1.98"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/trungdong/provkit"
+# ANCHOR_END: workspace
 authors = ["Trung Dong Huynh <trungdong@donggiang.com>"]
 
+# ANCHOR: workspace_dependencies
 [workspace.dependencies]
 provkit = { path = "provkit", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
@@ -21,7 +23,7 @@ clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 assert_cmd = "2"
 predicates = "3"
-# ANCHOR_END: workspace
+# ANCHOR_END: workspace_dependencies
 
 # ANCHOR: lints
 [workspace.lints.rust]

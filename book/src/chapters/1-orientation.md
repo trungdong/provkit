@@ -100,6 +100,8 @@ The root manifest holds what both crates share.
 
 ```toml
 {{#include ../../../Cargo.toml:workspace}}
+
+{{#include ../../../Cargo.toml:workspace_dependencies}}
 ```
 
 `[workspace.package]` sets the version, the 2024 edition, the minimum
