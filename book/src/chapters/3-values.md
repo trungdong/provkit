@@ -265,7 +265,7 @@ tests checks the round trip. Values in general keep their lexical form
 and datatype, so writing returns what was read. An `xsd:anyURI`
 literal, for example, stays a typed literal and is not turned into an
 identifier ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"`xsd:anyURI` stays a typed literal").
+"A value has one representation").
 
 ### Why `PartialOrd` and no `Ord`?
 

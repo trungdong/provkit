@@ -321,18 +321,16 @@ back as `xsd:int` unquoted, and every other typed value as a string with `%%` an
 `Strict` is the reference for the grammar and the MUST statements of
 the prose, and `Default` adds what ProvToolbox and ProvPy write, the
 forms the `Relaxation` enum names, except the two grammar-invalid
-forms ProvToolbox 2.2.5 writes and its `provext:` statements
-([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"`Profile::Strict` accepts the whole PROV-N grammar"). The `strict`
-profile of ProvPy 3.3.0 refuses four of those forms too, and
+forms ProvToolbox 2.2.5 writes and its `provext:` statements. The
+`strict` profile of ProvPy 3.3.0 refuses four of those forms too, and
 productions [1], [24] to [26] and [45] and the MUST in section 3.7.4
 are the grammar behind each refusal
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"`Strict` rejects the four constructs of #519"). The parser keeps the
-difference to `allows` calls, one relaxation per `Relaxation` variant.
-`read` uses `Default`, the grammar plus what the two libraries write,
-and the test `the_default_profile_is_default` pins `Profile::default()`
-to it.
+"`Profile::Strict` accepts the whole PROV-N grammar"). The parser
+keeps the difference to `allows` calls, one relaxation per
+`Relaxation` variant. `read` uses `Default`, the grammar plus what the
+two libraries write, and the test `the_default_profile_is_default`
+pins `Profile::default()` to it.
 
 ### Why does the writer write every argument?
 
@@ -539,11 +537,11 @@ test result: ok. 1 passed
 
 `corpus/provn/probes/expected.tsv` says the probe `alt_with_attrs`
 is rejected under `Strict` and accepted under `Default`, by rule
-[24], and names ProvPy issue 519 in its `provpy` column. Read
-`corpus/provn/probes/alt_with_attrs.provn` and predict which token
-`Strict` refuses and where its message points. Then run the
-doctest below, which the book compiles with the probe's text pasted
-in.
+[24], and its `provpy` column is empty, because ProvPy 3.3.0 gives the
+same results. Read `corpus/provn/probes/alt_with_attrs.provn` and
+predict which token `Strict` refuses and where its message points.
+Then run the doctest below, which the book compiles with the probe's
+text pasted in.
 
 ```rust
 # extern crate provkit;
@@ -577,7 +575,7 @@ PROV-N syntax error at line 3, column 27: expected no attributes in alternateOf 
 ```
 
 ProvPy writes an attribute block on `alternateOf`, so `Default` takes
-it, and the row beginning "`Strict` rejects the four constructs of #519"
+it, and the row beginning "`Profile::Strict` accepts the whole PROV-N grammar"
 lists this probe among its tests.
 
 </details>
