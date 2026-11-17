@@ -209,8 +209,9 @@ under test.
 
 The test reads every `.provn` file in the directory, strips the
 extension to get the probe's name, and looks the row up. A probe with
-no row fails. When the probe is in `WRITTEN_BACK`, a list of the probes on which
-`provconvert` fails with the original too, the test also reads the probe
+no row fails. When the probe is in `WRITTEN_BACK`, which holds the probes of
+the CONFORMANCE.md row on files that `provconvert` fails on with the original
+too, the test also reads the probe
 under `Profile::Default`, writes the document in PROV-N and reads it
 back, and does the same through PROV-JSON when the `json` feature is on.
 A document that does not read back equal is a failure. For each of the two profiles it reads the text with

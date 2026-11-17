@@ -11,8 +11,8 @@ use provkit::provn::{self, Profile};
 /// Number of probes in the corpus.
 const PROBE_COUNT: usize = 228;
 
-/// Probes on which `provconvert` fails with the original too: each is written in
-/// both formats and read back equal.
+/// The probes of the CONFORMANCE.md row on files that `provconvert` fails on
+/// with the original too. Each is written in both formats and read back equal.
 const WRITTEN_BACK: [&str; 5] = [
     "prefix_named_default",
     "prefix_named_prefix",

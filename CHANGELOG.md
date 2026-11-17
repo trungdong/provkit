@@ -16,7 +16,7 @@ The first release.
   once. The API reference is on [docs.rs](https://docs.rs/provkit/0.1.0);
   [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
   lists where the library departs from the Recommendations, where it differs
-  from ProvPy 3.3.0 and ProvToolbox 2.2.5, and its implementation limits,
+  from ProvPy 3.3.0 and ProvToolbox 2.5.0, and its implementation limits,
   each with its reason and test.
   - A `hadMember`, `alternateOf`, `specializationOf` or `mentionOf` without a
     mandatory party is an error in `Record::from_parts`, both readers, both

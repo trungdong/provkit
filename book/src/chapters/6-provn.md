@@ -321,8 +321,9 @@ back as `xsd:int` unquoted, and every other typed value as a string with `%%` an
 `Strict` is the reference for the grammar and the MUST statements of
 the prose, and `Default` adds the forms the `Relaxation` enum names.
 ProvPy writes three of them, and ProvPy 3.3.0's `default` profile reads all
-six. `Default` still refuses the two grammar-invalid forms ProvToolbox 2.2.5
-writes, and it leaves out ProvToolbox's `provext:` statements as
+six. `Default` still refuses the grammar-invalid form ProvToolbox 2.5.0
+writes, a string with both a language tag and a datatype, and it leaves
+out ProvToolbox's `provext:` statements as
 extensibility expressions. The
 `strict` profile of ProvPy 3.3.0 refuses four of those forms too, and
 productions [1], [24] to [26] and [45] and the MUST in section 3.7.4

@@ -175,7 +175,7 @@ with ProvPy 3.3.0.
 
 [ProvToolbox](https://lucmoreau.github.io/ProvToolbox/) is a Java
 library for PROV-DM. Its command-line tool is `provconvert`, and the
-book compares provkit with version 2.2.5.
+book compares provkit with version 2.5.0.
 
 Documents move between these tools and provkit, so
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
