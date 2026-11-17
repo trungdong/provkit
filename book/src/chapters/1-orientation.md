@@ -2,7 +2,7 @@
 
 provkit is a workspace of two crates. `provkit` is the library, which
 holds the data model and the two formats, and `provkit-cli` is the
-`provkit` binary that gives the library a command line. This chapter reads
+`provkit` binary that gives the library a command line. This chapter describes
 the crate root of the library and the two manifests, nothing else. It
 builds on no earlier chapter; every later chapter assumes the module list,
 the feature gates and the public surface shown here.

@@ -3,8 +3,8 @@
 A PROV identifier is a [namespace](../reference/glossary.md#namespace-and-prefix-prov) IRI plus a local part. Everything a
 [document](../reference/glossary.md#document-prov) names, from an [entity](../reference/glossary.md#entity-prov) to an [attribute](../reference/glossary.md#attribute-prov) key, is one of these,
 and the two readers turn every `prefix:local` they meet into one. This
-chapter reads the character rules the local part and the [prefix](../reference/glossary.md#namespace-and-prefix-prov) obey, the
-name type itself, and the prefix tables that both readers resolve
+chapter describes the character rules the local part and the [prefix](../reference/glossary.md#namespace-and-prefix-prov) obey, the
+name type itself, and the namespace tables that both readers resolve
 through. It builds on chapter 1 only, for the module list and the
 `pub use` lines that bring `QName`, `Namespaces` and `well_known` to
 the crate root.
@@ -54,8 +54,8 @@ position.
 
 Three rules sit in `local_char`. The `PN_CHARS_ESC` characters, among
 them `-`, `.` and `:`, are always written escaped, so the writer never
-has to decide whether a bare `-` would be read back. A `%` is bare
-only when two hex digits follow, because `PERCENT` is the only place
+has to decide whether an unescaped `-` would be read back. A `%` stands
+unescaped only when two hex digits follow, because `PERCENT` is the only place
 `%` can stand. Everything else goes through `is_bare_local_char`,
 which admits `PN_CHARS_U`, digits and the plain `PN_CHARS_OTHERS`
 characters anywhere, and the rest of `PN_CHARS`, such as a combining
@@ -77,9 +77,9 @@ names share, and the local part is a `Box<str>`, one owned string per
 name. Neither field is public. `QName::new` takes two `&str`, checks
 the local part with `check_local`, and builds the name; the
 crate-private `in_namespace` takes an `Arc<str>` instead, so a name
-resolved through a prefix table shares the table's allocation rather
+resolved through a namespace table shares the table's allocation rather
 than copying the IRI. The check refuses a character that no
-`PN_LOCAL` holds at its position, bare or escaped, which covers a `%`
+`PN_LOCAL` holds at its position, with or without an escape, which covers a `%`
 without two hex digits after it and a first character that may only
 continue a name. An empty local part is valid.
 
@@ -149,7 +149,7 @@ table a document or a [bundle](../reference/glossary.md#bundle-prov) carries.
 {{#include ../../../provkit/src/namespaces/mod.rs:namespaces}}
 ```
 
-The struct has four fields. `default` is the namespace a bare name resolves in.
+The struct has four fields. `default` is the namespace a [bare name](../reference/glossary.md#bare-name-provkit) resolves in.
 `prefixes` is an `IndexMap`, a map that remembers insertion order, so
 a writer can print the declarations in the order the document made
 them. `by_iri` is the reverse table the writers read, from an IRI to
@@ -439,7 +439,7 @@ and `entity(xx:e1)` and predict again.
 <details><summary>Answer</summary>
 
 Nothing is printed and the exit status is 0, because both names are
-`http://example.org/e1` and `compare` finds no [record](../reference/glossary.md#record-prov) on one side
+`http://example.org/e1` and `compare` finds no [record](../reference/glossary.md#record-provkit) on one side
 only.
 
 ```sh

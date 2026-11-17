@@ -5,7 +5,7 @@ lint set, the checks CI runs on a push to `main` and on every pull
 request, the licence check, the workflow that turns a tag into a
 release and the workflow that publishes this book. None of it is Rust,
 and all of it decides what a contributor's change must pass and what a user
-downloads. This chapter reads the release profile in the root manifest,
+downloads. This chapter describes the release profile in the root manifest,
 the clippy and rustfmt settings, the configuration of `cargo deny`,
 `typos` and `cargo about`, and the CI, release and Pages workflows,
 each file included whole. It builds on chapter 1 for the manifests and the
@@ -140,7 +140,7 @@ job runs once per entry in its matrix, on the latest Ubuntu and the
 latest Windows runner. On Windows the first step turns off CRLF
 conversion before the checkout, because the tests read LF text. The
 checkout brings the corpus submodule, because the corpus tests of
-chapter 8 read it. The toolchain step installs the version its
+[Chapter 8](8-tests.md) read it. The toolchain step installs the version its
 `toolchain` line names, together with `rustfmt`, `clippy` and the
 `wasm32-unknown-unknown` target. Every action is pinned to a commit,
 with the tag that commit carries in a trailing comment.
@@ -252,7 +252,7 @@ the subset steps in `ci.yml` build what that user gets. The
 crate-level example builds to an empty `main` when a feature is off,
 so a crate built with one feature compiles and its tests run. The
 `cargo check --tests` steps under `RUSTFLAGS=-D warnings` cover no
-default features, `provn` alone and `json` alone. Chapter 1 read the
+default features, `provn` alone and `json` alone. Chapter 1 described the
 pieces of the library these steps exercise, the
 `required-features` on each `[[test]]` target, so a corpus test that
 needs a feature is skipped rather than failed, and the crate-level

@@ -6,7 +6,7 @@ items. The corpus tests under `provkit/tests` run every file of a
 corpus shared with ProvPy, and every excluded file and known
 difference is listed in `provkit/tests/data/*.tsv` with a reason. The
 end-to-end tests under `provkit-cli/tests` run the built binary. This
-chapter reads
+chapter describes
 the helpers the unit tests share, the report
 that collects failures across a corpus, the test that reads every
 PROV-JSON file, the test that checks every probe against its row, the
@@ -16,7 +16,7 @@ for the `test_util` module under `#[cfg(test)]` and the `[[test]]`
 targets, on chapter 2 for `mod tests;`, on chapter 3 for `DateTime::parse`
 and argument-position `impl Trait`, on chapter 4 for the equality every
 round trip ends in, on chapter 5 for `json::read` and `json::to_string`,
-on chapter 6 for `provn::read_with` and the two [profiles](../reference/glossary.md#profile-prov), and on chapter 7
+on chapter 6 for `provn::read_with` and the two [profiles](../reference/glossary.md#profile-provkit), and on chapter 7
 for the binary the end-to-end tests run.
 
 ## What the code does
@@ -32,7 +32,7 @@ file, as chapter 2 said of `qname.rs`. Either way the tests are a child
 module of the code they test, so they see its private items. The
 first half of the file is builders. `ex` and `prov` make a name in
 `http://example.org/` or the PROV [namespace](../reference/glossary.md#namespace-and-prefix-prov), `entity`, `agent`,
-`bundle` and `document` build one [record](../reference/glossary.md#record-prov), [bundle](../reference/glossary.md#bundle-prov) or [document](../reference/glossary.md#document-prov) under
+`bundle` and `document` build one [record](../reference/glossary.md#record-provkit), [bundle](../reference/glossary.md#bundle-prov) or [document](../reference/glossary.md#document-prov) under
 `ex`, `dt` is one fixed `dateTime`, and `element` and `relation` go
 through `Record::from_parts`. Each goes through `unwrap` on a
 constructor that cannot fail for the inputs the tests pass, which is
@@ -277,12 +277,12 @@ among them `help_states_the_precedence_rule` for the order
 in which `-f`, `-t` and the extension decide a format and
 `compare_help_names_the_exit_codes` for the three codes chapter 7
 described. The rest exercise one behaviour each, the sniffer on
-standard input, a byte order mark, a positioned error, a closed pipe,
+standard input, a byte-order mark, a positioned error, a closed pipe,
 and the shape of a comparison listing.
 
 ### provkit/Cargo.toml
 
-Chapter 1 read the `[[test]]` targets and their `required-features`,
+Chapter 1 described the `[[test]]` targets and their `required-features`,
 so a feature-subset build skips a target rather than failing to
 compile it. The lines above those targets decide what the published
 crate carries.

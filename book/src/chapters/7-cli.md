@@ -85,7 +85,7 @@ first, standard input through `io::read_to_string` or the file through
 `fs::read_to_string`, and `map_err` turns a failure into one message
 naming the input. The message gains a hint when the error's kind is
 `InvalidData` and `starts_with_utf16_mark`, below the span, finds a
-UTF-16 byte order mark; that function opens the file and reads two
+UTF-16 byte-order mark; that function opens the file and reads two
 bytes only after the UTF-8 read has failed. The format is then
 resolved in a fixed order. `from` wins,
 then `Format::from_path`, then `Format::sniff`, and `or_else` makes
@@ -124,7 +124,7 @@ returns `None` for any other extension and for `-`.
 {{#include ../../../provkit-cli/src/format.rs:sniff}}
 ```
 
-`sniff` first drops a leading byte order mark, because both readers
+`sniff` first drops a leading byte-order mark, because both readers
 drop one. The loop then skips what the grammar
 calls trivia. It trims the four whitespace characters, and when `//`
 follows it moves past the end of the line, when `/*` follows it moves
@@ -154,7 +154,7 @@ with the one `-f`. With `--unified` each document is replaced by its
 from chapter 4, and `with_context` puts the file name in front of a
 [unification](../reference/glossary.md#unification-prov) failure. Then `a == b` is the set-based equality of chapter 4,
 so two documents in different formats, with different namespace
-tables and different [record](../reference/glossary.md#record-prov) order, compare equal, and the command
+tables and different [record](../reference/glossary.md#record-provkit) order, compare equal, and the command
 returns `ExitCode::SUCCESS` with nothing printed. Otherwise it builds
 the whole report in a `String`, one `report_side` call per side with
 the sides swapped, and writes it once, so a failure never leaves half

@@ -1,9 +1,9 @@
 # Chapter 5: PROV-JSON
 
 PROV-JSON is the W3C member submission of April 2013, a JSON object
-keyed by [record](../reference/glossary.md#record-prov) kind and then by identifier, with a `prefix` object
+keyed by [record](../reference/glossary.md#record-provkit) kind and then by identifier, with a `prefix` object
 for the [namespace](../reference/glossary.md#namespace-and-prefix-prov) table and a `bundle` object for the named [bundles](../reference/glossary.md#bundle-prov).
-This chapter reads the three layers of the `json` module. serde sees the
+This chapter describes the three layers of the `json` module. serde sees the
 shape and refuses what is not PROV-JSON, `read` turns the shape into
 builder calls, and `write` goes back from a [document](../reference/glossary.md#document-prov) to text. It
 builds on chapter 4 for the builder both readers drive and for
@@ -24,7 +24,7 @@ modules, re-exports `write` and
 ```
 
 The body of [`read`](../api/provkit/json/fn.read.html) is the three
-layers, one call each. `strip_bom` drops one leading byte order mark,
+layers, one call each. `strip_bom` drops one leading byte-order mark,
 `serde_json::from_str` reads the text into the wire type
 `JsonDocument`, and `read::emit` drives the builder with what the wire
 type holds. Text that is not JSON is [`Error::Json`](../api/provkit/enum.Error.html) holding a
@@ -35,7 +35,7 @@ two apart by `serde_json`'s `classify`, which reports JSON of the wrong
 shape as a data error. A fault found while the JSON is read carries the
 position of the offending token. For a key the reader refuses, the
 position is where `serde_json` puts an error raised once the key's
-value has been read, past the white space after the value and past a
+value has been read, past the whitespace after the value and past a
 closing brace that follows it. An error inside a record is wrapped in
 `Error::InRecord` naming the section and the record's key, and inside a
 bundle a second `InRecord` names the bundle. `char_column` recounts
@@ -222,7 +222,7 @@ records by kind in table order and by identifier within a kind,
 becomes `OneOrMany::One` while more become `Many`. `record_wire`, below
 the span, writes the formals first, from `Record::formals`, then the
 attributes, with several values under one name collected into a
-`JsonValue::Many`, and `value_wire` writes a plain string bare and
+`JsonValue::Many`, and `value_wire` writes a plain string as a JSON string and
 every other value as a `$` object, so the reader never sees a raw
 number or boolean the writer made. The doctest below runs the three
 layers once, and the book compiles it.
@@ -260,7 +260,7 @@ from its token and no digit is lost ([CONFORMANCE.md](https://github.com/trungdo
 as `i64`, `u64` or `f64`, so a reader built on those turns `-0` and
 any integer beyond `u64` into an `xsd:double` with re-rendered text,
 refuses `1e400` as out of range, drops the trailing zero of `1.50`,
-and disagrees with the PROV-N reader, which types a bare integer by
+and disagrees with the PROV-N reader, which types an unquoted integer by
 its text, on the same number. A dependant that enables the
 `arbitrary_precision` feature of `serde_json` changes how numbers
 arrive, and the raw text is the same under both feature sets.

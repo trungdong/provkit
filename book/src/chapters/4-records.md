@@ -1,8 +1,8 @@
 # Chapter 4: Records and documents
 
-A PROV [document](../reference/glossary.md#document-prov) is a set of [records](../reference/glossary.md#record-prov) of eighteen kinds, each a struct
-with an identifier, its [formal attributes](../reference/glossary.md#formal-attribute-prov) and the [attribute](../reference/glossary.md#attribute-prov) set of
-chapter 3, held at the top level or in a named [bundle](../reference/glossary.md#bundle-prov). This chapter reads
+A PROV [document](../reference/glossary.md#document-prov) is a set of [records](../reference/glossary.md#record-provkit) of eighteen kinds, each a struct
+with an identifier, its [formal attributes](../reference/glossary.md#formal-attribute-provkit) and the [attribute](../reference/glossary.md#attribute-prov) set of
+chapter 3, held at the top level or in a named [bundle](../reference/glossary.md#bundle-prov). This chapter describes
 the table that states the eighteen kinds once, the formal values that
 fill their positions, the document that holds them, the equality both
 `compare` and the tests lean on, the [unification](../reference/glossary.md#unification-prov) that merges records
@@ -118,8 +118,8 @@ document is a namespace table, top-level records and bundles. Every
 reference between records is a `QName`, so a document holds no
 pointer into itself and can be cloned, compared and sent between
 threads freely. Neither type derives `PartialEq`; the impls at the end
-of the file are written out and read below. `bundle` finds
-the first bundle with an identifier, and the next method reads the
+of the file are written out and described below. `bundle` finds
+the first bundle with an identifier, and the next method treats the
 bundles as equality and the writers do.
 
 ```rust,ignore
@@ -171,7 +171,7 @@ each bundle and on the top level, and returns a new document, with
 the span, first calls `check_attributes` on every record, because a
 hand-built record can carry an attribute named after one of its own
 formals. It then groups positions by identifier in an `IndexMap`,
-skipping records with no identifier and the four bare kinds, whose
+skipping records with no identifier and the four [bare kinds](../reference/glossary.md#bare-kind-provkit), whose
 identifier is a PROV-JSON grouping key and nothing more. Within a
 group it splits by kind, and `check_kinds` refuses the pairs of kinds
 that Constraints 53 to 55 keep apart, through
@@ -394,7 +394,7 @@ Records sharing an identifier and a kind merge, with
 silently picks a side hides a data error. An absent formal unifies
 with a present one, except in the four positions where
 PROV-CONSTRAINTS reads `-` as the constant "none". The four
-identifier-less kinds and records with no identifier never merge,
+bare kinds and records with no identifier never merge,
 while an exact repeat of any record is kept once
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md), the rows
 beginning "`Document::unified()` follows Constraints 53 to 55", "An

@@ -1,6 +1,6 @@
 # Glossary
 
-PROV and Rust share several words. Each entry here says which sense the book means, and the heading carries the tag `(PROV)` or `(Rust)`. A word with a sense in both gets two adjacent headings that link to each other. Entries run in alphabetical order of the term.
+PROV and Rust share several words. Each entry here says which sense the book means, and the heading carries the tag `(PROV)`, `(provkit)` or `(Rust)`. `(provkit)` marks a word that provkit and this book use with a meaning of their own, which the W3C texts do not define. A word with two senses gets two adjacent headings that link to each other. Entries run in alphabetical order of the term.
 
 PROV-DM is the [data model](https://www.w3.org/TR/2013/REC-prov-dm-20130430/), PROV-N the [notation](https://www.w3.org/TR/2013/REC-prov-n-20130430/), and PROV-JSON the [JSON serialisation](https://www.w3.org/Submission/2013/SUBM-prov-json-20130424/).
 
@@ -31,6 +31,14 @@ A `#[...]` or `#![...]` annotation on an item, such as `#[derive(Debug)]` or `#[
 ### attribution (PROV)
 
 The relation `wasAttributedTo`, which ties an entity to the agent responsible for it ([PROV-DM section 5.3.2](https://www.w3.org/TR/2013/REC-prov-dm-20130430/#term-attribution)).
+
+### bare kind (provkit)
+
+One of the four relation kinds that have no identifier in PROV-DM or PROV-Links, `specializationOf`, `alternateOf`, `hadMember` and `mentionOf`. The `records!` table marks them `bare`, and [Chapter 4](../chapters/4-records.md) shows the table. The other sense is [bare name (provkit)](#bare-name-provkit).
+
+### bare name (provkit)
+
+A name written without a prefix, such as `e1` in place of `ex:e1`. It resolves in the default namespace ([Chapter 2](../chapters/2-names.md)). The other sense is [bare kind (provkit)](#bare-kind-provkit).
 
 ### blank node (PROV)
 
@@ -116,9 +124,9 @@ A PROV-N statement whose name is not one of the standard relations, so that appl
 
 A named, optional part of a crate that a user turns on in `Cargo.toml` or on the command line ([the Cargo book chapter on features](https://doc.rust-lang.org/cargo/reference/features.html)).
 
-### formal attribute (PROV)
+### formal attribute (provkit)
 
-One of the positional arguments of a PROV-N statement, such as the entity and activity in `used(a, e, t)`, as opposed to the optional attribute list in square brackets ([PROV-N section 2.5](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prov-n-standard-terms) for the layout, [section 3.1](https://www.w3.org/TR/2013/REC-prov-n-20130430/#component1) for each statement's arguments).
+One of the positional arguments of a PROV-N statement, such as the entity and activity in `used(a, e, t)`, as opposed to the optional attribute list in square brackets. The W3C texts list these arguments for each kind but give them no collective name ([PROV-N section 2.5](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prov-n-standard-terms) for the layout, [section 3.1](https://www.w3.org/TR/2013/REC-prov-n-20130430/#component1) for each statement's arguments).
 
 ### generate (PROV)
 
@@ -152,9 +160,13 @@ The relation `wasInvalidatedBy`, which says an activity ended the existence of a
 
 The span of code during which a reference stays valid, written `'a` when a signature names it ([the Rust book chapter on lifetimes](https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html)).
 
+### literal (Rust)
+
+A value written directly in source code, such as `3`, `"text"` or `'c'` ([the Rust reference chapter on literal expressions](https://doc.rust-lang.org/reference/expressions/literal-expr.html)). The PROV sense is [literal and typed literal (PROV)](#literal-and-typed-literal-prov).
+
 ### literal and typed literal (PROV)
 
-A literal is a value such as `"abc"`. A typed literal pairs the value with a datatype, as in `"2013-01-01" %% xsd:date` ([PROV-DM section 5.7.3](https://www.w3.org/TR/2013/REC-prov-dm-20130430/#term-value), [PROV-N section 3.7.3](https://www.w3.org/TR/2013/REC-prov-n-20130430/#expression-literal)).
+A literal is a value such as `"abc"`. A typed literal pairs the value with a datatype, as in `"2013-01-01" %% xsd:date` ([PROV-DM section 5.7.3](https://www.w3.org/TR/2013/REC-prov-dm-20130430/#term-value), [PROV-N section 3.7.3](https://www.w3.org/TR/2013/REC-prov-n-20130430/#expression-literal)). The Rust sense is [literal (Rust)](#literal-rust).
 
 ### macro (Rust)
 
@@ -180,9 +192,13 @@ A namespace is an IRI, and a prefix is the short name that a document binds to i
 
 Each value has one owner, and assigning or passing it to another owner moves it, so the old name stops being usable, unless the type is `Copy`, in which case the value is copied and both names stay usable ([the Rust book chapter on ownership](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html)).
 
-### profile (PROV)
+### profile (provkit)
 
-A provkit setting that decides how strictly a reader treats input. `Strict` reads the whole grammar and the MUST statements of its prose, and `Default` adds the extensions ProvPy and ProvToolbox write. [Chapter 6](../chapters/6-provn.md) shows the code.
+A provkit setting that decides how strictly the PROV-N reader treats input. Only the PROV-N reader takes a profile. `Strict` reads the whole grammar and the MUST statements of its prose, and `Default` adds the extensions ProvPy and ProvToolbox write. [Chapter 6](../chapters/6-provn.md) shows the code. The Cargo sense is [profile (Rust)](#profile-rust).
+
+### profile (Rust)
+
+A named set of compiler settings that Cargo applies to a build, such as `dev` or `release` ([the Cargo book chapter on profiles](https://doc.rust-lang.org/cargo/reference/profiles.html)). The provkit sense is [profile (provkit)](#profile-provkit).
 
 ### PROV-CONSTRAINTS (PROV)
 
@@ -196,7 +212,7 @@ The 2013 W3C member submission that serialises PROV as JSON ([PROV-JSON](https:/
 
 The text notation for PROV, with one functional-style statement per record ([PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/)).
 
-### record (PROV)
+### record (provkit)
 
 provkit's word for one PROV-DM description, such as an entity, an activity or a relation. [Chapter 4](../chapters/4-records.md) shows the type.
 
@@ -207,6 +223,14 @@ provkit's word for one PROV-DM description, such as an entity, an activity or a 
 ### specialisation (PROV)
 
 The relation `specializationOf`, which says one entity is a more specific view of another ([PROV-DM section 5.5.1](https://www.w3.org/TR/2013/REC-prov-dm-20130430/#term-specialization)).
+
+### statement (provkit)
+
+This book's word for one PROV-N expression, such as `entity(ex:report)`, which describes one record. PROV-N itself says expression ([PROV-N section 2.1](https://www.w3.org/TR/2013/REC-prov-n-20130430/#functional-syntax)). The Rust sense is [statement (Rust)](#statement-rust).
+
+### statement (Rust)
+
+A component of a block, such as a `let` binding or an expression followed by `;` ([the Rust reference chapter on statements](https://doc.rust-lang.org/reference/statements.html)). The provkit sense is [statement (provkit)](#statement-provkit).
 
 ### trait (Rust)
 

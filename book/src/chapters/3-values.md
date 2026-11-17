@@ -1,8 +1,8 @@
 # Chapter 3: Values
 
 An [attribute](../reference/glossary.md#attribute-prov) value is a string, a language-tagged string, a name, a
-time or a [typed literal](../reference/glossary.md#literal-and-typed-literal-prov), and a [record](../reference/glossary.md#record-prov) carries its values as a set of
-name and value pairs. This chapter reads how each kind is stored and when
+time or a [typed literal](../reference/glossary.md#literal-and-typed-literal-prov), and a [record](../reference/glossary.md#record-provkit) carries its values as a set of
+name and value pairs. This chapter describes how each kind is stored and when
 two of them are equal, which is the rule every later layer leans on,
 from the deduplication of a record's attribute set to `compare` in the
 command line. It builds on chapter 2 for `QName`, which is both a kind of
@@ -58,7 +58,7 @@ would compare and hash the same things, and the two are written out
 side by side. The rule for typed literals sits in `TypedLiteral`'s
 impls, above the enum, and in `Key`. Two typed literals are equal when
 their datatypes are equal and their texts are equal or their keys are.
-`Key::of` trims the XSD white space and reads the text under its
+`Key::of` trims the XSD whitespace and reads the text under its
 datatype. An integer type in `INTEGER_TYPES` gives `Key::Integer`, a
 sign and the digits without leading zeros, but only when the number is
 within the type's bounds. `xsd:decimal` gives `Decimal` with the
@@ -120,7 +120,7 @@ Python's `repr` does. After the macros,
 `From<&str>` and `From<String>` give `Str`, and `QName`, `DateTime` and
 `LangStr` each map to their own variant. `Attributes::insert` takes
 `impl Into<Value>`, so `insert(name, 3)` and `insert(name, "text")`
-both work through these impls. The readers do not use them for a bare
+both work through these impls. The readers do not use them for an unquoted
 integer literal; they call `Value::integer`, which keeps the text and
 types it with `integer_datatype` by range.
 
@@ -235,14 +235,14 @@ compare the same things.
 
 Section 3.7.3 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prod-convenienceNotation)
-calls a bare integer sugar for `xsd:int`, but a number outside the
+calls an unquoted integer sugar for `xsd:int`, but a number outside the
 `xsd:int` range has no valid `xsd:int` form, and the PROV-JSON submission lets
 a native number stand for `xsd:decimal`. One rule for both formats
 means `[ex:k=3000000000]` equals the PROV-JSON `{"ex:k": 3000000000}`
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Integer literals are typed by range in both formats").
-ProvToolbox reads every bare integer with `Integer.valueOf` and fails
-above 2147483647, so the PROV-N writer writes an integer bare only when
+ProvToolbox reads every unquoted integer with `Integer.valueOf` and fails
+above 2147483647, so the PROV-N writer writes an integer unquoted only when
 it is an `xsd:int` and quotes an `xsd:long` or `xsd:integer` with its
 datatype. `integer_datatype` is the one function that picks the type,
 from the digits alone, so leading zeros do not change it. The `From`

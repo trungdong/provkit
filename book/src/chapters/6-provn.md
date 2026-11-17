@@ -1,12 +1,12 @@
 # Chapter 6: PROV-N
 
 PROV-N is the notation of the W3C Recommendation of April 2013, a
-text form with one statement per [record](../reference/glossary.md#record-prov), `prefix` and `default`
+text form with one statement per [record](../reference/glossary.md#record-provkit), `prefix` and `default`
 declarations for the [namespace](../reference/glossary.md#namespace-and-prefix-prov) table and `bundle ... endBundle` for
 the named [bundles](../reference/glossary.md#bundle-prov). Its grammar is the authority for this module, and
 this chapter follows the grammar from characters to tokens, from tokens
 to statements and from a [document](../reference/glossary.md#document-prov) back to text. It reads the two
-[profiles](../reference/glossary.md#profile-prov) the reader offers, the lexer, the recursive-descent parser,
+[profiles](../reference/glossary.md#profile-provkit) the reader offers, the lexer, the recursive-descent parser,
 the [extensibility expressions](../reference/glossary.md#extensibility-expression-prov) the parser accepts and leaves out, and
 the writer. It builds on chapter 2 for the `PN_PREFIX` and `PN_LOCAL`
 character classes the lexer and writer share and for the scope that
@@ -52,7 +52,7 @@ document plus the list of those.
 ```
 
 [`read_report`](../api/provkit/provn/fn.read_report.html) is the one
-function that does the work. `strip_bom` drops one leading byte order
+function that does the work. `strip_bom` drops one leading byte-order
 mark, as the PROV-JSON reader did in chapter 5, `lexer::tokenize` turns
 the whole text into a `Vec<Token>` ending in `Eof`, and
 `Parser::new` takes the text, the tokens and the profile. The parser
@@ -305,7 +305,7 @@ each pair as `name=value`. `value`, at the end of the file, writes a
 string with `"`, `\`, newline, return and tab escaped, a tagged string
 with `@`, a name in single quotes, a dateTime as a string typed
 `xsd:dateTime`, an `xsd:int` whose text is an `INT_LITERAL` and reads
-back as `xsd:int` bare, and every other typed value as a string with `%%` and its datatype.
+back as `xsd:int` unquoted, and every other typed value as a string with `%%` and its datatype.
 
 ## Why this shape
 
@@ -530,10 +530,10 @@ test result: ok. 1 passed
 ## Try it
 
 `corpus/provn/probes/expected.tsv` says the probe `alt_with_attrs`
-is rejected under `strict` and accepted under `default`, by rule
+is rejected under `Strict` and accepted under `Default`, by rule
 [24], and names ProvPy issue 519 in its `provpy` column. Read
 `corpus/provn/probes/alt_with_attrs.provn` and predict which token
-the strict profile refuses and where its message points. Then run the
+`Strict` refuses and where its message points. Then run the
 doctest below, which the book compiles with the probe's text pasted
 in.
 
