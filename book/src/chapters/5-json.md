@@ -271,9 +271,10 @@ The rule applies in a namespace table, among the sections of a
 document or bundle, among the records of a section, among the
 attributes of a record and among the members of a value object
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"A key given twice in one PROV-JSON object is an error"). ProvPy keeps
-the last value at every level, so a repeated key drops a namespace, a
-record, a section, a bundle or a value without a message. RFC 8259
+"A key given twice in one PROV-JSON object is an error"). ProvPy 3.3.0
+refuses a repeated key as well. A reader that keeps the last value
+drops a namespace, a record, a section, a bundle or a value without a
+message. RFC 8259
 says the names in an object SHOULD be unique and I-JSON (RFC 7493)
 says they MUST be, so a document with a repeated key is malformed by
 the standards' own terms. Keeping the last value would hide that fault
@@ -318,8 +319,8 @@ per relation ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CO
 writes three memberships on one collection as three objects under
 `hadMember`, each with one `prov:entity`, which is the model the
 fan-out produces, one membership per member. Every record gets the
-identifier and the attributes, where ProvPy gives them to the first
-record only, because the records are alike except for the member, and
+identifier and the attributes, as in ProvPy 3.3.0, because the
+records are alike except for the member, and
 which member comes first should not decide which record carries the
 identifier ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "A `hadMember` with several members gives every record the identifier

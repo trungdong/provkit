@@ -315,10 +315,10 @@ the prose, and `Default` adds what ProvToolbox and ProvPy write, the
 forms the `Relaxation` enum names, except the two grammar-invalid
 forms ProvToolbox 2.2.5 writes and its `provext:` statements
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"`Profile::Strict` accepts the whole PROV-N grammar"). Four of those
-forms ProvPy's own strict mode accepts, and productions [1], [24] to
-[26] and [45] and the MUST in section 3.7.4 are the grammar behind
-each refusal
+"`Profile::Strict` accepts the whole PROV-N grammar"). The `strict`
+profile of ProvPy 3.3.0 refuses four of those forms too, and
+productions [1], [24] to [26] and [45] and the MUST in section 3.7.4
+are the grammar behind each refusal
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "`Strict` rejects the four constructs of #519"). The parser keeps the
 difference to `allows` calls, one relaxation per `Relaxation` variant.
@@ -359,11 +359,9 @@ implementations MAY ignore these expressions". The reader does both,
 parsing them under either profile and leaving them out of the document
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Extensibility expressions are parsed under both profiles and left
-out"). ProvPy rejects them under `strict` and `default` and skips
-them with a warning under `lenient`, so a document that holds one
-reads in provkit under either profile and in ProvPy only under
-`lenient`. Section 3.7.1 requires a prefix to refer to a declared
-namespace, but the reader ignores the whole expression, contents
+out"). ProvPy 3.3.0 does the same under each of its profiles and
+warns about each expression it drops. Section 3.7.1 requires a prefix
+to refer to a declared namespace, but the reader ignores the whole expression, contents
 included, and reports it, so `ex:foo(zz:a)` reads with `zz`
 undeclared, while a time is checked because production [44] defines
 its form
@@ -567,9 +565,9 @@ the error placed at the `[`, on line 3 at column 27.
 PROV-N syntax error at line 3, column 27: expected no attributes in alternateOf under the strict profile, found '['
 ```
 
-ProvPy writes an attribute block on `alternateOf`, which its issue 519
-records, so `Default` takes it, and the row beginning "`Strict`
-rejects the four constructs of #519" lists this probe among its tests.
+ProvPy writes an attribute block on `alternateOf`, so `Default` takes
+it, and the row beginning "`Strict` rejects the four constructs of #519"
+lists this probe among its tests.
 
 </details>
 

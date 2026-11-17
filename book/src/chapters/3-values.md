@@ -219,9 +219,8 @@ one datatype, so `"5"`, `" 5 "`, `"+5"` and `"005"` are one `xsd:int`
 and `"1e999"` equals `"INF"` as an `xsd:double`
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "A typed literal is never rejected for its text"). Equal values under
-one datatype are one value. ProvPy compares `xsd:int`, `xsd:double`
-and `xsd:boolean` by value and `xsd:long`, `xsd:integer` and
-`xsd:float` by text ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+one datatype are one value, and ProvPy 3.3.0 compares the numeric and
+boolean datatypes by value too ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Values of the numeric and boolean datatypes compare by value"). Two
 edges follow. Text outside the datatype's lexical space compares as
 text, which is why `Key::integer` checks the bounds and `"300"` as
