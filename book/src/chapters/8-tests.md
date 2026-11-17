@@ -341,10 +341,7 @@ and the two-way check described above. A row is therefore a claim the
 test checks, that the file is rejected, for a spec example with the
 kind of error its reason names, or that it reads and differs from its
 twin, rather than a file the test does not look
-at, and each list sits in a section that names the test that pins it
-([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"PROV-N specification examples", "ProvToolbox files" and "ProvToolbox
-twins").
+at.
 
 ### Why test the packaged crate in CI?
 

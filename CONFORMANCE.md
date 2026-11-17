@@ -1,8 +1,8 @@
 # Conformance
 
 How provkit 0.1.0 relates to the W3C PROV Recommendations and to ProvPy 3.3.0
-(`prov` on PyPI) and to ProvToolbox 2.5.0. Four sections follow, then the
-corpus the tests read.
+(`prov` on PyPI) and to ProvToolbox 2.5.0. Four sections follow, then a note
+on the corpus the tests read.
 
 - Departures from the Recommendations: behaviour that differs from the
   grammar or the prose of PROV-N, PROV-DM, PROV-JSON or PROV-CONSTRAINTS, each
@@ -67,7 +67,6 @@ sections record it where it departs from a Recommendation or is a limit.
 | A PROV-JSON formal other than the `prov:entity` of a `hadMember`, given under two spellings of its IRI, is `Error::InvalidRecord` inside `Error::InRecord`. Given `prov:activity` beside `p:activity`, with `p` bound to the PROV namespace, ProvPy 3.3.0 keeps the later value without a message. | The two keys name one formal, and keeping one value drops the other unannounced. | #774 | `a_formal_given_under_two_spellings_is_an_invalid_record` (src/json/read/tests.rs) |
 | Under `Strict`, `prov:mentionOf(ex:i; ex:e2, ex:e1, ex:b)`, with an identifier and three names, is an extensibility expression. It is left out of the document, and `provn::read_report` lists it. ProvPy 3.3.0 reads it as a mention with the identifier `ex:i` under `strict` and `default`, as provkit does under `Default`. | PROV-LINKS gives a mention no identifier, so under `Strict` the text is an extensibility expression by production [49], as the departures above record. | no issue | `an_identifier_on_prov_mention_of_is_an_extension_under_strict`, `profiles` (src/provn/parser/tests.rs) |
 | An attribute named after a formal that its record does not have, such as `prov:time` or `prov:activity` on an entity, is an ordinary attribute in both formats, and its value keeps the type it was written with. ProvPy 3.3.0 lets the name decide the type on every kind of record. It reads PROV-N `prov:time="2012-01-01T00:00:00"` and PROV-JSON `"prov:time": "2012-01-01T00:00:00"` as an `xsd:dateTime`, and PROV-JSON `"prov:activity": "ex:a"` as a qualified name, where provkit reads strings. It refuses PROV-N `prov:time="not a time"`, `prov:activity="hello"` and two `prov:activity` attributes, and PROV-JSON `"prov:time": "hello"` and a `prov:activity` value object typed `xsd:QName` or `prov:QUALIFIED_NAME`, all of which provkit reads. It writes `prov:time="2012-01-01T00:00:00" %% xsd:dateTime` and `prov:activity='ex:a'` to PROV-JSON as bare strings, where provkit writes a value object with its `type`. ProvPy reads provkit's `prov:time` value object back equal, measured on the one corpus file with such an attribute, `probes/prov_time_attr_on_entity`. So ProvPy refuses provkit's PROV-JSON for a name-valued formal name, and provkit reads ProvPy's PROV-JSON for one, and for a time-valued one, as a different document. | An attribute is any qualified name (PROV-DM section 5.7.2, production [39]), a literal's type comes from how it is written (productions [40] and [41]), and PROV-JSON section 2.2 types a JSON string as `xsd:string`. PROV-DM defines five attributes in the PROV namespace and gives no rule for another. | #780 | `attribute_values` (src/provn/parser/tests.rs), `values_decode_per_table` (src/json/read/tests.rs), `every_value_variant_round_trips` (src/json/write.rs), `probes_read_as_the_grammar_requires` (prov_time_attr_on_entity.provn) |
-| Blank-node labels are numbered `_:idN` document-wide, so a record in a bundle continues the document's numbering. ProvPy 3.3.0 restarts the numbering in each bundle. Neither takes part in equality. | One counter is simpler and the labels are not kept. | no issue (no behaviour to change) | `blank_ids_continue_through_bundles` (src/json/write.rs) |
 | A `hadMember`, `alternateOf`, `specializationOf` or `mentionOf` without a mandatory party is an error. ProvPy 3.3.0's `default` profile and PROV-JSON reader drop such a statement with a warning. | A statement that names a PROV relation and lacks a mandatory party is malformed, and provkit reports a malformed statement as an error. Only extensibility expressions, which the grammar allows, are left out. | #710 | `from_parts_refuses_each_absent_mandatory_party` (src/record/tests.rs), `profiles` (src/provn/parser/tests.rs), `a_relation_without_a_mandatory_party_is_refused` (src/json/read/tests.rs), `probes_read_as_the_grammar_requires` (alt_marker_first.provn, alt_marker_second.provn, member_marker_first.provn, member_marker_second.provn, mention_marker_first.provn, mention_marker_second.provn, spec_marker_first.provn, spec_marker_second.provn) |
 
 ## Differences from ProvToolbox 2.5.0
@@ -121,7 +120,7 @@ provkit's PROV-N from `provconvert -infile <original> -compare <provkit's PROV-N
 |---|---|---|
 | PROV-N section 3.7.5, Table 2 (a generation, usage, start, end, invalidation or association with none of its optional elements, such as `wasGeneratedBy(ex:e)`) is a PROV-DM rule that the Recommendation calls syntactically correct. Both profiles accept such forms and the library does not check the rule. | A syntax reader follows the grammar. The rule belongs to validation, which 0.1.0 does not implement. | `probes_read_as_the_grammar_requires` (gen_arity_1.provn, association_1.provn) |
 | Every formal attribute is an `Option`. `Record::from_parts`, both readers, both writers and `unified()` refuse a record that lacks a mandatory party of `hadMember`, `alternateOf`, `specializationOf` or `mentionOf`. `Default` still reads `-` in a required position of any other relation, and `Strict` rejects it because the grammar does. | A document with missing arguments reads, except where a relation lacks a mandatory party. A statement that names a PROV relation and lacks a mandatory party is malformed, and provkit reports a malformed statement as an error. Only extensibility expressions, which the grammar allows, are left out. | `from_parts_rejects_bad_parts`, `from_parts_builds_every_kind_empty`, `from_parts_refuses_each_absent_mandatory_party` (src/record/tests.rs), `profiles` (src/provn/parser/tests.rs), `a_relation_without_a_mandatory_party_is_refused` (src/json/read/tests.rs), `a_hand_built_relation_without_a_party_is_refused` (src/json/write.rs, src/provn/write/tests.rs), `a_hand_built_relation_without_a_party_is_refused_but_a_mention_needs_no_bundle` (src/unify/tests.rs) |
-| Not implemented: the `lenient` PROV-N profile of ProvPy, a builder API, an index, query and store, PROV-JSONLD, PROV-XML, PROV-O, PROV-Dictionary (the three kinds of the PROV-JSON note's Appendix B are unknown record kinds), and validation of PROV-CONSTRAINTS. `unified()` applies Constraints 53 to 55 and a merge that treats an absent formal as unknown except in four positions (the row on absent formals below). | Out of scope for 0.1.0. | `constraint_53_relations_are_pairwise_disjoint`, `constraint_54_keeps_elements_apart_from_eleven_relations`, `constraint_55_entity_and_activity_are_disjoint_and_agents_overlap` (src/unify/tests.rs), `a_section_is_checked_by_name_before_its_body` (src/json/read/tests.rs) |
+| Not implemented: a builder API, an index, query and store, PROV-JSONLD, PROV-XML, PROV-O, PROV-Dictionary (the three kinds of the PROV-JSON note's Appendix B are unknown record kinds), and validation of PROV-CONSTRAINTS. `unified()` applies Constraints 53 to 55 and a merge that treats an absent formal as unknown except in four positions (the row on absent formals below). | Out of scope for 0.1.0. | `constraint_53_relations_are_pairwise_disjoint`, `constraint_54_keeps_elements_apart_from_eleven_relations`, `constraint_55_entity_and_activity_are_disjoint_and_agents_overlap` (src/unify/tests.rs), `a_section_is_checked_by_name_before_its_body` (src/json/read/tests.rs) |
 | Extensibility expressions nest to 64 levels, counting expressions and tuples. Deeper nesting is a syntax error. | The limit bounds the recursion on hostile input. | `nesting_is_limited`, `the_limit_is_64_levels_below_the_outermost_expression` (src/provn/extension.rs), `probes_read_as_the_grammar_requires` (extensibility_expressions_64.provn, extensibility_tuples_64.provn, extensibility_expressions_65.provn, extensibility_tuples_65.provn) |
 | Extensibility expressions are parsed under both profiles and left out of the document. `provn::read_report` lists them, one per outermost expression, with the name as written and its line and column. Names inside one are not resolved and literals inside one are not built, except that a time is checked, as the departures above record. The CLI prints one warning on standard error. | Section 5 requires a parser to parse them and lets it ignore them. | `example_46_reads_in_both_forms`, `every_argument_form_reads_unresolved`, `the_name_is_reported_as_written`, `read_and_read_with_drop_the_list`, `extensions_read_inside_bundles_and_before_bundles_under_strict` (src/provn/extension.rs), `corpus_extensibility_expressions_are_reported` (tests/corpus_provn.rs), `ignored_extensibility_expressions_warn_once_on_standard_error` (provkit-cli/tests/cli.rs), `probes_read_as_the_grammar_requires` (extensibility.provn, extensibility_after_bundle.provn) |
 | `Document::unified()` follows Constraints 53 to 55. A relation of the nine kinds in Constraint 53 (`used`, `wasGeneratedBy`, `wasInvalidatedBy`, `wasStartedBy`, `wasEndedBy`, `wasInformedBy`, `wasAttributedTo`, `wasAssociatedWith`, `actedOnBehalfOf`) cannot share an identifier with another of them. An entity, activity or agent cannot share one with those nine, `wasInfluencedBy` or `wasDerivedFrom`. An entity and an activity cannot share one, and an agent may be either. `wasInfluencedBy` and `wasDerivedFrom` may share one with any relation. Records that share an identifier and a kind merge, and `Error::Unification` reports conflicting formals. | ProvToolbox's normal form merges by union. A merge that silently picks a side hides a data error. | `constraint_53_relations_are_pairwise_disjoint`, `constraint_54_keeps_elements_apart_from_eleven_relations`, `constraint_55_entity_and_activity_are_disjoint_and_agents_overlap`, `an_entity_agent_and_activity_under_one_identifier_fail`, `overlapping_kinds_merge_per_kind`, `influence_and_derivation_share_with_any_relation`, `conflicting_times_fail`, `conflicting_names_fail` (src/unify/tests.rs) |
@@ -156,78 +155,7 @@ provkit's PROV-N from `provconvert -infile <original> -compare <provkit's PROV-N
 
 ## Corpus
 
-The tests read [prov-corpus](https://github.com/trungdong/prov-corpus) v3.0.0
-(submodule at `corpus/`). ProvPy 3.3.0 does not read the submodule. Its tests
-hold copies of the PROV-JSON documents, the ProvToolbox files and their
-twins, and the specification examples, eight of which hold one line more in
-the corpus. It does not read the probes. provkit's corpus tests collect the
-failing files and report them together.
-
-### PROV-JSON
-
-398 documents. All 398 read, round-trip through PROV-JSON and round-trip
-through PROV-N.
-
-Tests: `reads_all_398`, `round_trips_all_398` (tests/corpus_json.rs),
-`json_corpus_round_trips_through_provn` (tests/corpus_twins.rs).
-
-### PROV-N specification examples
-
-127 examples: 64 from PROV-N and 63 from PROV-DM. 100 parse under `Strict`. The
-other 27 are excluded, and each is asserted rejected. The grammar rejects them
-or they are not complete PROV-N:
-
-- Not a statement or not complete: `prov-n-example-52`, `-53`, `-54`, `-55`,
-  `-56`, `-59`; `prov-dm-example-05`, `-06`, `-19`, `-57`, `-58`, `-59`.
-- A required argument missing:
-  `prov-n-example-37`; `prov-dm-example-03`, `-04`, `-16`, `-24`, `-34`,
-  `-52`, `-53`, `-55`, `-56`, `-63`.
-- A statement the grammar orders otherwise: `prov-n-example-51` (`default`
-  after `prefix`, production [45]) and `prov-dm-example-42` (a statement after
-  a bundle, production [1]).
-- `prov-n-example-16`: a time argument that is not a `dateTime`.
-- `prov-n-example-61`: a bundle identifier with no default namespace.
-
-The exact list and reasons are in
-`provkit/tests/data/excluded_spec_examples.tsv`. The `strict` profile of
-ProvPy 3.3.0 refuses the same 27.
-
-Test: `spec_examples_parse_under_strict` (tests/corpus_provn.rs).
-
-### ProvToolbox files
-
-9 files. 6 parse under `Default`. 3 are excluded, listed with their reasons
-in `provkit/tests/data/excluded_provtoolbox_documents.tsv`:
-
-- `container0`: bare names with no default namespace.
-- `container1`: a language tag and a datatype on one literal, which
-  productions [41] and [43] forbid.
-- `container2`: a bare IRI as a datatype, where production [42] requires a
-  qualified name.
-
-`prov-family` and `prov-family-graphics` parse; the reader ignores their
-extensibility expressions (12 in `prov-family`). ProvPy 3.3.0 reads both too
-and drops their extensibility expressions with a warning.
-
-Tests: `provtoolbox_files_parse_under_default`,
-`corpus_extensibility_expressions_are_reported` (tests/corpus_provn.rs).
-
-### ProvToolbox twins
-
-388 PROV-N files with a PROV-JSON twin. 229 read equal to the twin. 159 are
-known differences, listed with their category in
-`provkit/tests/data/known_differences.tsv`. All 159 parse and are unequal to
-the twin:
-
-- 80 dynamic timestamps, where ProvToolbox wrote the wall-clock time.
-- 79 datatype palette differences.
-
-Test: `provtoolbox_corpus_equals_json_twins` (tests/corpus_twins.rs).
-
-### PROV-N probes
-
-228 probes in `corpus/provn/probes`, each isolating one production or rule.
-`expected.tsv` gives the result under `Strict` and under `Default`. Both must
-match for every probe.
-
-Test: `probes_read_as_the_grammar_requires` (tests/corpus_probes.rs).
+The tests read [prov-corpus](https://github.com/trungdong/prov-corpus) v3.0.0,
+the submodule at `corpus/`. Every corpus file the tests leave out, and every
+PROV-N file that reads but differs from its PROV-JSON twin, is listed with its
+reason or category in a file under `provkit/tests/data`.
