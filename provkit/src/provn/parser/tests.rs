@@ -163,20 +163,19 @@ fn profiles() {
             "mentionOf",
             false,
         ),
+        (
+            "prov:mentionOf(ex:i; ex:e2, -, ex:b)",
+            2,
+            "mentionOf",
+            false,
+        ),
     ] {
         let want = refused(body, argument, kind);
         let identifier_form = body.contains("ex:i;");
-        if identifier_form {
-            // The identifier makes the statement an error or an extension
-            // under Strict, so only Default reaches the missing party.
-            if body.starts_with("hadMember") {
-                // The identifier is the first token the strict grammar refuses.
-                let (position, _) = syntax(err(body, Profile::Strict));
-                assert_eq!(position, (4, body.find("ex:i").unwrap() + 1), "{body}");
-            } else {
-                let (doc, ignored) = report(body, Profile::Strict);
-                assert!(doc.records.is_empty() && ignored.len() == 1, "{body}");
-            }
+        if identifier_form && body.starts_with("hadMember") {
+            // The identifier is the first token the strict grammar refuses.
+            let (position, _) = syntax(err(body, Profile::Strict));
+            assert_eq!(position, (4, body.find("ex:i").unwrap() + 1), "{body}");
         } else if strict_at_keyword {
             assert_eq!(
                 syntax(err(body, Profile::Strict)),
@@ -310,14 +309,34 @@ fn prov_mention_of_with_a_marker_for_an_entity_is_refused() {
 }
 
 /// PROV-DM gives `mentionOf` no identifier. Under `Strict` one makes
-/// `prov:mentionOf` an extensibility expression; `Default` reads it as the
-/// mention's identifier, as it does for bare `mentionOf`.
+/// `prov:mentionOf` an extensibility expression, unless a name is `-`, which
+/// `Strict` refuses at the `-`. `Default` reads the identifier as the
+/// mention's, as it does for bare `mentionOf`.
 #[test]
 fn an_identifier_on_prov_mention_of_is_an_extension_under_strict() {
     let body = "prov:mentionOf(ex:m; ex:e2, ex:e1, ex:b)";
     let (doc, ignored) = report(body, Profile::Strict);
     assert!(doc.records.is_empty(), "{:?}", doc.records);
     assert_eq!(ignored.len(), 1);
+    for (body, column) in [
+        ("prov:mentionOf(ex:i; -, ex:e1, ex:b)", 22),
+        ("prov:mentionOf(ex:i; ex:e2, -, ex:b)", 29),
+        ("prov:mentionOf(ex:i; ex:e2, ex:e1, -)", 36),
+        ("prov:mentionOf(-; -, -, -)", 19),
+    ] {
+        let (position, message) = syntax(err(body, Profile::Strict));
+        assert_eq!(position, (4, column), "{body}");
+        assert!(
+            message.contains("strict profile") || message.contains("argument"),
+            "{body}: {message}"
+        );
+    }
+    // Default reads a `-` for the bundle, with an identifier too.
+    let (doc, _) = report("prov:mentionOf(ex:i; ex:e2, ex:e1, -)", Profile::Default);
+    assert!(matches!(&doc.records[0], Record::Mention(m) if m.bundle.is_none()));
+    // A `-` as the identifier is not a name.
+    let (doc, ignored) = report("prov:mentionOf(-; ex:e2, ex:e1, ex:b)", Profile::Strict);
+    assert!(doc.records.is_empty() && ignored.len() == 1);
     let (doc, ignored) = report(body, Profile::Default);
     assert!(ignored.is_empty(), "{ignored:?}");
     assert!(matches!(&doc.records[0], Record::Mention(m) if m.id == Some(ex("m"))));
@@ -914,9 +933,25 @@ fn long_tokens_are_cut_in_messages() {
 }
 
 #[test]
-fn an_empty_namespace_iri_is_an_error_at_the_iri() {
+fn a_blank_namespace_iri_is_an_error_at_the_iri() {
+    // `IRI_REF` forbids U+0000 to U+0020, so a space is a syntax error at
+    // the lexer. The other whitespace it admits, raw or as `\u`, reaches
+    // the declaration.
     for profile in [Profile::Default, Profile::Strict] {
-        for declaration in ["default <>", "prefix z <>"] {
+        let text = "document\n  prefix z < >\nendDocument";
+        assert_eq!(
+            syntax(provn::read_with(text, profile).unwrap_err()).0,
+            (2, 13),
+            "{profile:?}"
+        );
+        for (declaration, name) in [
+            ("default <>", ""),
+            ("prefix z <>", "z"),
+            ("default <\u{a0}>", ""),
+            ("prefix z <\u{3000}\u{2028}>", "z"),
+            ("prefix z <\\u00A0>", "z"),
+            ("default <\\u2003\\u2029>", ""),
+        ] {
             let documents = [
                 format!("document\n  {declaration}\nendDocument"),
                 format!(
@@ -924,12 +959,15 @@ fn an_empty_namespace_iri_is_an_error_at_the_iri() {
                 ),
             ];
             for text in documents {
-                let at = text.find("<>").unwrap();
+                let at = text.find(declaration).unwrap() + declaration.find('<').unwrap();
                 let line = text[..at].matches('\n').count() + 1;
                 let column = at - text[..at].rfind('\n').unwrap();
                 let (position, inner) = located(provn::read_with(&text, profile).unwrap_err());
                 assert_eq!(position, (line, column), "{text}");
-                assert!(matches!(inner, Error::EmptyNamespace), "{text}");
+                assert!(
+                    matches!(&inner, Error::EmptyNamespace { prefix: Some(p) } if p == name),
+                    "{text}"
+                );
             }
         }
     }

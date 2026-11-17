@@ -21,13 +21,16 @@ The first release.
   - A `hadMember`, `alternateOf`, `specializationOf` or `mentionOf` without a
     mandatory party is an error in `Record::from_parts`, both readers, both
     writers and `unified()`. Under `Strict`, `prov:mentionOf` with `-` for any
-    of its three arguments is refused.
+    of its three arguments is refused, with or without an identifier.
   - A PROV-N `\U` escape below U+10000 decodes. A surrogate or a value above
     U+10FFFF stays a syntax error.
-  - An empty namespace IRI is an error. `Namespaces::declare`,
-    `Namespaces::set_default` and `QName::new` refuse it, both readers refuse
-    `prefix z <>`, `default <>` and a PROV-JSON `""`, and `set_default` now
-    returns a `Result`.
+  - A namespace IRI that is empty or all whitespace is an error.
+    `Namespaces::declare`, `Namespaces::set_default`,
+    `Namespaces::ensure_prefix` and `QName::new` refuse it, and both readers
+    refuse `prefix z <>`, `default <>` and a PROV-JSON `""` or `" "`.
+    `set_default` and `ensure_prefix` now return a `Result`, and
+    `Error::EmptyNamespace` names the prefix or the default namespace at
+    fault.
 - `provkit-cli`, the `provkit` command: `convert` between the two formats and
   `compare` two documents, with prebuilt binaries for macOS, Linux and
   Windows on each release. The command reference is in the

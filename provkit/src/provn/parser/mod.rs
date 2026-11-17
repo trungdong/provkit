@@ -325,15 +325,13 @@ impl<'t> Parser<'t> {
     /// Whether the tokens after the current `prov:mentionOf` have the shape
     /// of a mention (PROV-LINKS): `(`, three names separated by `,`, then
     /// `)` or `, [`. A `-` counts as a name, so that `formals` refuses it
-    /// where a party is mandatory. [`Profile::Default`] also takes an
-    /// `identifierOrMarker` and `;` before the names, as it does for bare
-    /// `mentionOf`. Any other shape is an extensibility expression under
-    /// production [49].
+    /// where a party is mandatory. An `identifierOrMarker` and `;` may come
+    /// before the names, as for bare `mentionOf`. [`Profile::Default`] takes
+    /// that form always, and [`Profile::Strict`] only when one of the names
+    /// is `-`, so that `formals` refuses the `-` as `ProvPy` 3.3.0 does. Any
+    /// other shape is an extensibility expression under production [49].
     fn mention_shape_follows(&self) -> bool {
         let kind = |i: usize| self.tokens.get(self.pos + i).map(|t| &t.kind);
-        let identifier = self
-            .profile
-            .allows(Relaxation::IdentifierOrAttributesOnBareKind);
         let is_name = |i: usize| {
             kind(i).is_some_and(|k| {
                 matches!(k, TokenKind::Name { .. })
@@ -345,12 +343,12 @@ impl<'t> Parser<'t> {
             return false;
         }
         let mut i = 2;
-        if identifier
-            && kind(i + 1) == Some(&TokenKind::Semicolon)
-            && kind(i).is_some_and(TokenKind::is_identifier_or_marker)
-        {
+        let identified = kind(i + 1) == Some(&TokenKind::Semicolon)
+            && kind(i).is_some_and(TokenKind::is_identifier_or_marker);
+        if identified {
             i += 2;
         }
+        let mut marker = false;
         for position in 0..3 {
             if position > 0 {
                 if kind(i) != Some(&TokenKind::Comma) {
@@ -361,7 +359,15 @@ impl<'t> Parser<'t> {
             if !is_name(i) {
                 return false;
             }
+            marker |= kind(i) == Some(&TokenKind::Marker);
             i += 1;
+        }
+        let identifier_read = self
+            .profile
+            .allows(Relaxation::IdentifierOrAttributesOnBareKind)
+            || marker;
+        if identified && !identifier_read {
+            return false;
         }
         match kind(i) {
             Some(TokenKind::RParen) => true,
@@ -441,7 +447,9 @@ impl<'t> Parser<'t> {
                 ));
             }
         };
-        if self.takes_no_extras(kind) {
+        // A `prov:mentionOf` that reaches here under Strict has a `-` among
+        // its names, which `formals` refuses.
+        if self.takes_no_extras(kind) && kind != Kind::Mention {
             return Err(Self::expected_at(
                 first.0,
                 &format!("no identifier in {} under the strict profile", kind.name()),

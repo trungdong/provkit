@@ -383,14 +383,16 @@ fn unrepresentable_iris_are_errors() {
             if prefix.is_empty() && iri == "http://x.org/>"
     ));
 
-    // A prefix minted for the empty namespace would write as `<>`.
+    // No prefix is minted for an empty or blank namespace, so no table
+    // holds one for a writer to refuse.
     let mut empty = Document::new();
-    assert_eq!(empty.namespaces.ensure_prefix(""), "ns1");
-    assert!(matches!(
-        provn::to_string(&empty),
-        Err(Error::UnwritableNamespace { prefix, iri, reason })
-            if prefix == "ns1" && iri.is_empty() && reason == "the namespace IRI is empty"
-    ));
+    for blank in ["", " "] {
+        assert!(matches!(
+            empty.namespaces.ensure_prefix(blank),
+            Err(Error::EmptyNamespace { prefix: None })
+        ));
+    }
+    assert_eq!(empty.namespaces, Namespaces::new());
 
     let mut declared = Document::new();
     declared.namespaces.declare("q", "http://x.org/\"").unwrap();

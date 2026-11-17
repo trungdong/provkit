@@ -136,9 +136,9 @@ fn ensure_prefix_reuses_then_mints() {
     let mut ns = Namespaces::new();
     ns.declare("ex", "http://example.org/").unwrap();
     ns.declare("ns1", "http://taken/").unwrap();
-    assert_eq!(ns.ensure_prefix("http://example.org/"), "ex");
-    assert_eq!(ns.ensure_prefix("http://new/"), "ns2");
-    assert_eq!(ns.ensure_prefix("http://new/"), "ns2");
+    assert_eq!(ns.ensure_prefix("http://example.org/").unwrap(), "ex");
+    assert_eq!(ns.ensure_prefix("http://new/").unwrap(), "ns2");
+    assert_eq!(ns.ensure_prefix("http://new/").unwrap(), "ns2");
     assert_eq!(ns.prefix_for(PROV), Some("prov"));
 }
 
@@ -304,7 +304,7 @@ fn a_merged_table_answers_prefix_for() {
 #[test]
 fn minted_prefixes_answer_prefix_for() {
     let mut ns = Namespaces::new();
-    assert_eq!(ns.ensure_prefix("http://x.org/"), "ns1");
+    assert_eq!(ns.ensure_prefix("http://x.org/").unwrap(), "ns1");
     assert_eq!(ns.prefix_for("http://x.org/"), Some("ns1"));
 }
 
@@ -510,10 +510,10 @@ fn a_bundle_default_writes_bare_and_the_document_default_takes_a_prefix() {
 #[test]
 fn minting_continues_past_the_last_minted_number() {
     let mut ns = Namespaces::new();
-    assert_eq!(ns.ensure_prefix("http://a/"), "ns1");
+    assert_eq!(ns.ensure_prefix("http://a/").unwrap(), "ns1");
     ns.declare("ns2", "http://taken/").unwrap();
-    assert_eq!(ns.ensure_prefix("http://b/"), "ns3");
-    assert_eq!(ns.ensure_prefix("http://c/"), "ns4");
+    assert_eq!(ns.ensure_prefix("http://b/").unwrap(), "ns3");
+    assert_eq!(ns.ensure_prefix("http://c/").unwrap(), "ns4");
     // A minted prefix is a binding like any other to equality.
     let mut other = Namespaces::new();
     other.declare("ns1", "http://a/").unwrap();
@@ -524,19 +524,62 @@ fn minting_continues_past_the_last_minted_number() {
 }
 
 #[test]
-fn an_empty_iri_is_refused_and_a_space_is_not() {
+fn a_blank_iri_is_refused_and_a_padded_one_is_not() {
     let mut ns = Namespaces::new();
     ns.declare("ex", "http://example.org/").unwrap();
     ns.set_default("http://default.org/").unwrap();
     let before = ns.clone();
-    assert!(matches!(ns.declare("z", ""), Err(Error::EmptyNamespace)));
-    assert!(matches!(ns.declare("ex", ""), Err(Error::EmptyNamespace)));
-    assert!(matches!(ns.set_default(""), Err(Error::EmptyNamespace)));
+    // Whitespace is what Python's `str.isspace()` counts, so U+001C to
+    // U+001F count and U+200B does not.
+    for blank in ["", " ", "\t\u{a0}", "\u{1c}", "\u{3000}"] {
+        for prefix in ["z", "ex"] {
+            assert!(
+                matches!(
+                    ns.declare(prefix, blank),
+                    Err(Error::EmptyNamespace { prefix: Some(p) }) if p == prefix
+                ),
+                "{blank:?}"
+            );
+        }
+        assert!(
+            matches!(
+                ns.set_default(blank),
+                Err(Error::EmptyNamespace { prefix: Some(p) }) if p.is_empty()
+            ),
+            "{blank:?}"
+        );
+        assert!(
+            matches!(
+                ns.ensure_prefix(blank),
+                Err(Error::EmptyNamespace { prefix: None })
+            ),
+            "{blank:?}"
+        );
+    }
     assert_eq!(ns, before);
     assert_eq!(ns.default_namespace(), Some("http://default.org/"));
-    // The IRI is never trimmed.
-    ns.declare("z", " ").unwrap();
-    ns.set_default(" ").unwrap();
-    assert_eq!(ns.lookup("z"), Some(" "));
-    assert_eq!(ns.default_namespace(), Some(" "));
+    // The IRI is never trimmed, and only an IRI of whitespace alone is blank.
+    ns.declare("z", " x").unwrap();
+    ns.declare("y", "\u{200b}").unwrap();
+    ns.set_default(" x").unwrap();
+    assert_eq!(ns.lookup("z"), Some(" x"));
+    assert_eq!(ns.default_namespace(), Some(" x"));
+    assert_eq!(
+        Error::EmptyNamespace {
+            prefix: Some("z".into())
+        }
+        .to_string(),
+        "prefix `z`: a namespace IRI cannot be empty or whitespace"
+    );
+    assert_eq!(
+        Error::EmptyNamespace {
+            prefix: Some(String::new())
+        }
+        .to_string(),
+        "the default namespace: a namespace IRI cannot be empty or whitespace"
+    );
+    assert_eq!(
+        Error::EmptyNamespace { prefix: None }.to_string(),
+        "a namespace IRI cannot be empty or whitespace"
+    );
 }

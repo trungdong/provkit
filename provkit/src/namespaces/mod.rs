@@ -54,11 +54,14 @@ impl Namespaces {
     ///
     /// # Errors
     ///
-    /// [`Error::EmptyNamespace`] if `iri` is the empty string. The table
-    /// keeps its earlier default. A whitespace-only `iri` is not empty.
+    /// [`Error::EmptyNamespace`] if `iri` is empty or all whitespace, as
+    /// Python's `str.isspace()` counts it. The table keeps its earlier
+    /// default.
     pub fn set_default(&mut self, iri: &str) -> Result<()> {
-        if iri.is_empty() {
-            return Err(Error::EmptyNamespace);
+        if is_blank(iri) {
+            return Err(Error::EmptyNamespace {
+                prefix: Some(String::new()),
+            });
         }
         self.default = Some(Arc::from(iri));
         Ok(())
@@ -78,16 +81,18 @@ impl Namespaces {
     /// start with a letter, continue with letters, digits, `-`, `_`, `.` or
     /// another `PN_CHARS` character such as U+00B7, and not end in `.`. `_`,
     /// which introduces blank nodes, is never a prefix.
-    /// [`Error::EmptyNamespace`] if `iri` is the empty string. A whitespace-only
-    /// `iri` is not empty.
+    /// [`Error::EmptyNamespace`] if `iri` is empty or all whitespace, as
+    /// Python's `str.isspace()` counts it.
     /// [`Error::ReservedPrefix`] if `prefix` is `prov` or `xsd` and `iri` is
     /// not its fixed IRI.
     pub fn declare(&mut self, prefix: &str, iri: &str) -> Result<()> {
         if !pn::is_pn_prefix(prefix) {
             return Err(Error::InvalidPrefix(prefix.into()));
         }
-        if iri.is_empty() {
-            return Err(Error::EmptyNamespace);
+        if is_blank(iri) {
+            return Err(Error::EmptyNamespace {
+                prefix: Some(prefix.into()),
+            });
         }
         if let Some(expected) = reserved(prefix) {
             if expected == iri {
@@ -196,10 +201,16 @@ impl Namespaces {
     }
 
     /// The prefix for `namespace`, minting `ns1`, `ns2`, ... when none exists.
-    /// An empty `namespace` gets a prefix too, and both writers then refuse
-    /// the table.
-    pub fn ensure_prefix(&mut self, namespace: &str) -> String {
-        WriteScope::of(self).ensure_prefix(namespace)
+    ///
+    /// # Errors
+    ///
+    /// [`Error::EmptyNamespace`] if `namespace` is empty or all whitespace,
+    /// as [`declare`](Self::declare) counts it. No prefix is minted.
+    pub fn ensure_prefix(&mut self, namespace: &str) -> Result<String> {
+        if is_blank(namespace) {
+            return Err(Error::EmptyNamespace { prefix: None });
+        }
+        Ok(WriteScope::of(self).ensure_prefix(namespace))
     }
 
     /// This table with `parent`'s bindings behind it.
@@ -390,6 +401,13 @@ impl<'a> WriteScope<'a> {
             n += 1;
         }
     }
+}
+
+/// Whether `iri` is empty or all whitespace. The whitespace is what Python's
+/// `str.isspace()` counts: Unicode `White_Space` and U+001C to U+001F.
+pub(crate) fn is_blank(iri: &str) -> bool {
+    iri.chars()
+        .all(|c| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c))
 }
 
 /// The shared IRI of a reserved prefix.

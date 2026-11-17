@@ -320,16 +320,6 @@ mod tests {
     }
 
     #[test]
-    fn a_table_with_a_prefix_minted_for_the_empty_namespace_is_refused() {
-        let mut d = Document::new();
-        assert_eq!(d.namespaces.ensure_prefix(""), "ns1");
-        assert!(matches!(
-            json::to_string(&d),
-            Err(crate::Error::EmptyNamespace)
-        ));
-    }
-
-    #[test]
     fn a_bundle_writes_bare_names_against_its_own_default() {
         let mut d = Document::new();
         d.namespaces.set_default("http://one.org/").unwrap();

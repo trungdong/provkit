@@ -5,7 +5,7 @@ use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use crate::{Error, Result, pn};
+use crate::{Error, Result, namespaces, pn};
 
 // ANCHOR: qname
 /// A PROV identifier: a namespace IRI and a local part.
@@ -35,7 +35,8 @@ impl QName {
     ///
     /// # Errors
     ///
-    /// [`Error::EmptyNamespace`] if `namespace` is the empty string.
+    /// [`Error::EmptyNamespace`] if `namespace` is empty or all whitespace,
+    /// as [`Namespaces::declare`](crate::Namespaces::declare) counts it.
     /// [`Error::InvalidQName`] if `local` holds a character that `PN_LOCAL`
     /// admits nowhere, bare or after `\`: a space or another separator, a
     /// control character, a symbol outside `PN_CHARS` such as `£` or `×`,
@@ -54,8 +55,8 @@ impl QName {
     ///
     /// As [`new`](Self::new).
     pub(crate) fn in_namespace(namespace: Arc<str>, local: &str) -> Result<Self> {
-        if namespace.is_empty() {
-            return Err(Error::EmptyNamespace);
+        if namespaces::is_blank(&namespace) {
+            return Err(Error::EmptyNamespace { prefix: None });
         }
         Self::check_local(local)?;
         Ok(QName {
@@ -234,10 +235,19 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_namespace_is_refused() {
-        assert!(matches!(QName::new("", "e"), Err(Error::EmptyNamespace)));
-        assert!(matches!(QName::new("", ""), Err(Error::EmptyNamespace)));
-        assert!(QName::new(" ", "e").is_ok());
+    fn an_empty_or_blank_namespace_is_refused() {
+        for namespace in ["", " ", "\u{1c}\u{3000}"] {
+            for local in ["e", ""] {
+                assert!(
+                    matches!(
+                        QName::new(namespace, local),
+                        Err(Error::EmptyNamespace { prefix: None })
+                    ),
+                    "{namespace:?} {local:?}"
+                );
+            }
+        }
+        assert!(QName::new(" x", "e").is_ok());
     }
 
     #[test]

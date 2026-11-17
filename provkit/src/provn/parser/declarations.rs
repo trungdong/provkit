@@ -6,7 +6,7 @@ use super::{NameParts, Parser, at};
 use crate::error::clip;
 use crate::pn;
 use crate::provn::Relaxation;
-use crate::{Error, Namespaces, Result};
+use crate::{Error, Namespaces, Result, namespaces};
 
 impl<'t> Parser<'t> {
     // ANCHOR: namespace_declarations
@@ -48,8 +48,9 @@ impl<'t> Parser<'t> {
                 }
                 let token = self.peek();
                 let iri = self.iri()?;
-                if iri.is_empty() {
-                    return Err(at(token, Error::EmptyNamespace));
+                if namespaces::is_blank(iri) {
+                    let prefix = Some(name.local.to_owned());
+                    return Err(at(token, Error::EmptyNamespace { prefix }));
                 }
                 // `prov` and `xsd` are predeclared: section 3.7.4.
                 let predeclared = Namespaces::is_predeclared(name.local, iri);

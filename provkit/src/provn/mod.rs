@@ -36,8 +36,8 @@ pub enum Profile {
     /// `prov:mentionOf` (PROV-LINKS) is a mention only when three names
     /// follow it, with or without an attribute block. Under `Strict` an
     /// identifier makes it an extensibility expression (production
-    /// \[49\]), parsed and left out of the document, and a `-` for any of
-    /// the three names is refused.
+    /// \[49\]), parsed and left out of the document, unless one of the
+    /// three names is `-`. A `-` for any of the three names is refused.
     ///
     /// Both profiles reject a repeated `default`, a prefix that is not a
     /// `PN_PREFIX`, and every other text the grammar rejects.

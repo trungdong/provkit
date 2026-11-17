@@ -178,8 +178,9 @@ bundle's name in the bundle's own scope, and refuses `bundle` and
 statement or a syntax error. A prefixed name starts an extensibility
 expression, except `prov:mentionOf` when `mention_shape_follows`, which
 looks ahead without consuming for `(`, three names separated by
-commas, and `)` or `, [`. A `-` counts as a name under both profiles,
-and the identifier form is `Default` only. A PROV statement goes
+commas, and `)` or `, [`. A `-` counts as a name under both profiles.
+The identifier form is `Default`'s, and `Strict` takes it only when a name
+is `-`, so that `formals` refuses the `-`. A PROV statement goes
 through `expression`, below the span, and the record it returns goes
 to the builder.
 `expression` reads every PROV statement with one method, where the
@@ -220,8 +221,9 @@ both profiles. `seen` is a `HashSet<&str>` borrowing from the tokens,
 as chapter 4's sets borrowed their keys. `prefix_name`, below the span,
 tests the prefix's text as written with `is_pn_prefix` from chapter 2,
 because production [46] takes a `PN_PREFIX`, which has no escapes.
-An empty IRI, as in `prefix z <>` or `default <>`, is refused under both
-profiles, although `IRI_REF` admits `<>`.
+An empty or all-whitespace IRI, as in `prefix z <>`, `default <>` or
+`prefix z <\u00A0>`, is refused under both profiles at the IRI token,
+although `IRI_REF` admits it.
 
 ### provkit/src/provn/extension.rs
 

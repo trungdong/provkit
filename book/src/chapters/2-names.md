@@ -75,7 +75,7 @@ else.
 The namespace is an `Arc<str>`, a reference-counted string that many
 names share, and the local part is a `Box<str>`, one owned string per
 name. Neither field is public. `QName::new` takes two `&str`, refuses
-an empty namespace, checks the local part with `check_local`, and builds the name; the
+an empty or whitespace-only namespace, checks the local part with `check_local`, and builds the name; the
 crate-private `in_namespace` takes an `Arc<str>` instead, so a name
 resolved through a namespace table shares the table's allocation rather
 than copying the IRI. The check refuses a character that no
@@ -176,10 +176,11 @@ prefix, and a table that holds only valid prefixes writes to both
 formats ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "`Namespaces::declare` rejects a prefix"). `prov` or `xsd`
 at any IRI but its fixed one is `Error::ReservedPrefix`, which carries
-the prefix, the expected IRI and the one found. An empty IRI is
-`Error::EmptyNamespace`, a departure from the Recommendation
+the prefix, the expected IRI and the one found. An empty or
+all-whitespace IRI is `Error::EmptyNamespace`, which names the prefix and
+is a departure from the Recommendation
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"An empty namespace IRI"). A declaration of `prov` or `xsd`
+"A namespace IRI that is empty or all whitespace"). A declaration of `prov` or `xsd`
 at the right IRI is accepted and changes nothing, so a PROV-JSON
 document that restates a predeclared binding still reads, and so does
 a PROV-N one under the `Default` profile. Everything else goes to

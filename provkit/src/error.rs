@@ -125,13 +125,19 @@ pub enum Error {
         /// The character that prevents it.
         reason: String,
     },
-    /// A namespace IRI is empty. `Namespaces::declare`,
-    /// `Namespaces::set_default` and `QName::new` refuse the empty string as
-    /// a namespace IRI.
-    #[error("a namespace IRI cannot be empty")]
-    EmptyNamespace,
+    /// A namespace IRI is empty or all whitespace. `Namespaces::declare`,
+    /// `Namespaces::set_default`, `Namespaces::ensure_prefix` and
+    /// `QName::new` refuse one.
+    #[error("{}a namespace IRI cannot be empty or whitespace", blank_namespace(.prefix.as_deref()))]
+    #[non_exhaustive]
+    EmptyNamespace {
+        /// The prefix whose declaration is at fault. The empty string stands
+        /// for the default namespace, and `None` for a namespace that no
+        /// declaration names.
+        prefix: Option<String>,
+    },
     /// A namespace declaration PROV-N cannot write, because the IRI holds a
-    /// character `IRI_REF` forbids, or is empty.
+    /// character `IRI_REF` forbids.
     #[error("PROV-N cannot declare {}: {reason}", declaration(.prefix, .iri))]
     #[non_exhaustive]
     UnwritableNamespace {
@@ -213,6 +219,16 @@ fn declaration(prefix: &str, iri: &str) -> String {
         format!("the default namespace <{iri}>")
     } else {
         format!("prefix `{prefix}` for <{iri}>")
+    }
+}
+
+/// The declaration at fault in [`Error::EmptyNamespace`], with its separator,
+/// or nothing when no declaration is at fault.
+fn blank_namespace(prefix: Option<&str>) -> String {
+    match prefix {
+        None => String::new(),
+        Some("") => "the default namespace: ".to_owned(),
+        Some(p) => format!("prefix `{}`: ", clip(p)),
     }
 }
 
