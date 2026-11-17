@@ -489,6 +489,10 @@ fn a_language_subtag_may_hold_digits() {
 fn a_raw_line_break_ends_a_short_string() {
     assert_eq!(syntax_at("\"a\nb\""), (1, 1));
     assert_eq!(syntax_at("\"a\rb\""), (1, 1));
+    assert_eq!(
+        syntax(tokenize("\"a\nb\"").unwrap_err()).1,
+        "unterminated string"
+    );
 }
 
 #[test]

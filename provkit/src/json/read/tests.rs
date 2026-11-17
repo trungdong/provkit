@@ -861,6 +861,13 @@ fn equal_values_under_one_name_are_one_pair() {
     assert_eq!(read.len(), 2);
     assert!(matches!(&read[0], Value::Typed(t) if t.lexical() == " 5 "));
     assert_eq!(read[1].datatype(), Some(XSD_LONG.clone()));
+    // An `xsd:float` compares in single precision, so these are one value.
+    let d = doc(&entity(
+        r#""ex:f": [{"$": "16777216", "type": "xsd:float"}, {"$": "16777217", "type": "xsd:float"}]"#,
+    ));
+    let read = values(&d, "f");
+    assert_eq!(read.len(), 1);
+    assert!(matches!(&read[0], Value::Typed(t) if t.lexical() == "16777216"));
 }
 
 #[test]

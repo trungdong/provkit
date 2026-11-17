@@ -503,6 +503,8 @@ fn a_bare_minus_zero_is_an_int_and_a_plus_sign_is_a_syntax_error() {
 fn a_language_tag_ends_at_an_underscore_and_the_rest_is_a_syntax_error() {
     for profile in [Profile::Strict, Profile::Default] {
         syntax(err(r#"entity(ex:e, [ex:a="x" @en_US])"#, profile));
+        // A language tag and a datatype together are not one literal.
+        syntax(err(r#"entity(ex:e, [ex:a="x"@en %% xsd:string])"#, profile));
     }
 }
 

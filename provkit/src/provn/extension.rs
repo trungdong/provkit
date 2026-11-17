@@ -318,6 +318,14 @@ mod tests {
         let (doc, ignored) = report("prov:entity(ex:e)", Profile::Strict).unwrap();
         assert!(doc.records.is_empty(), "{:?}", doc.records);
         assert_eq!(ignored[0].name, "prov:entity");
+        // A `provext:` statement, as ProvToolbox writes an identified or
+        // attributed `specializationOf`, is an extension under both profiles.
+        for profile in [Profile::Strict, Profile::Default] {
+            let (doc, ignored) =
+                report("provext:specializationOf(ex:id; ex:e2, ex:e1)", profile).unwrap();
+            assert!(doc.records.is_empty(), "{:?}", doc.records);
+            assert_eq!(ignored[0].name, "provext:specializationOf");
+        }
     }
 
     #[test]

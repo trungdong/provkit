@@ -1,4 +1,6 @@
-use crate::test_util::{Broken, bundle, document, dt, element, entity, entity_in, ex, relation};
+use crate::test_util::{
+    Broken, bundle, document, dt, element, entity, entity_in, ex, parties, relation,
+};
 use crate::well_known::{PROV_LABEL, PROV_TYPE, XSD_INT, XSD_INTEGER, XSD_LONG};
 use crate::{
     Attributes, Bundle, Document, Error, Formal, FormalAttr as F, Kind, LangStr, Membership,
@@ -148,6 +150,74 @@ fn an_identifier_on_a_bare_kind_is_written_and_reads_back() {
         ),
         "{text}"
     );
+    // The other three kinds follow the same rule.
+    let identified = |kind, first, second| {
+        relation(
+            kind,
+            Some(ex("i")),
+            vec![
+                (first, Formal::Name(ex("a"))),
+                (second, Formal::Name(ex("b"))),
+            ],
+        )
+    };
+    for (record, expected) in [
+        (
+            identified(Kind::Specialization, F::SpecificEntity, F::GeneralEntity),
+            "specializationOf(ex:i; ex:a, ex:b)",
+        ),
+        (
+            identified(Kind::Alternate, F::Alternate1, F::Alternate2),
+            "alternateOf(ex:i; ex:a, ex:b)",
+        ),
+        (
+            identified(Kind::Mention, F::SpecificEntity, F::GeneralEntity),
+            "mentionOf(ex:i; ex:a, ex:b, -)",
+        ),
+    ] {
+        assert_eq!(line(record.clone()), expected);
+        let d = document(vec![record]);
+        let text = provn::to_string(&d).unwrap();
+        assert_eq!(provn::read(&text).unwrap(), d, "{expected}");
+        assert!(
+            matches!(
+                provn::read_with(&text, provn::Profile::Strict),
+                Err(Error::Syntax { .. })
+            ),
+            "{text}"
+        );
+    }
+    // Attributes on the other three follow the same rule.
+    let attributed = |kind| {
+        let attributes = [(ex("k"), "v".into())].into_iter().collect();
+        Record::from_parts(kind, None, parties(kind), attributes).unwrap()
+    };
+    for (record, expected) in [
+        (
+            attributed(Kind::Specialization),
+            "specializationOf(ex:p, ex:p, [ex:k=\"v\"])",
+        ),
+        (
+            attributed(Kind::Alternate),
+            "alternateOf(ex:p, ex:p, [ex:k=\"v\"])",
+        ),
+        (
+            attributed(Kind::Membership),
+            "hadMember(ex:p, ex:p, [ex:k=\"v\"])",
+        ),
+    ] {
+        assert_eq!(line(record.clone()), expected);
+        let d = document(vec![record]);
+        let text = provn::to_string(&d).unwrap();
+        assert_eq!(provn::read(&text).unwrap(), d, "{expected}");
+        assert!(
+            matches!(
+                provn::read_with(&text, provn::Profile::Strict),
+                Err(Error::Syntax { .. })
+            ),
+            "{text}"
+        );
+    }
 }
 
 #[test]
@@ -256,6 +326,9 @@ fn a_lone_minus_or_empty_int_is_not_bare() {
             "lexical form {text:?}"
         );
     }
+    // A number keeps its text, so `-0` is written as it was read.
+    let zero = Value::typed("-0", XSD_INT.clone()).unwrap();
+    assert_eq!(entity_line([(ex("i"), zero)]), "entity(ex:e, [ex:i=-0])");
 }
 
 /// `PN_LOCAL` [53] admits `-` after the first character and `.` between the

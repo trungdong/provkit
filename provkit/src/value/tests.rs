@@ -291,6 +291,10 @@ fn floats_compare_in_single_precision() {
     let forms = ["0.1", "0.100000001"];
     assert_one_value(&XSD_FLOAT, &forms);
     assert_distinct_values(&XSD_DOUBLE, &forms);
+    // 2^24 and 2^24 + 1 are the first integers a single cannot tell apart.
+    let big = ["16777216", "16777217"];
+    assert_one_value(&XSD_FLOAT, &big);
+    assert_distinct_values(&XSD_DOUBLE, &big);
     assert_one_value(&XSD_FLOAT, &["INF", "1e39"]);
     assert_distinct_values(&XSD_DOUBLE, &["INF", "1e39"]);
 }

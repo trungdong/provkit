@@ -511,12 +511,37 @@ mod tests {
             QName::new(crate::well_known::PROV, "activity").unwrap(),
             ex("a"),
         );
+        // A literal keeps the text it was read with, and a number keeps its
+        // text, so `-0` is written as `-0`.
+        a.insert(
+            ex("padded"),
+            crate::Value::typed(" 5 ", crate::well_known::XSD_INT.clone()).unwrap(),
+        );
+        a.insert(
+            ex("zero"),
+            crate::Value::typed("-0", crate::well_known::XSD_INT.clone()).unwrap(),
+        );
         let mut d = document(vec![element(Kind::Entity, ex("e"), a)]);
         for &kind in Kind::ALL {
             d.records
                 .push(relation(kind, Some(ex(kind.name())), parties(kind)));
         }
+        // The three kinds that PROV-N leaves without an identifier keep
+        // theirs and their attributes in the standard section.
+        for kind in [Kind::Specialization, Kind::Alternate, Kind::Membership] {
+            let mut attributes = Attributes::new();
+            attributes.insert(ex("k"), "v");
+            let id = ex(&format!("attributed-{}", kind.name()));
+            d.records
+                .push(Record::from_parts(kind, Some(id), parties(kind), attributes).unwrap());
+        }
         let (text, v) = round_trip(&d);
+        for kind in [Kind::Specialization, Kind::Alternate, Kind::Membership] {
+            let section = &v[kind.name()];
+            assert!(section[format!("ex:{}", kind.name())].is_object(), "{text}");
+            let attributed = &section[format!("ex:attributed-{}", kind.name())];
+            assert_eq!(attributed["ex:k"], "v", "{text}");
+        }
         let body = &v["entity"]["ex:e"];
         for key in ["ex:i", "ex:f", "ex:b", "ex:q", "ex:d", "ex:l"] {
             assert!(body[key]["$"].is_string(), "{key} must be a `$` string");
@@ -531,6 +556,14 @@ mod tests {
         assert_eq!(
             body["prov:activity"],
             serde_json::json!({"$": "ex:a", "type": "xsd:QName"})
+        );
+        assert_eq!(
+            body["ex:padded"],
+            serde_json::json!({"$": " 5 ", "type": "xsd:int"})
+        );
+        assert_eq!(
+            body["ex:zero"],
+            serde_json::json!({"$": "-0", "type": "xsd:int"})
         );
         assert_eq!(body["ex:s"].as_array().unwrap().len(), 2);
     }

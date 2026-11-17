@@ -156,7 +156,9 @@ impl Eq for Document {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_util::{agent, bundle, entity, ex};
+    use crate::test_util::{agent, bundle, entity, ex, relation};
+    use crate::well_known::XSD_INT;
+    use crate::{Formal, FormalAttr, Kind, Record, Value};
 
     fn bundled(bundles: Vec<Bundle>) -> Document {
         Document {
@@ -174,6 +176,57 @@ mod tests {
         assert_eq!(a, b);
         b.records.push(entity("e3"));
         assert_ne!(a, b);
+
+        // A membership is one record per member.
+        let member = |entity: &str| {
+            relation(
+                Kind::Membership,
+                None,
+                vec![
+                    (FormalAttr::Collection, Formal::Name(ex("c"))),
+                    (FormalAttr::Entity, Formal::Name(ex(entity))),
+                ],
+            )
+        };
+        let mut both = Document::new();
+        both.records.extend([member("a"), member("b")]);
+        let mut reversed = Document::new();
+        reversed.records.extend([member("b"), member("a")]);
+        let mut one = Document::new();
+        one.records.push(member("a"));
+        assert_eq!(both, reversed);
+        assert_ne!(both, one);
+
+        // The spelling of a literal does not count and the identifier does.
+        let int = |text: &str| Value::typed(text, XSD_INT.clone()).unwrap();
+        let with = |value: Value, id: Option<&str>| {
+            let attributes = [(ex("k"), value)].into_iter().collect();
+            let mut d = Document::new();
+            d.records
+                .push(Record::from_parts(Kind::Usage, id.map(ex), vec![], attributes).unwrap());
+            d
+        };
+        // One value in two spellings is one value.
+        assert_eq!(with(int(" 5 "), None), with(int("+005"), None));
+        assert_ne!(with(int("5"), None), with(int("6"), None));
+        // An identifier is part of a record, so presence and value both count.
+        assert_ne!(with(int("5"), None), with(int("5"), Some("u")));
+        assert_ne!(with(int("5"), Some("u")), with(int("5"), Some("v")));
+        assert_eq!(with(int("5"), Some("u")), with(int("5"), Some("u")));
+
+        // A blank-node label does not count.
+        #[cfg(feature = "json")]
+        {
+            let read = |label: &str| {
+                crate::json::read(&format!(
+                    r#"{{"prefix": {{"ex": "http://example.org/"}},
+                    "used": {{"{label}": {{"prov:activity": "ex:a"}}}}}}"#
+                ))
+                .unwrap()
+            };
+            assert_eq!(read("_:first"), read("_:second"));
+            assert_ne!(read("_:first"), read("ex:named"));
+        }
     }
 
     #[test]
