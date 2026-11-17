@@ -33,7 +33,7 @@ build time for a smaller, faster binary. The `dev` profile that
 `cargo build` uses is not changed, and neither is the `test` profile
 that `cargo test` uses, which inherits from `dev`. The lint table sits
 above the profile in the same file, and
-[chapter 1](1-orientation.md#cargotoml) reads it. Each crate manifest
+[Chapter 1](1-orientation.md#cargotoml) describes it. Each crate manifest
 carries `[lints]` with `workspace = true`, so both crates build under
 that one table.
 
@@ -271,8 +271,8 @@ exclude. The step compiles the library and every dependency its
 default features pull in for a target with no operating system
 beneath it, so a dependency that needs one may not compile there.
 The target is installed in the toolchain step with `targets:
-wasm32-unknown-unknown`. It is one of the checks that run in CI only,
-and `rustup target add wasm32-unknown-unknown` adds the target
+wasm32-unknown-unknown`. It is one of the CI checks that need a tool or
+target beyond a default Rust install, and `rustup target add wasm32-unknown-unknown` adds the target
 locally.
 
 ### Why `cargo deny` and `cargo about` both?
@@ -370,9 +370,9 @@ advisories ok, bans ok, licenses ok, sources ok
 
 The second reads every file in the repository that is not ignored,
 the corpus excluded, and prints nothing when it finds no misspelling,
-exiting 0. These two and the `wasm32-unknown-unknown` build are the
-checks that run in CI only, and `cargo build -p provkit --target
-wasm32-unknown-unknown` also passes once
+exiting 0. These two and the `wasm32-unknown-unknown` build
+need a tool or target beyond a default Rust install.
+`cargo build -p provkit --target wasm32-unknown-unknown` passes once
 `rustup target add wasm32-unknown-unknown` has run.
 
 ## Try it
