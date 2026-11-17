@@ -36,8 +36,8 @@ the four non-expandable positions of PROV-CONSTRAINTS Table 3 meets a present
 one. `provn::read_with` takes a `provn::Profile`. `Strict` accepts the whole
 PROV-N grammar and the MUST statements of its prose, with the departures
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-records, and `Default` adds the extensions ProvPy and ProvToolbox write, with
-the exceptions that file lists.
+records, and `Default` adds six extensions that ProvPy 3.3.0's `default`
+profile also reads, which that file lists.
 
 ## Features
 

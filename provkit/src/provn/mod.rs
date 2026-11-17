@@ -42,8 +42,8 @@ pub enum Profile {
     /// Both profiles reject a repeated `default`, a prefix that is not a
     /// `PN_PREFIX`, and every other text the grammar rejects.
     Strict,
-    /// The grammar plus the six extensions that `Strict` rejects, which
-    /// `ProvPy` and `ProvToolbox` write, with the exceptions that
+    /// The grammar plus six extensions that `Strict` rejects and the `default`
+    /// profile of `ProvPy` 3.3.0 also reads, which
     /// [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
     /// lists. `prov:mentionOf` with an identifier, or with `-` for its bundle,
     /// is a mention under `Default`, as bare `mentionOf` is. `-` for a

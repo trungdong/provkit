@@ -1,5 +1,5 @@
 [files]
-# The corpus is a submodule shared with ProvPy; its text is not ours to spell.
+# The corpus is the prov-corpus submodule; its text is not ours to spell.
 extend-exclude = ["corpus/"]
 
 [default.extend-words]

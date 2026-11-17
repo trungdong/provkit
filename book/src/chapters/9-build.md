@@ -89,15 +89,15 @@ with no arguments, so the file above is its whole configuration.
 
 `typos` reads every file in the repository that is not ignored and
 compares each word with its list of common misspellings. The `[files]`
-table excludes the corpus, because the submodule is shared with ProvPy
-and its text is not this repository's to spell. Each entry under
-`[default.extend-words]` maps a word to itself, which tells `typos`
-that the spelling is intended, and the entries come in groups by where
-the words occur. The British spellings are the first group. The others
-are an identifier from the PROV-N name grammar and the strings the
-tests need, a value an ill-formed `xsd:int` keeps, a fragment of an
-escaped word in the lexer tests and a misspelt keyword that a test
-expects to be a syntax error.
+table excludes the corpus, because the submodule belongs to the
+prov-corpus repository and its text is not this repository's to spell.
+Each entry under `[default.extend-words]` maps a word to itself, which
+tells `typos` that the spelling is intended, and the entries come in
+groups by where the words occur. The British spellings are the first
+group. The others are an identifier from the PROV-N name grammar and
+the strings the tests need, a value an ill-formed `xsd:int` keeps, a
+fragment of an escaped word in the lexer tests and a misspelt keyword
+that a test expects to be a syntax error.
 
 ### about.toml and about.hbs
 

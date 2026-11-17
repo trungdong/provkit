@@ -34,9 +34,9 @@ form the grammar does not allow, each listed on the
 of the six with a production or section, among them a prefixed
 `prov:mentionOf` that is an extensibility expression rather than a
 mention unless three names follow it. `Default` is the grammar plus the forms
-in that list, which ProvPy and ProvToolbox write. Below the span,
-`Relaxation` has one variant per item in the `Strict` list, and
-`Profile::allows` answers `false` for `Strict` and `true` for
+in that list, which ProvPy 3.3.0's `default` profile also reads.
+Below the span, `Relaxation` has one variant per item in the `Strict` list,
+and `Profile::allows` answers `false` for `Strict` and `true` for
 `Default` whatever the relaxation; a third profile would name the ones
 it reads there. The parser asks `allows` with the
 relaxation in hand wherever one applies, instead of comparing the
@@ -319,9 +319,11 @@ back as `xsd:int` unquoted, and every other typed value as a string with `%%` an
 ### Why two profiles, and why is `Default` the default?
 
 `Strict` is the reference for the grammar and the MUST statements of
-the prose, and `Default` adds what ProvToolbox and ProvPy write, the
-forms the `Relaxation` enum names, except the two grammar-invalid
-forms ProvToolbox 2.2.5 writes and its `provext:` statements. The
+the prose, and `Default` adds the forms the `Relaxation` enum names.
+ProvPy writes three of them, and ProvPy 3.3.0's `default` profile reads all
+six. `Default` still refuses the two grammar-invalid forms ProvToolbox 2.2.5
+writes, and it leaves out ProvToolbox's `provext:` statements as
+extensibility expressions. The
 `strict` profile of ProvPy 3.3.0 refuses four of those forms too, and
 productions [1], [24] to [26] and [45] and the MUST in section 3.7.4
 are the grammar behind each refusal

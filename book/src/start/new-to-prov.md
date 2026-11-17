@@ -170,8 +170,8 @@ declared inside a bundle applies only there, as
 ## ProvPy and ProvToolbox are the libraries provkit is compared with
 
 [ProvPy](https://github.com/trungdong/prov) is a Python implementation
-of PROV-DM, published on PyPI as `prov`. provkit's test corpus is
-shared with it, and the book compares provkit with ProvPy 3.3.0.
+of PROV-DM, published on PyPI as `prov`. The book compares provkit
+with ProvPy 3.3.0.
 
 [ProvToolbox](https://lucmoreau.github.io/ProvToolbox/) is a Java
 library for PROV-DM. Its command-line tool is `provconvert`, and the

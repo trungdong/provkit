@@ -222,7 +222,8 @@ and `"1e999"` equals `"INF"` as an `xsd:double`
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "A typed literal is never rejected for its text"). Equal values under
 one datatype are one value, and ProvPy 3.3.0 compares the numeric and
-boolean datatypes by value too ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+boolean datatypes by value too, except that it finds two `xsd:float`
+values unequal that differ only beyond single precision ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Values of the numeric and boolean datatypes compare by value"). Two
 edges follow. Text outside the datatype's lexical space compares as
 text, which is why `Key::integer` checks the bounds and `"300"` as

@@ -2,21 +2,21 @@
 
 The tests live in three places. Unit tests sit beside each module, in
 a sibling `tests.rs` or an inline `mod tests`, and reach private
-items. The corpus tests under `provkit/tests` run every file of a
-corpus shared with ProvPy, and every excluded file and known
-difference is listed in `provkit/tests/data/*.tsv` with a reason. The
-end-to-end tests under `provkit-cli/tests` run the built binary. This
-chapter describes
-the helpers the unit tests share, the report
-that collects failures across a corpus, the test that reads every
-PROV-JSON file, the test that checks every probe against its row, the
-three data files, the binary's tests and the manifest lines that
-decide which tests ship. It builds on every chapter before it, on chapter 1
-for the `test_util` module under `#[cfg(test)]` and the `[[test]]`
-targets, on chapter 2 for `mod tests;`, on chapter 3 for `DateTime::parse`
-and argument-position `impl Trait`, on chapter 4 for the equality every
-round trip ends in, on chapter 5 for `json::read` and `json::to_string`,
-on chapter 6 for `provn::read_with` and the two [profiles](../reference/glossary.md#profile-provkit), and on chapter 7
+items. The corpus tests under `provkit/tests` run the PROV-JSON,
+PROV-N and constraints files of the prov-corpus repository, and every
+excluded file and known difference is listed in
+`provkit/tests/data/*.tsv` with a reason. The end-to-end tests under
+`provkit-cli/tests` run the built binary. This chapter describes the
+helpers the unit tests share, the report that collects failures across
+a corpus, the test that reads every PROV-JSON file, the test that
+checks every probe against its row, the three data files, the binary's
+tests and the manifest lines that decide which tests ship. It builds on every chapter before it, on chapter 1 for the
+`test_util` module under `#[cfg(test)]` and the `[[test]]` targets, on
+chapter 2 for `mod tests;`, on chapter 3 for `DateTime::parse` and
+argument-position `impl Trait`, on chapter 4 for the equality every
+round trip ends in, on chapter 5 for `json::read` and
+`json::to_string`, on chapter 6 for `provn::read_with` and the two
+[profiles](../reference/glossary.md#profile-provkit), and on chapter 7
 for the binary the end-to-end tests run.
 
 ## What the code does
@@ -133,19 +133,20 @@ the rest.
 ### provkit/tests/corpus_json.rs
 
 The corpus is the git submodule `corpus/`, whose `.gitmodules` entry
-points at the `prov-corpus` repository. ProvPy shares it, and it is
-read-only here, so a corpus change goes to that repository and
-arrives as a submodule bump. The submodule is pinned at a tag, which
-`git submodule status` prints beside the commit
+points at the `prov-corpus` repository. It is read-only here, so a
+corpus change goes to that repository and arrives as a submodule bump.
+The submodule is pinned at a tag, which `git submodule status` prints
+beside the commit
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"The tests read"). `json/` holds the PROV-JSON
-documents of the shared ProvToolbox corpus, `provn/spec/prov-n/` and
-`provn/spec/prov-dm/` hold the examples of the two Recommendations
-wrapped in a document, `provn/provtoolbox/` holds ProvToolbox's own
-test documents, `provn/provtoolbox-corpus/` holds the PROV-N that
-ProvToolbox wrote from the JSON corpus, a twin of the same name for
-388 of the 398 JSON files, `provn/probes/` holds the probes and
-`expected.tsv`, and `constraints/` holds the PROV-CONSTRAINTS [unification](../reference/glossary.md#unification-prov) cases.
+"The tests read"). `json/` holds the PROV-JSON documents of the shared
+ProvToolbox corpus, `provn/spec/prov-n/` and `provn/spec/prov-dm/`
+hold the examples of the two Recommendations wrapped in a document,
+`provn/provtoolbox/` holds ProvToolbox's own test documents,
+`provn/provtoolbox-corpus/` holds the PROV-N that ProvToolbox wrote
+from the JSON corpus, a twin of the same name for 388 of the 398 JSON
+files, `provn/probes/` holds the probes and `expected.tsv`, and
+`constraints/` holds the PROV-CONSTRAINTS
+[unification](../reference/glossary.md#unification-prov) cases.
 
 ```rust,ignore
 {{#include ../../../provkit/tests/corpus_json.rs:reads_all}}
@@ -300,17 +301,19 @@ the end-to-end tests read the corpus too.
 
 ## Why this shape
 
-### Why a corpus shared with ProvPy?
+### Why test on the documents ProvPy tests on?
 
 provkit does not deviate from ProvPy without a CONFORMANCE.md row
-giving the reason and the issue number, and the corpus tests read the
-same files ProvPy reads
+giving the reason and the issue number where one is filed. ProvPy 3.3.0's own tests read
+copies of the corpus's PROV-JSON documents, specification examples and
+ProvToolbox files, so the two libraries are tested on nearly the same
+documents
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "The tests read"). Both profiles must match `expected.tsv` for every
 probe
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "`expected.tsv` gives the result"). Each of the two libraries keeps
-its own copy of the exclusion list.
+its own exclusion lists.
 
 ### Why does `expected.tsv` carry a `rule` column?
 

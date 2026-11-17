@@ -106,8 +106,9 @@ of PROV-CONSTRAINTS Table 3 meets a present one. `provn::read_with` takes a
 `provn::Profile`. `Strict` accepts the whole PROV-N grammar and the MUST
 statements of its prose, with the departures
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-records, and `Default` (the profile `provn::read` uses) adds the extensions
-ProvPy and ProvToolbox write, with the exceptions that file lists.
+records, and `Default` (the profile `provn::read` uses) adds six
+extensions that ProvPy 3.3.0's `default` profile also reads, which that file
+lists.
 `provn::read_report` returns a `ReadReport` with the document and the
 expressions left out. API documentation: `cargo doc --open -p provkit`.
 
@@ -115,16 +116,17 @@ expressions left out. API documentation: `cargo doc --open -p provkit`.
 
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 lists where provkit departs from the PROV Recommendations, where it differs
-from ProvPy 3.2.2 (with the ProvPy issue number) and from ProvToolbox 2.2.5,
-and its implementation limits, each with its reason and test.
+from ProvPy 3.3.0 (with the ProvPy issue number where one is filed) and from
+ProvToolbox 2.2.5, and its implementation limits, each with its reason and
+test.
 [CHANGELOG.md](https://github.com/trungdong/provkit/blob/main/CHANGELOG.md)
 lists the releases.
 
 ## Tests and CI
 
 The tests read the [prov-corpus](https://github.com/trungdong/prov-corpus)
-submodule at `corpus/`, shared with ProvPy (`prov`, Python). Clone with
-`--recurse-submodules`, or run `git submodule update --init`.
+submodule at `corpus/`. Clone with `--recurse-submodules`, or run
+`git submodule update --init`.
 
 The corpus holds examples extracted and modified from the
 PROV-N and PROV-DM Recommendations, under the

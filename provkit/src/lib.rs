@@ -38,12 +38,12 @@
 //!   `Strict` reads the whole grammar and the MUST statements of its prose,
 //!   with the departures
 //!   [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
-//!   records, and `Default` adds the extensions `ProvPy` and `ProvToolbox`
-//!   write, with the exceptions that file lists.
+//!   records, and `Default` adds six extensions that the
+//!   `default` profile of `ProvPy` 3.3.0 also reads, which that file lists.
 //!
 //! [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 //! in the repository lists where provkit departs from the PROV
-//! Recommendations, where it differs from `ProvPy` 3.2.2 and from
+//! Recommendations, where it differs from `ProvPy` 3.3.0 and from
 //! `ProvToolbox` 2.2.5, and its implementation limits.
 //!
 //! # Features

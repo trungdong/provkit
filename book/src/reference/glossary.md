@@ -194,7 +194,7 @@ Each value has one owner, and assigning or passing it to another owner moves it,
 
 ### profile (provkit)
 
-A provkit setting that decides how strictly the PROV-N reader treats input. Only the PROV-N reader takes a profile. `Strict` reads the whole grammar and the MUST statements of its prose, and `Default` adds the extensions ProvPy and ProvToolbox write. [Chapter 6](../chapters/6-provn.md) shows the code. The Cargo sense is [profile (Rust)](#profile-rust).
+A provkit setting that decides how strictly the PROV-N reader treats input. Only the PROV-N reader takes a profile. `Strict` reads the whole grammar and the MUST statements of its prose, and `Default` adds six extensions that ProvPy 3.3.0's `default` profile also reads. [Chapter 6](../chapters/6-provn.md) shows the code. The Cargo sense is [profile (Rust)](#profile-rust).
 
 ### profile (Rust)
 
