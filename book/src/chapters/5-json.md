@@ -169,9 +169,16 @@ of the kind's formals. A formal's value goes through `formal_value`,
 which reads a time from a string or an `xsd:dateTime` object and a name
 from a string or an `xsd:QName` or `prov:QUALIFIED_NAME` object, and
 any other value goes through `decode_value` into chapter 3's `Value`, one
-attribute per element of an array. The `prov:entity` of a `hadMember`
-is the exception. Its elements are gathered as `members`. An empty
-array is an error naming `prov:entity`, and when there are any members
+attribute per element of an array. A second prefix bound to the PROV
+namespace can give one formal two keys. The `find` over `formals` keeps
+the first value when a later key gives an equal one, and two different
+values are the error that `two_values`, the closure at the top, builds
+with the formal's name. The `prov:entity` of a `hadMember`
+is the exception. The elements of its first key are gathered as
+`members` and those of a later spelling as `repeated_members`. An empty
+array is an error naming `prov:entity`, and a repeated member that
+differs from any member is the `two_values` error, so the keys read
+only when together they name one member. When there are members
 the function returns one record per member, each with a clone of the
 identifier, the other formals and the attributes, by mapping the
 members through `from_parts` and collecting the results into one

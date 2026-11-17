@@ -1080,38 +1080,96 @@ fn a_formal_spelled_with_another_split_is_the_formal() {
     assert!(g.attributes.is_empty());
 }
 
+/// A document with a second prefix, `w3`, under which `w3:prov#activity`
+/// spells `prov:activity`, holding one record of `kind` with `body`.
+fn two_spellings(kind: &str, body: &str) -> String {
+    format!(
+        r#"{{"prefix": {{"ex": "http://example.org/", "w3": "http://www.w3.org/ns/"}},
+        "{kind}": {{"ex:r": {{{body}}}}}}}"#
+    )
+}
+
 #[test]
-fn a_formal_given_under_two_spellings_is_an_invalid_record() {
+fn a_formal_under_two_spellings_holds_one_value() {
     // A key that spells an own formal is the formal, never an attribute, so
-    // the only way to meet the check is to give one formal twice.
-    let text = r#"{"prefix": {"ex": "http://example.org/", "w3": "http://www.w3.org/ns/"},
-        "wasGeneratedBy": {"_:g": {"prov:activity": "ex:a", "w3:prov#activity": "ex:b"}}}"#;
-    let (section, _, error) = record_error(text);
-    assert_eq!(section, "wasGeneratedBy");
-    assert!(
-        matches!(
-            error,
-            Error::InvalidRecord {
-                kind: Kind::Generation,
-                ..
-            }
-        ),
-        "{error:?}"
+    // a second spelling of its IRI gives the formal a second value. Two equal
+    // values are one value, and the first is kept as written.
+    let d = doc(&two_spellings(
+        "wasGeneratedBy",
+        r#""prov:entity": "ex:e", "prov:activity": "ex:a", "w3:prov#activity": "ex:a",
+        "prov:time": "2012-01-01T00:00:00Z", "w3:prov#time": "2012-01-01T01:00:00+01:00""#,
+    ));
+    let [Record::Generation(g)] = d.records.as_slice() else {
+        panic!("{:?}", d.records);
+    };
+    assert_eq!(g.activity, Some(ex("a")));
+    assert_eq!(
+        g.time.as_ref().map(ToString::to_string).as_deref(),
+        Some("2012-01-01T00:00:00Z")
     );
-    // On a `hadMember`, `prov:entity` is a member list, so two spellings
-    // give the members of both.
-    let text = r#"{"prefix": {"ex": "http://example.org/", "w3": "http://www.w3.org/ns/"},
-        "hadMember": {"ex:m": {"prov:collection": "ex:c", "prov:entity": "ex:a", "w3:prov#entity": "ex:b"}}}"#;
-    let d = doc(text);
-    let members: Vec<_> = d
-        .records
-        .iter()
-        .map(|r| match r {
-            Record::Membership(m) => m.entity.clone(),
-            other => panic!("{other:?}"),
-        })
-        .collect();
-    assert_eq!(members, [Some(ex("a")), Some(ex("b"))]);
+    // Two different values are an error.
+    for body in [
+        r#""prov:entity": "ex:e", "prov:activity": "ex:a", "w3:prov#activity": "ex:b""#,
+        r#""prov:entity": "ex:e", "prov:time": "2012-01-01T00:00:00", "w3:prov#time": "2013-01-01T00:00:00""#,
+    ] {
+        let (section, _, error) = record_error(&two_spellings("wasGeneratedBy", body));
+        assert_eq!(section, "wasGeneratedBy");
+        assert!(
+            matches!(
+                error,
+                Error::InvalidRecord {
+                    kind: Kind::Generation,
+                    ..
+                }
+            ),
+            "{body}: {error:?}"
+        );
+    }
+}
+
+#[test]
+fn member_keys_under_two_spellings_name_one_member() {
+    // The first `prov:entity` key of a `hadMember` gives the members. A
+    // later spelling must give the member of every record again, so the
+    // keys read only when together they name one member.
+    let members = |keys: &str| {
+        two_spellings(
+            "hadMember",
+            &format!(r#""prov:collection": "ex:c", {keys}"#),
+        )
+    };
+    for keys in [
+        r#""prov:entity": "ex:a", "w3:prov#entity": "ex:a""#,
+        r#""prov:entity": ["ex:a"], "w3:prov#entity": "ex:a""#,
+        r#""prov:entity": "ex:a", "w3:prov#entity": ["ex:a", "ex:a"]"#,
+    ] {
+        let d = doc(&members(keys));
+        let [Record::Membership(m)] = d.records.as_slice() else {
+            panic!("{keys}: {:?}", d.records);
+        };
+        assert_eq!(m.entity, Some(ex("a")), "{keys}");
+    }
+    for keys in [
+        r#""prov:entity": "ex:a", "w3:prov#entity": "ex:b""#,
+        r#""prov:entity": ["ex:a", "ex:b"], "w3:prov#entity": "ex:a""#,
+        r#""prov:entity": "ex:a", "w3:prov#entity": ["ex:a", "ex:b"]"#,
+        r#""prov:entity": ["ex:a", "ex:b"], "w3:prov#entity": ["ex:a", "ex:b"]"#,
+        r#""prov:entity": "ex:a", "w3:prov#entity": []"#,
+        r#""prov:entity": [], "w3:prov#entity": "ex:a""#,
+    ] {
+        let (section, key, error) = record_error(&members(keys));
+        assert_eq!((section.as_str(), key.as_str()), ("hadMember", "ex:r"));
+        assert!(
+            matches!(
+                error,
+                Error::InvalidRecord {
+                    kind: Kind::Membership,
+                    ..
+                }
+            ),
+            "{keys}: {error:?}"
+        );
+    }
 }
 
 #[test]

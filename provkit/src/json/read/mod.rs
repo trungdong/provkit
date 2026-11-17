@@ -225,27 +225,53 @@ fn needs_identifier(section: &str, key: &str) -> Error {
 
 // ANCHOR: records_from
 /// One record, or several for `hadMember` with an array of members.
+///
+/// A second prefix bound to the PROV namespace gives a formal a second key.
+/// Two equal values are one value, and two different values are an error.
+/// On a `hadMember` the first `prov:entity` key gives the members, and a
+/// later one must give the member of every record again.
 fn records_from(
     kind: Kind,
     id: Option<&QName>,
     body: &JsonRecord,
     scope: Scope<'_>,
 ) -> Result<Vec<Record>> {
+    let two_values = |attr: FormalAttr| Error::InvalidRecord {
+        kind,
+        message: format!("{attr} given two different values"),
+    };
     let mut formals: Vec<(FormalAttr, Formal)> = Vec::new();
-    let mut members: Vec<Formal> = Vec::new();
-    let mut saw_members = false;
+    let mut members: Option<Vec<Formal>> = None;
+    let mut repeated_members: Vec<Formal> = Vec::new();
     let mut attributes = Attributes::new();
     for (key, value) in body {
         let name = scope.resolve(key)?;
         let formal = crate::record::formal_named(kind, &name);
         match formal {
             Some(FormalAttr::Entity) if kind == Kind::Membership => {
-                saw_members = true;
+                let mut given = Vec::new();
                 for v in value.items() {
-                    members.push(formal_value(v, key, false, scope)?);
+                    given.push(formal_value(v, key, false, scope)?);
+                }
+                if given.is_empty() {
+                    return Err(Error::InvalidRecord {
+                        kind,
+                        message: "prov:entity is an empty array".to_owned(),
+                    });
+                }
+                match members {
+                    None => members = Some(given),
+                    Some(_) => repeated_members.extend(given),
                 }
             }
-            Some(f) => formals.push((f, formal_value(value, key, f.is_time(), scope)?)),
+            Some(f) => {
+                let value = formal_value(value, key, f.is_time(), scope)?;
+                match formals.iter().find(|(attr, _)| *attr == f) {
+                    None => formals.push((f, value)),
+                    Some((_, first)) if *first == value => {}
+                    Some(_) => return Err(two_values(f)),
+                }
+            }
             None => {
                 for v in value.items() {
                     attributes.insert(name.clone(), decode_value(v, scope)?);
@@ -253,13 +279,11 @@ fn records_from(
             }
         }
     }
-    if kind == Kind::Membership && saw_members && members.is_empty() {
-        return Err(Error::InvalidRecord {
-            kind,
-            message: "prov:entity is an empty array".to_owned(),
-        });
-    }
-    if kind == Kind::Membership && !members.is_empty() {
+    if let Some(members) = members {
+        let differs = |again: &Formal| members.iter().any(|member| member != again);
+        if repeated_members.iter().any(differs) {
+            return Err(two_values(FormalAttr::Entity));
+        }
         return members
             .into_iter()
             .map(|m| {
