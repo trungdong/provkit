@@ -23,5 +23,4 @@
 
 # Reference
 
-- [Rust idioms, from the commit log](reference/idioms.md)
 - [Glossary](reference/glossary.md)

@@ -6,9 +6,7 @@ library or the crate that documents it. The table lists the idioms in
 that order, so you can see what each chapter asks of you before you start
 it. Three chapters of the Rust book cover most of what this book's chapters ask:
 ownership (chapter 4), enums and pattern matching (chapter 6), and
-traits, generics and lifetimes (chapter 10). The generated
-[idiom index](../reference/idioms.md) lists every idiom any commit
-introduced, grouped by the document it links to. The
+traits, generics and lifetimes (chapter 10). The
 [glossary](../reference/glossary.md) explains the words that Rust and
 PROV use differently.
 

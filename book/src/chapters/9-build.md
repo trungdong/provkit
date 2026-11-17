@@ -166,9 +166,8 @@ toolchain, so the next toolchain's lints show before the pin moves,
 and `continue-on-error: true` means it never blocks. `deny` and
 `typos` each check out the repository and run the tool's
 own action with its defaults, so `deny.toml` and `_typos.toml` are the
-whole of their configuration. `book` checks out the full history,
-because the idiom index at the end of this book is generated from
-every commit message, installs the same toolchain and a pinned
+whole of their configuration. `book` checks out the repository with
+the corpus submodule, installs the same toolchain and a pinned
 `mdbook` binary through `install-action`, and runs `book/build.sh`,
 the script that builds the pages you are reading and runs their
 doctests, so a snippet whose anchor vanished or a doctest that no
