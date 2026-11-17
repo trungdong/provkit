@@ -170,9 +170,9 @@ own action with its defaults, so `deny.toml` and `_typos.toml` are the
 whole of their configuration. `book` checks out the repository with
 the corpus submodule, installs the same toolchain and a pinned
 `mdbook` binary through `install-action`, and runs `book/build.sh`,
-the script that builds the pages you are reading and runs their
-doctests, so a snippet whose anchor vanished or a doctest that no
-longer compiles fails the run.
+the script that checks every included anchor, builds the pages you are
+reading and runs their doctests, so a snippet whose anchor vanished or a
+doctest that no longer compiles fails the run.
 
 ### .github/workflows/release.yml
 
