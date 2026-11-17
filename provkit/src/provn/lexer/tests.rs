@@ -291,10 +291,17 @@ fn code_point_escapes_decode_in_strings_and_iris() {
             TokenKind::Eof
         ]
     );
-    // `\U` starts at U+10000, where `\u` ends.
+    // `\U` takes any scalar value, including those `\u` also covers.
     assert_eq!(
-        kinds("\"\\uFFFF\\U00010000\""),
-        [TokenKind::Str("\u{FFFF}\u{10000}".into()), TokenKind::Eof]
+        kinds("\"\\uFFFF\\U00010000\\U00000041\\U000000E9\\U0000FFFF\""),
+        [
+            TokenKind::Str("\u{FFFF}\u{10000}A\u{E9}\u{FFFF}".into()),
+            TokenKind::Eof
+        ]
+    );
+    assert_eq!(
+        kinds("<a\\U00000041\\U000000E9\\U0000FFFF>"),
+        [TokenKind::Iri("aA\u{E9}\u{FFFF}".into()), TokenKind::Eof]
     );
     // Names take no code point escapes.
     assert!(tokenize("ex:a\\u00E9").is_err());
@@ -317,24 +324,11 @@ fn a_decoded_escape_is_content_and_is_not_lexed_again() {
 }
 
 #[test]
-fn an_upper_case_u_escape_below_u10000_is_a_syntax_error_at_its_backslash() {
-    for (src, column) in [
-        ("\"a\\U000000E9\"", 3),
-        ("\"a\\U0000FFFF\"", 3),
-        ("<a\\U000000E9>", 3),
-        ("\"ab\\U00000041\"", 4),
-    ] {
-        assert_eq!(syntax_at(src), (1, column), "{src}");
-    }
-    let (_, message) = syntax(tokenize("\"\\U000000E9\"").unwrap_err());
-    assert!(message.contains("U+10000"), "{message}");
-}
-
-#[test]
 fn a_bad_code_point_escape_is_reported_at_its_backslash() {
     for (src, column) in [
         ("\"a\\u00e9\"", 3),
         ("\"a\\uD800\"", 3),
+        ("\"a\\U0000D800\"", 3),
         ("\"a\\UDFFF0000\"", 3),
         ("\"a\\U00110000\"", 3),
         ("\"a\\u12\"", 3),

@@ -410,16 +410,16 @@ impl<'a> Lexer<'a> {
 
 /// Decode the `uXXXX` or `UXXXXXXXX` after a backslash in a string or IRI.
 /// The digits are upper-case hexadecimal and name a Unicode scalar value:
-/// `\u` one up to U+FFFF and `\U` one from U+10000, as section 6 assigns
-/// them. Returns the character and the number of hex digits.
+/// `\u` one up to U+FFFF and `\U` one up to U+10FFFF, as SPARQL 1.1 section
+/// 19.2 and the `UCHAR` production of Turtle 1.1 allow. Returns the character
+/// and the number of hex digits.
 fn decode_code_point(s: &str) -> std::result::Result<(char, usize), String> {
     let letter = s.chars().next().unwrap_or_default();
-    let (digits, lowest) = if letter == 'u' { (4, 0) } else { (8, 0x10000) };
+    let digits = if letter == 'u' { 4 } else { 8 };
     let invalid = || {
         format!(
             "invalid escape '\\{letter}': expected {digits} upper-case hex digits naming a Unicode \
-             scalar value{}",
-            if lowest > 0 { " from U+10000" } else { "" }
+             scalar value"
         )
     };
     let hex = s
@@ -428,7 +428,6 @@ fn decode_code_point(s: &str) -> std::result::Result<(char, usize), String> {
         .ok_or_else(invalid)?;
     u32::from_str_radix(hex, 16)
         .ok()
-        .filter(|&value| value >= lowest)
         .and_then(char::from_u32)
         .map(|c| (c, digits))
         .ok_or_else(invalid)

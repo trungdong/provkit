@@ -22,6 +22,8 @@ The first release.
     mandatory party is an error in `Record::from_parts`, both readers, both
     writers and `unified()`. Under `Strict`, `prov:mentionOf` with `-` for any
     of its three arguments is refused.
+  - A PROV-N `\U` escape below U+10000 decodes. A surrogate or a value above
+    U+10FFFF stays a syntax error.
 - `provkit-cli`, the `provkit` command: `convert` between the two formats and
   `compare` two documents, with prebuilt binaries for macOS, Linux and
   Windows on each release. The command reference is in the
