@@ -362,8 +362,8 @@ parsing them under either profile and leaving them out of the document
 "Extensibility expressions are parsed under both profiles and left
 out"). ProvPy 3.3.0 does the same under each of its profiles and
 warns about each expression it drops. Section 3.7.1 requires a prefix
-to refer to a declared namespace, but the reader ignores the whole expression, contents
-included, and reports it, so `ex:foo(zz:a)` reads with `zz`
+to refer to a declared namespace, but the reader ignores the whole
+expression, contents included, and reports it, so `ex:foo(zz:a)` reads with `zz`
 undeclared, while a time is checked because production [44] defines
 its form
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),

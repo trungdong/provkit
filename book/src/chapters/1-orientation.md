@@ -90,8 +90,9 @@ Each integration test target names the features it needs.
 
 Cargo skips a `[[test]]` target whose `required-features` are off
 instead of failing to compile it. `cargo test -p provkit
---no-default-features --features provn` therefore builds the unit tests, the doctests and the
-three `provn` targets, and leaves `corpus_json` and `corpus_twins` out.
+--no-default-features --features provn` therefore builds the unit
+tests, the doctests and the three `provn` targets, and leaves
+`corpus_json` and `corpus_twins` out.
 
 ### Cargo.toml
 
@@ -151,12 +152,12 @@ on neither `serde` nor `serde_core`, which an `indexmap` built with its
 ### Why does every data-model type sit at the crate root?
 
 With every module private except `json` and `provn`, and `well_known`
-re-exported from the private `qname`, each data-model type has exactly one public path and shows once in the
-API reference, at the root. `provn` keeps its own three types,
-`Profile`, `Ignored` and `ReadReport`. A private module with a
-`pub use` re-export is what gives an item that single path. The file
-layout inside `src/` is then an internal matter, because no caller can
-name a private module.
+re-exported from the private `qname`, each data-model type has exactly
+one public path and shows once in the API reference, at the root.
+`provn` keeps its own three types, `Profile`, `Ignored` and
+`ReadReport`. A private module with a `pub use` re-export is what
+gives an item that single path. The file layout inside `src/` is then
+an internal matter, because no caller can name a private module.
 
 ## The Rust here
 
