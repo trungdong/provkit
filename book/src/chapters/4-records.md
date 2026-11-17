@@ -121,8 +121,8 @@ reference between records is a `QName`, so a document holds no
 pointer into itself and can be cloned, compared and sent between
 threads freely. Neither type derives `PartialEq`; the impls at the end
 of the file are written out and described below. `bundle` finds
-the first bundle with an identifier, and the next method treats the
-bundles as equality and the writers do.
+the first bundle with an identifier, and the next method gives the
+bundles as document equality and the writers read them.
 
 ```rust,ignore
 {{#include ../../../provkit/src/document.rs:merged_bundles}}

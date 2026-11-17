@@ -8,7 +8,7 @@ and all of it decides what a contributor's change must pass and what a user
 downloads. This chapter describes the release profile in the root manifest,
 the clippy and rustfmt settings, the configuration of `cargo deny`,
 `typos` and `cargo about`, and the CI, release and Pages workflows,
-each file included whole. It builds on chapter 1 for the manifests and the
+each file but the manifest included whole. It builds on chapter 1 for the manifests and the
 lint table, which that chapter shows and this one does not repeat, and on
 chapter 8 for the `exclude` line and the `[[test]]` targets that the
 packaged-crate and feature-subset steps of CI exercise.
@@ -208,7 +208,7 @@ the workflow checks the tag against the version of `provkit-cli`. The
 release steps set the changelog date, run the checks CI runs and a
 clean `cargo package --workspace`, commit, set the Pages source of
 the repository to "GitHub Actions" once, after the repository is
-public and before the first push to `main`, tag with `git tag -a`,
+public and before the next push to `main`, tag with `git tag -a`,
 wait for the workflow, publish `provkit` and then `provkit-cli` to
 crates.io, and install from both sources to check. Two recovery paths
 follow, for a workflow that fails after the tag and for `provkit`
@@ -234,8 +234,8 @@ it is skipped while the repository is private.
 
 The toolchain is pinned so that a new lint in a later toolchain does
 not fail a push that changed no code. The pin is raised together with
-`rust-version` and the pin in `release.yml`, so the binaries are built
-with the toolchain CI tests, and a higher minimum is a minor release.
+`rust-version` and the pins in `release.yml` and `pages.yml`, so the
+binaries and this book are built with the toolchain CI tests, and a higher minimum is a minor release.
 The `clippy-stable` job is the other half of the arrangement. It shows
 the next batch of lints before the pinned toolchain moves and cannot
 fail the run, so the lints a new toolchain brings are visible on every

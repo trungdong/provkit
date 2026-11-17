@@ -341,7 +341,7 @@ and the two-way check described above. A row is therefore a claim the
 test checks, that the file is rejected, for a spec example with the
 kind of error its reason names, or that it reads and differs from its
 twin, rather than a file the test does not look
-at, and each list has a heading naming the test that pins it
+at, and each list sits in a section that names the test that pins it
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "PROV-N specification examples", "ProvToolbox files" and "ProvToolbox
 twins").
@@ -473,6 +473,9 @@ read as equal, which holds. With `-- --nocapture` the test's
 `eprintln!` shows the file under its category.
 
 ```text
+DynamicTimestamp: 0 equal, 0 unequal
+  equal:
+  unequal:
 DatatypePalette: 0 equal, 1 unequal
   equal:
   unequal: attr_activity0.provn

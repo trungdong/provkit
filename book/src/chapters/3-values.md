@@ -232,8 +232,8 @@ edges follow. Text outside the datatype's lexical space compares as
 text, which is why `Key::integer` checks the bounds and `"300"` as
 `xsd:byte` has no integer key, and values of different datatypes are
 never equal, so `"5"` as `xsd:int` and `"5"` as `xsd:long` are two
-values. The impl is written out beside `Hash`, and a derived one would
-compare the same things.
+values. The impl is written out beside `Hash`, because a derived one would
+compare the text as written and find `"5"` and `"005"` unequal.
 
 ### Why are integers typed by range?
 

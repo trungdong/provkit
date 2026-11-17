@@ -151,7 +151,7 @@ whose section is `bundle`, before any bundle body is read. The closure
 `located` captures `key` and is called at each of those points, by
 hand or through `map_err`, so every error under one key is wrapped the
 same way; chapter 3's `map_err` calls took a closure written in place.
-The second loop emits each bundle between `start_bundle` and
+The last loop emits each bundle between `start_bundle` and
 `end_bundle`, and `end_document` closes the sequence chapter 4 described.
 `emit_sections`, below the span, is where a section's `OneOrMany` is
 read. `record_id` resolves the key, or returns `None` for a `_:` key

@@ -118,7 +118,7 @@ An enum is a type that is exactly one of several named variants, and each varian
 
 ### extensibility expression (PROV)
 
-A PROV-N statement whose name is not one of the standard relations, so that applications can add their own ([PROV-N section 5](https://www.w3.org/TR/2013/REC-prov-n-20130430/#extensibility)).
+A PROV-N statement whose name is a prefixed name, so that applications can add their own ([PROV-N section 5](https://www.w3.org/TR/2013/REC-prov-n-20130430/#extensibility)).
 
 ### feature (Rust)
 

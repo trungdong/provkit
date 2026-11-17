@@ -31,8 +31,8 @@ caller passes it by value, and `#[non_exhaustive]`, so a later profile
 does not break a `match` outside the crate. `Strict` refuses every
 form the grammar does not allow, each listed on the
 [variant](../api/provkit/provn/enum.Profile.html#variant.Strict), four
-of the six with a production or section, among them a prefixed
-`prov:mentionOf` that is an extensibility expression rather than a
+of the six with a production or section. The variant also says that a
+prefixed `prov:mentionOf` is an extensibility expression rather than a
 mention unless three names follow it. `Default` is the grammar plus the forms
 in that list, which ProvPy 3.3.0's `default` profile also reads.
 Below the span, `Relaxation` has one variant per item in the `Strict` list,

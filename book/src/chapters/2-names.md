@@ -175,13 +175,13 @@ Three refusals come first. A prefix that `is_pn_prefix` rejects is
 and anything with a space or a colon. PROV-N cannot write any other
 prefix, and a table that holds only valid prefixes writes to both
 formats ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"`Namespaces::declare` rejects a prefix"). `prov` or `xsd`
-at any IRI but its fixed one is `Error::ReservedPrefix`, which carries
-the prefix, the expected IRI and the one found. An empty or
+"`Namespaces::declare` rejects a prefix"). An empty or
 all-whitespace IRI is `Error::EmptyNamespace`, which names the prefix and
 is a departure from the Recommendation
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"A namespace IRI that is empty or all whitespace"). A declaration of `prov` or `xsd`
+"A namespace IRI that is empty or all whitespace"). `prov` or `xsd`
+at any IRI but its fixed one is `Error::ReservedPrefix`, which carries
+the prefix, the expected IRI and the one found. A declaration of `prov` or `xsd`
 at the right IRI is accepted and changes nothing, so a PROV-JSON
 document that restates a predeclared binding still reads, and so does
 a PROV-N one under the `Default` profile. Everything else goes to
@@ -463,9 +463,9 @@ provkit compare /tmp/a.provn /tmp/b.provn; echo $?
 0
 ```
 
-To see what a difference looks like, restore `prefix ex
-<http://example.org/>` in `/tmp/b.provn` and change the local part instead,
-to `entity(ex:e2)`. Now the IRIs differ and `compare` lists each
+To see what a difference looks like, change `/tmp/b.provn` to `prefix ex
+<http://example.org/>` and `entity(ex:e2)`, so that only the local part
+differs from `/tmp/a.provn`. Now the IRIs differ and `compare` lists each
 record under the file it came from, and exits 1.
 
 ```sh

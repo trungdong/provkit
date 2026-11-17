@@ -4,7 +4,7 @@ The `provkit-cli` crate is the binary `provkit`, and it owns everything
 the library refuses to. The library reads `&str` and writes to
 `impl std::io::Write` and never touches a file, and the CLI owns
 files, format detection and exit codes. This chapter
-reads the clap definitions that turn two structs and an enum into the
+reads the clap definitions that turn three structs and two enums into the
 commands and their help, the function both
 commands read their input through, the sniffer that tells PROV-JSON
 from PROV-N by looking at the text, the `main` that turns a `Result`
@@ -85,7 +85,7 @@ that names each record stays in front of the message and the
 ` at line `, because a value quoted in the message can hold those words,
 and it accepts the ending only when both numbers are plain digits. An
 error without that ending, such as one inside a record that has no
-position, prints as it always did, label included. `message_of` cuts
+position, takes that fallback, label included. `message_of` cuts
 the same ending from a `JsonError` message.
 
 ```rust,ignore

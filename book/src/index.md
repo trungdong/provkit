@@ -2,8 +2,9 @@
 
 This book is for people who will read or change the provkit source:
 contributors, reviewers, and the maintainer coming back after a gap. It
-assumes you can program and takes nothing for granted about Rust or
-PROV; pick the track for the one you know less. It is not a user guide.
+assumes you can program, and its two tracks say what to read first when
+Rust or PROV is new to you; pick the track for the one you know less. It is
+not a user guide.
 To install and run `provkit`, read the
 [README](https://github.com/trungdong/provkit/blob/main/README.md); for
 the library's API, the [reference](api/provkit/index.html); for where
