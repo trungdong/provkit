@@ -25,7 +25,9 @@ use crate::{
 ///
 /// - [`Error::Io`](crate::Error::Io) if `out` fails.
 /// - [`Error::InvalidRecord`](crate::Error::InvalidRecord) for an attribute
-///   that spells one of its record's own formals.
+///   that spells one of its record's own formals, and for a `hadMember`,
+///   `alternateOf`, `specializationOf` or `mentionOf` that lacks a mandatory
+///   party.
 pub fn write(document: &Document, out: &mut impl Write) -> Result<()> {
     let wire = to_wire(document)?;
     serde_json::to_writer_pretty(&mut *out, &wire).map_err(|e| {
@@ -499,6 +501,16 @@ mod tests {
         a.insert(ex("f"), 1.5f64);
         a.insert(ex("b"), true);
         a.insert(ex("s"), "second");
+        // An entity has no `time` or `activity` formal, so both are
+        // ordinary attributes and keep the type they hold.
+        a.insert(
+            QName::new(crate::well_known::PROV, "time").unwrap(),
+            crate::DateTime::parse("2012-01-01T00:00:00").unwrap(),
+        );
+        a.insert(
+            QName::new(crate::well_known::PROV, "activity").unwrap(),
+            ex("a"),
+        );
         let mut d = document(vec![element(Kind::Entity, ex("e"), a)]);
         for &kind in Kind::ALL {
             d.records
@@ -512,6 +524,14 @@ mod tests {
         assert_eq!(body["ex:l"]["lang"], "fr");
         assert!(body["ex:l"].get("type").is_none(), "{text}");
         assert_eq!(body["ex:q"]["type"], "xsd:QName");
+        assert_eq!(
+            body["prov:time"],
+            serde_json::json!({"$": "2012-01-01T00:00:00", "type": "xsd:dateTime"})
+        );
+        assert_eq!(
+            body["prov:activity"],
+            serde_json::json!({"$": "ex:a", "type": "xsd:QName"})
+        );
         assert_eq!(body["ex:s"].as_array().unwrap().len(), 2);
     }
 

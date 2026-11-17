@@ -36,7 +36,9 @@ use crate::{Document, Error, JsonError, Result, strip_bom};
 ///   carries no position.
 /// - [`Error::InRecord`] wrapping an error inside a record: a bad attribute
 ///   value, a repeated attribute or value-object key, a formal of the wrong
-///   form, a blank identifier, or a name or literal PROV does not allow. It
+///   form, a blank identifier, a name or literal PROV does not allow, or a
+///   `hadMember`, `alternateOf`, `specializationOf` or `mentionOf` that
+///   lacks a mandatory party ([`Error::InvalidRecord`]). It
 ///   names the section and the record's key, which locates an error that
 ///   carries no position. Inside a bundle the record's error is wrapped once
 ///   more in an `InRecord` whose section is `bundle` and whose key is the
@@ -52,6 +54,9 @@ use crate::{Document, Error, JsonError, Result, strip_bom};
 ///   reported in the order of the text, ahead of every other fault.
 /// - [`Error::InvalidPrefix`] and [`Error::ReservedPrefix`] for a `prefix`
 ///   entry that PROV-N could not write, returned as they are.
+/// - [`Error::EmptyNamespace`] for a namespace in a `prefix` block whose IRI
+///   is empty or all white space. Inside a bundle it sits in the
+///   [`Error::InRecord`] of that bundle.
 pub fn read(text: &str) -> Result<Document> {
     let text = strip_bom(text);
     let wire: wire::JsonDocument = serde_json::from_str(text).map_err(|e| shape_error(e, text))?;

@@ -9,7 +9,7 @@ excluded file and known difference is listed in
 `provkit-cli/tests` run the built binary. This chapter describes the
 helpers the unit tests share, the report that collects failures across
 a corpus, the test that reads every PROV-JSON file, the test that
-checks every probe against its row, the three data files, the binary's
+checks every probe against its row, the four data files, the binary's
 tests and the manifest lines that decide which tests ship. It builds on every chapter before it, on chapter 1 for the
 `test_util` module under `#[cfg(test)]` and the `[[test]]` targets, on
 chapter 2 for `mod tests;`, on chapter 3 for `DateTime::parse` and
@@ -209,7 +209,11 @@ under test.
 
 The test reads every `.provn` file in the directory, strips the
 extension to get the probe's name, and looks the row up. A probe with
-no row fails. For each of the two profiles it reads the text with
+no row fails. When the probe is in `WRITTEN_BACK`, a list of the probes on which
+`provconvert` fails with the original too, the test also reads the probe
+under `Profile::Default`, writes the document in PROV-N and reads it
+back, and does the same through PROV-JSON when the `json` feature is on.
+A document that does not read back equal is a failure. For each of the two profiles it reads the text with
 [`provn::read_with`](../api/provkit/provn/fn.read_with.html) from
 chapter 6, turns the result into an `Outcome`, and records a failure
 naming the profile when it differs from the row. When no filter is

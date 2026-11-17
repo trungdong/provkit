@@ -11,6 +11,16 @@ use provkit::provn::{self, Profile};
 /// Number of probes in the corpus.
 const PROBE_COUNT: usize = 228;
 
+/// Probes on which `provconvert` fails with the original too: each is written in
+/// both formats and read back equal.
+const WRITTEN_BACK: [&str; 5] = [
+    "prefix_named_default",
+    "prefix_named_prefix",
+    "keyword_bundle_id",
+    "bundle_own_default_id",
+    "dt_negative_year",
+];
+
 /// The columns of `expected.tsv`.
 const HEADER: [&str; 5] = ["name", "strict", "default", "rule", "provpy"];
 
@@ -95,6 +105,25 @@ fn probes_read_as_the_grammar_requires() {
             report.fail(name, "no row in expected.tsv");
             continue;
         };
+        if WRITTEN_BACK.contains(&name) {
+            match provn::read_with(text, Profile::Default) {
+                Ok(d) => {
+                    let again = provn::to_string(&d).and_then(|t| provn::read(&t));
+                    if again.as_ref().ok() != Some(&d) {
+                        report.fail(name, "PROV-N written and read back is not equal");
+                    }
+                    #[cfg(feature = "json")]
+                    {
+                        let again =
+                            provkit::json::to_string(&d).and_then(|t| provkit::json::read(&t));
+                        if again.as_ref().ok() != Some(&d) {
+                            report.fail(name, "PROV-JSON written and read back is not equal");
+                        }
+                    }
+                }
+                Err(e) => report.fail(name, format!("expected a document, got {e}")),
+            }
+        }
         for (label, profile, want) in [
             ("strict", Profile::Strict, row.strict),
             ("default", Profile::Default, row.default),

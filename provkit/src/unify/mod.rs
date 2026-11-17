@@ -70,6 +70,9 @@ impl Document {
     /// - [`Error::InvalidRecord`] when a record carries an attribute that
     ///   spells one of its own formals (`prov:activity` on a generation).
     ///   Readers never produce such a record, but a hand-built one can.
+    /// - [`Error::InvalidRecord`] when a `hadMember`, `alternateOf`,
+    ///   `specializationOf` or `mentionOf` lacks a mandatory party, which
+    ///   again only a hand-built record can do.
     pub fn unified(&self) -> Result<Document> {
         let mut bundles = Vec::new();
         for bundle in self.merged_bundles().iter() {

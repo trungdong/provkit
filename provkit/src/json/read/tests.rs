@@ -132,6 +132,46 @@ fn values_decode_per_table() {
     assert_eq!(get("ty"), [Value::typed("1", XSD_LONG.clone()).unwrap()]);
     assert_eq!(get("many").len(), 2);
     assert_eq!(e.attributes.len(), 15);
+
+    // An entity has no `time` or `activity` formal, so these names are
+    // ordinary attributes and each value keeps the type it was written with
+    // (PROV-JSON section 2.2).
+    let formal_name = |body: &str, local: &str| {
+        let d = doc(&entity(body));
+        let name = QName::new(crate::well_known::PROV, local).unwrap();
+        d.records[0]
+            .attributes()
+            .get(&name)
+            .cloned()
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        formal_name(r#""prov:time": "2012-01-01T00:00:00""#, "time"),
+        [Value::Str("2012-01-01T00:00:00".into())]
+    );
+    assert_eq!(
+        formal_name(r#""prov:time": "hello""#, "time"),
+        [Value::Str("hello".into())]
+    );
+    let timed = formal_name(
+        r#""prov:time": {"$": "2012-01-01T00:00:00", "type": "xsd:dateTime"}"#,
+        "time",
+    );
+    assert_eq!(timed.len(), 1);
+    assert!(matches!(timed[0], Value::DateTime(_)));
+    assert_eq!(
+        formal_name(r#""prov:activity": "ex:a""#, "activity"),
+        [Value::Str("ex:a".into())]
+    );
+    for qualified in ["xsd:QName", "prov:QUALIFIED_NAME"] {
+        assert_eq!(
+            formal_name(
+                &format!(r#""prov:activity": {{"$": "ex:a", "type": "{qualified}"}}"#),
+                "activity"
+            ),
+            [Value::QName(ex("a"))]
+        );
+    }
 }
 
 #[test]

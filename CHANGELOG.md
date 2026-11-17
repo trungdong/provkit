@@ -28,7 +28,7 @@ The first release.
     `Namespaces::declare`, `Namespaces::set_default`,
     `Namespaces::ensure_prefix` and `QName::new` refuse it, and both readers
     refuse `prefix z <>`, `default <>` and a PROV-JSON `""` or `" "`.
-    `set_default` and `ensure_prefix` now return a `Result`, and
+    `set_default` and `ensure_prefix` return a `Result`, and
     `Error::EmptyNamespace` names the prefix or the default namespace at
     fault.
 - `provkit-cli`, the `provkit` command: `convert` between the two formats and

@@ -100,6 +100,34 @@ fn attribute_values() {
         "entity(ex:e, [ex:d=2011-11-16T16:05:33Z])",
         Profile::Default,
     ));
+
+    // An entity has no `time` or `activity` formal, so both names are
+    // ordinary attributes (production [39]) and the literal's form decides
+    // its type (productions [40] and [41]).
+    let read_values = |attributes: &str| {
+        let d = doc(&format!("entity(ex:e, [{attributes}])"), Profile::Strict);
+        values(&d).into_iter().cloned().collect::<Vec<_>>()
+    };
+    assert_eq!(
+        read_values(r#"prov:time="2012-01-01T00:00:00""#),
+        [Value::Str("2012-01-01T00:00:00".into())]
+    );
+    assert_eq!(
+        read_values(r#"prov:time="not a time""#),
+        [Value::Str("not a time".into())]
+    );
+    let timed = read_values(r#"prov:time="2012-01-01T00:00:00" %% xsd:dateTime"#);
+    assert_eq!(timed.len(), 1);
+    assert!(matches!(timed[0], Value::DateTime(_)));
+    assert_eq!(read_values("prov:activity='ex:a'"), [Value::QName(ex("a"))]);
+    assert_eq!(
+        read_values(r#"prov:activity="hello""#),
+        [Value::Str("hello".into())]
+    );
+    assert_eq!(
+        read_values("prov:activity='ex:a', prov:activity='ex:b'"),
+        [Value::QName(ex("a")), Value::QName(ex("b"))]
+    );
 }
 
 #[test]

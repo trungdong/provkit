@@ -23,7 +23,7 @@ attestations fail in a private repository on a free personal account.
 3. Commit, and fast-forward `main` to the release commit.
 4. Set the Pages source of the repository to "GitHub Actions" (Settings,
    Pages, Build and deployment). Do this once, after the repository is public
-   and before the first push to `main`. `pages.yml` deploys with
+   and before the next push to `main`. `pages.yml` deploys with
    `actions/deploy-pages`, which fails otherwise, and the README and
    CHANGELOG link the site.
 5. Tag with `git tag -a v<version> -m "provkit <version>"`. Push `main` and
@@ -55,6 +55,6 @@ from step 1. The `provkit` version already on crates.io stays, and the new
 
 ## Moving the toolchain
 
-The pinned toolchain appears in `ci.yml`, `release.yml`, `rust-version` in
-`Cargo.toml` and the minimum supported Rust version in both READMEs. Move them
-together. A higher minimum is a minor release.
+The pinned toolchain appears in `ci.yml`, `release.yml`, `pages.yml`,
+`rust-version` in `Cargo.toml` and the minimum supported Rust version in both
+READMEs. Move them together. A higher minimum is a minor release.

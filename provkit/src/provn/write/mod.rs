@@ -42,7 +42,8 @@ pub fn write(document: &Document, out: &mut impl io::Write) -> Result<()> {
 /// with such an IRI.
 ///
 /// [`Error::InvalidRecord`] for an attribute that spells one of the record's
-/// own formals.
+/// own formals, and for a `hadMember`, `alternateOf`, `specializationOf` or
+/// `mentionOf` that lacks a mandatory party.
 pub fn to_string(document: &Document) -> Result<String> {
     // Names are rendered before the declarations are printed, so that every
     // prefix minted along the way is declared.
