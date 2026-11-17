@@ -105,7 +105,7 @@ The root manifest holds what both crates share.
 ```
 
 `[workspace.package]` sets the version, the 2024 edition, the minimum
-Rust version `1.98`, the licence and the repository once; each crate's
+Rust version `1.85`, the licence and the repository once; each crate's
 manifest says `version.workspace = true` and so on to inherit them.
 The version appears twice, once as the package version and once in the
 `provkit` entry of `[workspace.dependencies]`, which is the version

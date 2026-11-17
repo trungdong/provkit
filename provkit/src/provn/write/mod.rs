@@ -171,12 +171,12 @@ fn declarations(
     s: &mut String,
 ) -> Result<bool> {
     let mut any = false;
-    if let Some(default) = names.default_namespace()
-        && inherited.and_then(Namespaces::default_namespace) != Some(default)
-    {
-        check_declaration(None, default)?;
-        let _ = writeln!(s, "{indent}default <{default}>");
-        any = true;
+    if let Some(default) = names.default_namespace() {
+        if inherited.and_then(Namespaces::default_namespace) != Some(default) {
+            check_declaration(None, default)?;
+            let _ = writeln!(s, "{indent}default <{default}>");
+            any = true;
+        }
     }
     for (prefix, iri) in names.iter() {
         if inherited.is_some_and(|o| o.lookup(prefix) == Some(iri)) {

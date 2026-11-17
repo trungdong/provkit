@@ -60,7 +60,7 @@ serialisation library.
 
 ## Minimum supported Rust version
 
-Rust 1.98. The CI checks this version on every change.
+Rust 1.85. The CI checks this version on every change.
 
 ## Command line
 

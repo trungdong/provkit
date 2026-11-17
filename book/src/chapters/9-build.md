@@ -162,13 +162,21 @@ job, and a build of the library for `wasm32-unknown-unknown`. The
 from Cargo rather than from a literal, so the step does not change at
 a release.
 
+`msrv` tests the minimum supported Rust version, the `rust-version` of
+the root manifest, which is the oldest toolchain Cargo agrees to build
+the crates with. The job installs that version on the same two
+runners and runs the workspace tests on both. On Ubuntu it also runs
+the tests of `provkit` under `provn` alone and under `json` alone,
+`cargo check --tests` under no default features and the
+`wasm32-unknown-unknown` build.
+
 `clippy-stable` runs the same clippy command on the `stable`
 toolchain, so the next toolchain's lints show before the pin moves,
 and `continue-on-error: true` means it never blocks. `deny` and
 `typos` each check out the repository and run the tool's
 own action with its defaults, so `deny.toml` and `_typos.toml` are the
 whole of their configuration. `book` checks out the repository with
-the corpus submodule, installs the same toolchain and a pinned
+the corpus submodule, installs the pinned toolchain and a pinned
 `mdbook` binary through `install-action`, and runs `book/build.sh`,
 the script that checks every included anchor, builds the pages you are
 reading and runs their doctests, so a snippet whose anchor vanished or a
@@ -212,8 +220,9 @@ public and before the next push to `main`, tag with `git tag -a`,
 wait for the workflow, publish `provkit` and then `provkit-cli` to
 crates.io, and install from both sources to check. Two recovery paths
 follow, for a workflow that fails after the tag and for `provkit`
-published without `provkit-cli`, and the places the toolchain pin
-appears are listed last, because they move together.
+published without `provkit-cli`, and the places the toolchain pin and
+the minimum Rust version appear are listed last, because each set
+moves together.
 
 ### .github/workflows/pages.yml
 
@@ -234,8 +243,12 @@ it is skipped while the repository is private.
 
 The toolchain is pinned so that a new lint in a later toolchain does
 not fail a push that changed no code. The pin is raised together with
-`rust-version` and the pins in `release.yml` and `pages.yml`, so the
-binaries and this book are built with the toolchain CI tests, and a higher minimum is a minor release.
+the pins in `release.yml` and `pages.yml`, so the binaries and this
+book are built with the toolchain CI tests. `rust-version` is a
+separate, lower number, because a library's minimum becomes the
+minimum of every crate that depends on it. Version 1.85 is the oldest
+that the 2024 edition and the locked dependencies accept, the `msrv`
+job tests it, and a higher minimum is a minor release.
 The `clippy-stable` job is the other half of the arrangement. It shows
 the next batch of lints before the pinned toolchain moves and cannot
 fail the run, so the lints a new toolchain brings are visible on every

@@ -57,6 +57,9 @@ from step 1. The `provkit` version already on crates.io stays, and the new
 
 ## Moving the toolchain
 
-The pinned toolchain appears in `ci.yml`, `release.yml`, `pages.yml`,
-`rust-version` in `Cargo.toml`, the minimum supported Rust version in both
-READMEs and chapter 1 of the book. Move them together. A higher minimum is a minor release.
+The pinned toolchain appears in the `test` and `book` jobs of `ci.yml`, in
+`release.yml` and in `pages.yml`. Move them together.
+
+The minimum supported Rust version appears as `rust-version` in `Cargo.toml`,
+in the `msrv` job of `ci.yml`, in both READMEs and in chapter 1 of the book.
+Move them together. A higher minimum is a minor release.

@@ -118,7 +118,6 @@ profiles and the build and release tools.
 | `a closure taking &mut Self` | [Chapter 6](../chapters/6-provn.md) | [Rust book](https://doc.rust-lang.org/book/ch13-01-closures.html) |
 | `a const depth limit on recursion` | [Chapter 6](../chapters/6-provn.md) | [Rust reference](https://doc.rust-lang.org/reference/items/constant-items.html) |
 | `.map(drop)` | [Chapter 6](../chapters/6-provn.md) | [std](https://doc.rust-lang.org/std/mem/fn.drop.html) |
-| `let chains` | [Chapter 6](../chapters/6-provn.md) | [Rust reference](https://doc.rust-lang.org/reference/expressions/if-expr.html#chains-of-conditions) |
 | `let _ = writeln!(..)` | [Chapter 6](../chapters/6-provn.md) | [std](https://doc.rust-lang.org/std/macro.writeln.html) |
 | `Result::as_deref with a slice pattern` | [Chapter 6](../chapters/6-provn.md) | [std](https://doc.rust-lang.org/std/result/enum.Result.html#method.as_deref) |
 | `a scoped block around a borrow` | [Chapter 6](../chapters/6-provn.md) | [Rust book](https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html) |

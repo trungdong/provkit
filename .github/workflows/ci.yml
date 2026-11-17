@@ -21,8 +21,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1 (2026-09-12)
         with:
           # Pinned, so a new lint in a later toolchain does not fail a push that
-          # changed no code. Raise it with `rust-version`, together with the
-          # pin in release.yml.
+          # changed no code. Raise it together with the pins in release.yml and
+          # pages.yml.
           toolchain: "1.98"
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
@@ -54,6 +54,32 @@ jobs:
       - run: cargo doc --workspace --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+        if: matrix.os == 'ubuntu-latest'
+      - run: cargo build -p provkit --target wasm32-unknown-unknown
+        if: matrix.os == 'ubuntu-latest'
+  msrv:
+    # Builds and tests with the oldest toolchain the crates support.
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - run: git config --global core.autocrlf false
+        if: runner.os == 'Windows'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1 (2026-09-12)
+        with:
+          # The `rust-version` of Cargo.toml. Move the two together.
+          toolchain: "1.85"
+          targets: wasm32-unknown-unknown
+      - run: cargo test --workspace --all-features
+      - run: cargo test -p provkit --no-default-features --features provn
+        if: matrix.os == 'ubuntu-latest'
+      - run: cargo test -p provkit --no-default-features --features json
+        if: matrix.os == 'ubuntu-latest'
+      - run: cargo check -p provkit --no-default-features --tests
         if: matrix.os == 'ubuntu-latest'
       - run: cargo build -p provkit --target wasm32-unknown-unknown
         if: matrix.os == 'ubuntu-latest'

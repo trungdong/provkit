@@ -12,7 +12,7 @@ read and write, and a
 for the interchange of provenance, which is information about the entities,
 activities and people involved in producing a piece of data or thing.
 
-Status: 0.1.0, the first release. The minimum supported Rust version is 1.98.
+Status: 0.1.0, the first release. The minimum supported Rust version is 1.85.
 
 ## Install
 
@@ -158,7 +158,8 @@ The published crates do not include the corpus.
 cargo test --workspace
 ```
 
-CI runs the tests on Linux and Windows. On Linux it also runs
+CI runs the tests on Linux and Windows, with the toolchain it pins and with
+Rust 1.85. On Linux it also runs
 `cargo fmt --check`, clippy, the tests of the packaged crate and of each
 feature alone, the rustdoc build, the `wasm32-unknown-unknown` build,
 `cargo deny` for supply-chain audits, `typos` for spell checking and the book

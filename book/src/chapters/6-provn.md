@@ -469,10 +469,6 @@ text with `is_pn_prefix`.
   `extensibility_body` does not want; `map(drop)` turns the `Ok` payload into `()`
   and keeps the `Err`.
   [drop](https://doc.rust-lang.org/std/mem/fn.drop.html)
-- **Let chains**. `if let Some(default) = ... && inherited... !=
-  Some(default)` in `declarations` binds and tests in one condition,
-  which edition 2024 allows.
-  [Chains of conditions](https://doc.rust-lang.org/reference/expressions/if-expr.html#chains-of-conditions)
 - **`let _ = writeln!(..)`**. Writing into a `String` cannot fail, and
   `let _` in `declarations` discards the `Result` that the `must_use` on it would
   otherwise warn about.
@@ -594,7 +590,6 @@ lists this probe among its tests.
 - `a closure taking &mut Self`: https://doc.rust-lang.org/book/ch13-01-closures.html
 - `a const depth limit on recursion`: https://doc.rust-lang.org/reference/items/constant-items.html
 - `.map(drop)`: https://doc.rust-lang.org/std/mem/fn.drop.html
-- `let chains`: https://doc.rust-lang.org/reference/expressions/if-expr.html#chains-of-conditions
 - `let _ = writeln!(..)`: https://doc.rust-lang.org/std/macro.writeln.html
 - `Result::as_deref with a slice pattern`: https://doc.rust-lang.org/std/result/enum.Result.html#method.as_deref
 - `a scoped block around a borrow`: https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html
