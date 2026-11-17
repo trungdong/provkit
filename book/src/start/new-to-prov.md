@@ -23,8 +23,10 @@ builds it.
 ## Every record is one of eighteen kinds
 
 [PROV-DM section 5](https://www.w3.org/TR/2013/REC-prov-dm-20130430/#data-model-components)
-defines the kinds, grouped into six components. [PROV-N section 3](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prov-n-expressions)
-gives each kind a statement form, such as `used(a, e, t)`. The
+defines seventeen of the kinds in its six components, and [PROV-N section 3](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prov-n-expressions)
+gives each of them a statement form, such as `used(a, e, t)`. The
+eighteenth, `mentionOf`, comes from
+[PROV-Links section 2](https://www.w3.org/TR/2013/NOTE-prov-links-20130430/#term-mention). The
 `records!` table at [Chapter 4](../chapters/4-records.md) states the same list
 once, and the rest of the crate follows from it.
 
@@ -55,8 +57,9 @@ datatypes is not equal. [Chapter 3](../chapters/3-values.md) shows the rules.
 ## Formal attributes are positions and other attributes are pairs
 
 A statement has fixed positions for the things its kind always has, such
-as the activity and entity of `used`. PROV-N writes each absent position
-as `-`
+as the activity and entity of `used`. PROV-N writes an absent position
+as `-` when only some of the optional positions are given, and leaves
+them all out when none is
 ([PROV-N section 2.4](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prov-n-optionals)),
 so `used(ex:a, ex:e, -)` has three positions. Every other attribute is a
 name-value pair in an optional bracketed list

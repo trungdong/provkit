@@ -1,4 +1,5 @@
-//! Records: the eighteen PROV-DM types and the enum that holds them.
+//! Records: the eighteen record types and the enum that holds them.
+//! Seventeen come from PROV-DM and `mentionOf` from PROV-LINKS.
 
 #[macro_use]
 mod formal;
@@ -145,7 +146,8 @@ macro_rules! records {
         )*
         // ANCHOR_END: record_struct_rule
 
-        /// A PROV record of any of the eighteen PROV-DM types.
+        /// A PROV record of any of the eighteen types, seventeen from PROV-DM
+        /// and `mentionOf` from PROV-LINKS.
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         #[non_exhaustive]
         pub enum Record {

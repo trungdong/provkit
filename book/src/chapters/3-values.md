@@ -235,7 +235,7 @@ compare the same things.
 Section 3.7.3 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#prod-convenienceNotation)
 calls a bare integer sugar for `xsd:int`, but a number outside the
-`xsd:int` range has no valid `xsd:int` form, and the PROV-JSON note lets
+`xsd:int` range has no valid `xsd:int` form, and the PROV-JSON submission lets
 a native number stand for `xsd:decimal`. One rule for both formats
 means `[ex:k=3000000000]` equals the PROV-JSON `{"ex:k": 3000000000}`
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),

@@ -237,7 +237,7 @@ impl<'t> Parser<'t> {
     }
 
     // ANCHOR: parse_document
-    // document ::= "document" namespaceDeclarations? (expression | bundle)* "endDocument"
+    // [1] document ::= "document" (namespaceDeclarations)? (expression)* (bundle)* "endDocument"
 
     pub(super) fn document(&mut self, builder: &mut DocumentBuilder) -> Result<()> {
         self.keyword("document")?;

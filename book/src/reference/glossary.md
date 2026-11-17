@@ -22,7 +22,7 @@ Reference-counted pointers that let several owners share one value. `Rc` stays o
 
 ### attribute (PROV)
 
-A name-value pair attached to a record, such as `prov:type="createFile"`. The name is a qualified name ([PROV-DM section 5.7.2](https://www.w3.org/TR/2013/REC-prov-dm-20130430/#term-attribute)). The Rust sense is [attribute (Rust)](#attribute-rust).
+The name in a name-value pair attached to a record, such as `prov:type` in `prov:type="createFile"`. It is a qualified name ([PROV-DM section 5.7.2](https://www.w3.org/TR/2013/REC-prov-dm-20130430/#term-attribute)). This book also calls the whole pair an attribute. The Rust sense is [attribute (Rust)](#attribute-rust).
 
 ### attribute (Rust)
 
@@ -162,7 +162,7 @@ Code that writes code. Declarative macros (`macro_rules!`) match patterns, and p
 
 ### mention (PROV)
 
-The relation `prov:mentionOf`, which says one entity is a view of another entity inside a named bundle ([PROV-Links section 2](https://www.w3.org/TR/2013/NOTE-prov-links-20130430/#term-mention)). It parses as an extensibility expression in PROV-N.
+The relation `prov:mentionOf`, which says one entity is a view of another entity inside a named bundle ([PROV-Links section 2](https://www.w3.org/TR/2013/NOTE-prov-links-20130430/#term-mention)). PROV-N has no production for it. provkit reads `prov:mentionOf` followed by three names as a mention record under both profiles ([Chapter 6](../chapters/6-provn.md)).
 
 ### module (Rust)
 
@@ -222,7 +222,7 @@ The set of values a name can hold and the operations on them, such as `u8`, `Str
 
 ### unification (PROV)
 
-Merging two descriptions that share an identifier into one, provided their attributes do not conflict ([PROV-CONSTRAINTS section 2.4, Unification and Merging](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/#unification-and-merging)).
+Merging two descriptions that share an identifier into one, which needs their formal attributes to unify and combines their other attributes ([PROV-CONSTRAINTS section 2.4, Unification and Merging](https://www.w3.org/TR/2013/REC-prov-constraints-20130430/#unification-and-merging)).
 
 ### usage (PROV)
 

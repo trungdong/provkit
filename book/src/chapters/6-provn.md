@@ -378,10 +378,11 @@ the stack
 
 The decoded content is not lexed again, so `"\u0022"` is the
 one-character string `"`, and `"a\u000Ab"` holds a line feed in a
-short string, because section 6 of
+short string. Section 6 of
 [PROV-N](https://www.w3.org/TR/2013/REC-prov-n-20130430/#media-type)
-places the escapes in the text of a literal, and decoding them before
-lexing would let `\u0022` end a string
+lets a code point be written as a `\u` or `\U` escape and does not say
+at which stage it decodes. The lexer decodes it inside a string or an
+IRI, because decoding before lexing would let `\u0022` end a string
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "A `\u` or `\U` escape in a string or IRI decodes"). In the code,
 `string` and

@@ -19,8 +19,10 @@ endDocument
 ```
 
 Every statement is a record. `entity`, `activity` and the relations
-`used` and `wasGeneratedBy` are four of the eighteen kinds PROV-DM
-defines. `-` is an absent argument; the writer always writes every
+`used` and `wasGeneratedBy` are four of the eighteen kinds provkit
+holds, seventeen from PROV-DM and `mentionOf` from
+[PROV-Links](https://www.w3.org/TR/2013/NOTE-prov-links-20130430/#term-mention).
+`-` is an absent argument; the writer always writes every
 position, so a reader never has to count. `ex:draft` is a qualified
 name. The prefix `ex` stands for the namespace declared at the top.
 

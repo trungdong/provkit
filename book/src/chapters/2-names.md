@@ -240,7 +240,7 @@ Section 3.7.4 of
 says a namespace declaration must not declare the prefixes `prov` and
 `xsd`; they are predeclared. `prov` or `xsd` at another IRI is
 therefore `Error::ReservedPrefix`. Table 1 of PROV-N, the prefix table
-of PROV-DM and the PROV-JSON note all print
+of PROV-DM and the PROV-JSON submission all print
 `http://www.w3.org/2000/10/XMLSchema#`, but the 2001 IRI is the XML
 Schema namespace and ProvPy uses it, so `well_known::XSD` holds the
 2001 IRI and `declare("xsd", ...)` accepts only that one
