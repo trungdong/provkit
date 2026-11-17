@@ -143,9 +143,9 @@ documents of the shared ProvToolbox corpus, `provn/spec/prov-n/` and
 `provn/spec/prov-dm/` hold the examples of the two Recommendations
 wrapped in a document, `provn/provtoolbox/` holds ProvToolbox's own
 test documents, `provn/provtoolbox-corpus/` holds the PROV-N that
-ProvToolbox wrote from the JSON corpus, one twin per JSON file of the
-same name, `provn/probes/` holds the probes and `expected.tsv`, and
-`constraints/` holds the PROV-CONSTRAINTS [unification](../reference/glossary.md#unification-prov) cases.
+ProvToolbox wrote from the JSON corpus, a twin of the same name for
+388 of the 398 JSON files, `provn/probes/` holds the probes and
+`expected.tsv`, and `constraints/` holds the PROV-CONSTRAINTS [unification](../reference/glossary.md#unification-prov) cases.
 
 ```rust,ignore
 {{#include ../../../provkit/tests/corpus_json.rs:reads_all}}
@@ -163,7 +163,8 @@ chapter 4 on every document, expects the `scruffy-*` files to fail with a
 against a constant list and counts the ones that fail on a time, and
 checks that every other document unifies, that unifying twice gives
 the same result and that unification never adds a record. The
-constraints test does the same over `corpus/constraints`, with one
+constraints test calls `unified` on every file of
+`corpus/constraints` and checks which files fail, with one
 constant list of the files whose failing formal is present on one
 side only and another pairing each other failing file with its cause.
 The last test in the file reads the first Rust block of both READMEs
@@ -332,8 +333,9 @@ shared `tsv` helper. An excluded spec example must fail with the kind
 its reason names, and a phantom or duplicate row in
 `known_differences.tsv` fails, which is the `fails_as_listed` check
 and the two-way check described above. A row is therefore a claim the
-test checks, that the file is rejected for the stated reason or reads
-and differs from its twin, rather than a file the test does not look
+test checks, that the file is rejected, for a spec example with the
+kind of error its reason names, or that it reads and differs from its
+twin, rather than a file the test does not look
 at, and each list has a heading naming the test that pins it
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "PROV-N specification examples", "ProvToolbox files" and "ProvToolbox

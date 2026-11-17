@@ -284,8 +284,12 @@ PROV-JSON the same rule.
 
 ### Why do positions match `serde_json`'s?
 
-Both readers carry a line and a column on every error and count the
-column in characters ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
+The PROV-N reader carries a line and a column on every error, and the
+PROV-JSON reader on every error it finds while reading the JSON. Both
+count the column in characters. A PROV-JSON error found while building
+a record carries no position, and `Error::InRecord` names the section
+and the key of the record instead
+([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Every error from the PROV-N reader carries a line and a column"). The
 reader raises some errors itself, a value it could not decode or a key
 given twice in a record, after `serde_json` has accepted the text, and

@@ -2,13 +2,13 @@
 
 The last chapter is everything that runs before and after the code: the
 lint set, the checks CI runs on a push to `main` and on every pull
-request, the licence check and the workflow that turns a tag into a
-release. None of it is Rust, and all
-of it decides what a contributor's change must pass and what a user
+request, the licence check, the workflow that turns a tag into a
+release and the workflow that publishes this book. None of it is Rust,
+and all of it decides what a contributor's change must pass and what a user
 downloads. This chapter reads the release profile in the root manifest,
 the clippy and rustfmt settings, the configuration of `cargo deny`,
-`typos` and `cargo about`, and the CI and release workflows, each
-file included whole. It builds on chapter 1 for the manifests and the
+`typos` and `cargo about`, and the CI, release and Pages workflows,
+each file included whole. It builds on chapter 1 for the manifests and the
 lint table, which that chapter shows and this one does not repeat, and on
 chapter 8 for the `exclude` line and the `[[test]]` targets that the
 packaged-crate and feature-subset steps of CI exercise.
@@ -206,12 +206,27 @@ is the human side of the same steps. A release is a tag `v<version>`
 on `main`, the version sits in two places in the root manifest, and
 the workflow checks the tag against the version of `provkit-cli`. The
 release steps set the changelog date, run the checks CI runs and a
-clean `cargo package --workspace`, commit, tag with `git tag -a`, wait
-for the workflow, publish `provkit` and then `provkit-cli` to
+clean `cargo package --workspace`, commit, set the Pages source of
+the repository to "GitHub Actions" once, after the repository is
+public and before the first push to `main`, tag with `git tag -a`,
+wait for the workflow, publish `provkit` and then `provkit-cli` to
 crates.io, and install from both sources to check. Two recovery paths
 follow, for a workflow that fails after the tag and for `provkit`
 published without `provkit-cli`, and the places the toolchain pin
 appears are listed last, because they move together.
+
+### .github/workflows/pages.yml
+
+```yaml
+{{#include ../../../.github/workflows/pages.yml}}
+```
+
+`pages.yml` runs on every push to `main`. The `build` job checks out
+the repository with the corpus submodule, installs the toolchain and
+the `mdbook` binary that the `book` job of CI installs, runs
+`book/build.sh` and uploads `book/book` as the Pages artifact. The
+`deploy` job publishes that artifact with `actions/deploy-pages`, and
+it is skipped while the repository is private.
 
 ## Why this shape
 

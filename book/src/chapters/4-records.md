@@ -335,8 +335,11 @@ variants, the keywords, the formals, the structs, the `Record`
 variants and the arms of every `match` over the kinds. The PROV-N
 parser would hold its own copy of the argument counts. With the
 table, a kind's facts sit on one row, and the enum, the struct, the
-`Record` variant and every generated `match` arm follow from it, so
-adding a kind is adding a row. `Kind` and `Record` are
+`Record` variant and every generated `match` arm follow from it.
+Adding a kind is adding a row, a re-export in `lib.rs`, a line in the
+table that the test `formal_tables_match_the_spec` checks and, where
+PROV-CONSTRAINTS names the kind, an entry in the constraint tables of
+`unify/mod.rs`. `Kind` and `Record` are
 `#[non_exhaustive]`, so a row added later does not break a `match` in another crate.
 
 ### Why is every formal an `Option`?

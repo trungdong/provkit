@@ -117,11 +117,11 @@ crate, and `forbid` cannot be overridden by an `allow` further down.
 Clippy's `all` and `pedantic` groups both warn, and CI runs clippy with
 `-D warnings`, so each is an error there. The manifest allows a
 handful of pedantic lints that fight the domain, and its comment says
-why for all but one. PROV names repeat their module, as `json::JsonValue`
+why for two of them. PROV names repeat their module, as `json::JsonValue`
 does, so `module_name_repetitions` is off, and every fallible function
-documents its `Error` in one place, so `missing_errors_doc` and
-`missing_panics_doc` are off too. `must_use_candidate` is allowed with
-no comment. Where one lint is wrong for a single item, the code
+documents its `Error` in one place, so `missing_errors_doc` is off
+too. `missing_panics_doc` and `must_use_candidate` are allowed with no
+stated reason. Where one lint is wrong for a single item, the code
 carries `#[allow(clippy::...)]`
 with a comment giving the reason, for example `too_many_arguments` on
 `DateTime::new`, which takes one argument per XSD component.
@@ -148,13 +148,15 @@ the `json` list for the same reason, so a build without `json` depends
 on neither `serde` nor `serde_core`, which an `indexmap` built with its
 `serde` feature would pull in.
 
-### Why does every type sit at the crate root?
+### Why does every data-model type sit at the crate root?
 
 With every module private except `json`, `provn` and `well_known`,
-each type has exactly one public path and shows once in the API
-reference, at the root. A private module with a `pub use` re-export is
-what gives an item that single path. The file layout inside `src/` is
-then an internal matter, because no caller can name a private module.
+each data-model type has exactly one public path and shows once in the
+API reference, at the root. `provn` keeps its own three types,
+`Profile`, `Ignored` and `ReadReport`. A private module with a
+`pub use` re-export is what gives an item that single path. The file
+layout inside `src/` is then an internal matter, because no caller can
+name a private module.
 
 ## The Rust here
 

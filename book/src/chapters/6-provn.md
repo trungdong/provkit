@@ -30,10 +30,10 @@ defines the reader's public types and entry points.
 caller passes it by value, and `#[non_exhaustive]`, so a later profile
 does not break a `match` outside the crate. `Strict` refuses every
 form the grammar does not allow, each listed on the
-[variant](../api/provkit/provn/enum.Profile.html#variant.Strict) with
-its production or section, among them a prefixed `prov:mentionOf`
-that is an extensibility expression rather than a mention unless three
-names follow it. `Default` is the grammar plus the forms
+[variant](../api/provkit/provn/enum.Profile.html#variant.Strict), four
+of the six with a production or section, among them a prefixed
+`prov:mentionOf` that is an extensibility expression rather than a
+mention unless three names follow it. `Default` is the grammar plus the forms
 in that list, which ProvPy and ProvToolbox write. Below the span,
 `Relaxation` has one variant per item in the `Strict` list, and
 `Profile::allows` answers `false` for `Strict` and `true` for

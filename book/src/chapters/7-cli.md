@@ -325,8 +325,8 @@ declarations and the `prefix` lines beneath them. The tests
   `split_once`**. `eq_ignore_ascii_case` compares without making a
   lower-cased copy, `trim_start_matches` drops every leading match, and
   `strip_prefix` and `split_once` return `None` when the pattern is
-  absent, so the fallbacks in `from_path` and `sniff` are `unwrap_or`
-  and `map_or` rather than `?`.
+  absent, so the fallbacks in `sniff` are `unwrap_or` and `map_or`
+  rather than `?`, while `from_path` uses `?` on its two `Option` steps.
   [str methods](https://doc.rust-lang.org/std/primitive.str.html#method.strip_prefix)
 - **`HashSet::insert` inside a `filter`**. `insert` returns whether the
   value was new, so `seen.insert(*r)` in `only_in` both remembers a

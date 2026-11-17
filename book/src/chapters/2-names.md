@@ -78,9 +78,10 @@ name. Neither field is public. `QName::new` takes two `&str`, checks
 the local part with `check_local`, and builds the name; the
 crate-private `in_namespace` takes an `Arc<str>` instead, so a name
 resolved through a prefix table shares the table's allocation rather
-than copying the IRI. The check refuses only characters that no
-`PN_LOCAL` holds anywhere, bare or escaped. An empty local part is
-valid.
+than copying the IRI. The check refuses a character that no
+`PN_LOCAL` holds at its position, bare or escaped, which covers a `%`
+without two hex digits after it and a first character that may only
+continue a name. An empty local part is valid.
 
 Equality, ordering and hashing are written by hand, and all three
 look at the joined IRI rather than at the two fields.
@@ -176,8 +177,9 @@ formats ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORM
 "`Namespaces::declare` rejects a prefix"). `prov` or `xsd`
 at any IRI but its fixed one is `Error::ReservedPrefix`, which carries
 the prefix, the expected IRI and the one found. A declaration of `prov` or `xsd`
-at the right IRI is accepted and changes nothing, so a document that
-restates a predeclared binding still reads. Everything else goes to
+at the right IRI is accepted and changes nothing, so a PROV-JSON
+document that restates a predeclared binding still reads, and so does
+a PROV-N one under the `Default` profile. Everything else goes to
 `bind`, which replaces an earlier binding of the same prefix in place
 and keeps the reverse table in step.
 
@@ -214,8 +216,8 @@ clones that `Arc` into every name it resolves through
 `QName::in_namespace`, so the name shares its namespace with the other
 names built from the same table. The local part is a `Box<str>`, one owned allocation per name with no
 count to maintain, and `in_namespace` builds it fresh from the `&str`
-it is given. A document read through one table holds each namespace IRI once,
-however many names use it.
+it is given. A document read through one table holds the IRI of each
+binding once, however many names resolve through it.
 
 ### Why is equality on the IRI and not the prefix?
 
@@ -280,10 +282,10 @@ prefix adds to it.
 
 ## The Rust here
 
-- **Ownership and borrowing**. Every function in this chapter takes `&str`,
-  a borrowed view of text someone else owns, and returns a length or a
-  new value; `QName::new` is where a borrowed `&str` is copied into an
-  owned string the name keeps.
+- **Ownership and borrowing**. Functions such as `prefix_len` and
+  `QName::new` take `&str`, a borrowed view of text someone else owns,
+  and return a length or a new value; `QName::new` is where a borrowed
+  `&str` is copied into an owned string the name keeps.
   [What is ownership?](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html),
   [References and borrowing](https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html)
 - **`Arc<str>`**. A reference-counted pointer to an immutable string,
