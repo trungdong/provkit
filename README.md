@@ -125,7 +125,7 @@ statements of its prose, with the departures
 records, and `Default` (the profile `provn::read` uses) adds six
 extensions that
 [Python `prov`](https://github.com/trungdong/prov)
-3.3.0's `default` profile also reads, which that file
+3.3.1's `default` profile also reads, which that file
 lists.
 `provn::read_report` returns a `ReadReport` with the document and the
 expressions left out. The API reference is on
@@ -136,7 +136,7 @@ it locally.
 
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 lists where provkit departs from the PROV Recommendations, where it differs
-from Python `prov` 3.3.0 (with its issue number where one is filed) and from
+from `prov` 3.3.1 (with its issue number where one is filed) and from
 [ProvToolbox](https://lucmoreau.github.io/ProvToolbox/)
 2.5.0, and its implementation limits, each with its reason and
 test.

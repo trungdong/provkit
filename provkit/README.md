@@ -45,7 +45,7 @@ PROV-N grammar and the MUST statements of its prose, with the departures
 [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 records, and `Default` adds six extensions that
 [Python `prov`](https://github.com/trungdong/prov)
-3.3.0's `default`
+3.3.1's `default`
 profile also reads, which that file lists.
 
 ## Features

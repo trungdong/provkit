@@ -226,7 +226,7 @@ and `"1e999"` equals `"INF"` as an `xsd:double`
 "A typed literal is never rejected for its text"). Equal values under
 one datatype are one value, and
 [Python `prov`](https://github.com/trungdong/prov)
-3.3.0 compares the numeric and
+3.3.1 compares the numeric and
 boolean datatypes by value too, except that it finds two `xsd:float`
 values unequal that differ only beyond single precision ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Values of the numeric and boolean datatypes compare by value"). Two

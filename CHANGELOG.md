@@ -26,7 +26,7 @@ The first release.
   lists where the library departs from the Recommendations, where it differs
   from
   [Python `prov`](https://github.com/trungdong/prov)
-  3.3.0 and
+  3.3.1 and
   [ProvToolbox](https://lucmoreau.github.io/ProvToolbox/)
   2.5.0, and its implementation limits,
   each with its reason and test.

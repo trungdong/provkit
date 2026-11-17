@@ -49,11 +49,11 @@
 //!   records, and `Default` adds six extensions that the
 //!   `default` profile of
 //!   [Python `prov`](https://github.com/trungdong/prov)
-//!   3.3.0 also reads, which that file lists.
+//!   3.3.1 also reads, which that file lists.
 //!
 //! [CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md)
 //! in the repository lists where provkit departs from the PROV
-//! Recommendations, where it differs from Python `prov` 3.3.0 and from
+//! Recommendations, where it differs from `prov` 3.3.1 and from
 //! `ProvToolbox` 2.5.0, and its implementation limits.
 //!
 //! # Features

@@ -36,7 +36,7 @@ prefixed `prov:mentionOf` is an extensibility expression rather than a
 mention unless three names follow it. `Default` is the grammar plus the forms
 in that list, which
 [Python `prov`](https://github.com/trungdong/prov)
-3.3.0's `default` profile also reads.
+3.3.1's `default` profile also reads.
 Below the span, `Relaxation` has one variant per item in the `Strict` list,
 and `Profile::allows` answers `false` for `Strict` and `true` for
 `Default` whatever the relaxation; a third profile would name the ones
@@ -322,12 +322,12 @@ back as `xsd:int` unquoted, and every other typed value as a string with `%%` an
 
 `Strict` is the reference for the grammar and the MUST statements of
 the prose, and `Default` adds the forms the `Relaxation` enum names.
-Python `prov` writes three of them, and Python `prov` 3.3.0's `default` profile reads all
+`prov` writes three of them, and `prov` 3.3.1's `default` profile reads all
 six. `Default` still refuses the grammar-invalid form ProvToolbox 2.5.0
 writes, a string with both a language tag and a datatype, and it leaves
 out ProvToolbox's `provext:` statements as
 extensibility expressions. The
-`strict` profile of Python `prov` 3.3.0 refuses four of those forms too, and
+`strict` profile of `prov` 3.3.1 refuses four of those forms too, and
 productions [1], [24] to [26] and [45] and the MUST in section 3.7.4
 are the grammar behind each refusal
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
@@ -371,7 +371,7 @@ implementations MAY ignore these expressions". The reader does both,
 parsing them under either profile and leaving them out of the document
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
 "Extensibility expressions are parsed under both profiles and left
-out"). Python `prov` 3.3.0 does the same under each of its profiles and
+out"). `prov` 3.3.1 does the same under each of its profiles and
 warns about each expression it drops. Section 3.7.1 requires a prefix
 to refer to a declared namespace, but the reader ignores the whole
 expression, contents included, and reports it, so `ex:foo(zz:a)` reads with `zz`
@@ -542,7 +542,7 @@ test result: ok. 1 passed
 
 `corpus/provn/probes/expected.tsv` says the probe `alt_with_attrs`
 is rejected under `Strict` and accepted under `Default`, by rule
-[24], and its `provpy` column is empty, because Python `prov` 3.3.0 gives the
+[24], and its `provpy` column is empty, because `prov` 3.3.1 gives the
 same results. Read `corpus/provn/probes/alt_with_attrs.provn` and
 predict which token `Strict` refuses and where its message points.
 Then run the doctest below, which the book compiles with the probe's
@@ -579,7 +579,7 @@ the error placed at the `[`, on line 3 at column 27.
 PROV-N syntax error at line 3, column 27: expected no attributes in alternateOf under the strict profile, found '['
 ```
 
-Python `prov` writes an attribute block on `alternateOf`, so `Default` takes
+`prov` writes an attribute block on `alternateOf`, so `Default` takes
 it, and the row beginning "`Profile::Strict` accepts the whole PROV-N grammar"
 lists this probe among its tests.
 

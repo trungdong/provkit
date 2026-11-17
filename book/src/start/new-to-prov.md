@@ -171,7 +171,7 @@ declared inside a bundle applies only there, as
 
 [Python `prov`](https://github.com/trungdong/prov) is a Python implementation
 of PROV-DM, published on PyPI as `prov`. The book compares provkit
-with Python `prov` 3.3.0.
+with `prov` 3.3.1.
 
 [ProvToolbox](https://lucmoreau.github.io/ProvToolbox/) is a Java
 library for PROV-DM. Its command-line tool is `provconvert`, and the

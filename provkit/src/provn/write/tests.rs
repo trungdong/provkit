@@ -332,7 +332,7 @@ fn a_lone_minus_or_empty_int_is_not_bare() {
 }
 
 /// `PN_LOCAL` [53] admits `-` after the first character and `.` between the
-/// first and the last, so the writer leaves them bare there, as Python `prov` 3.3.0
+/// first and the last, so the writer leaves them bare there, as Python `prov` 3.3.1
 /// does. Every other `PN_CHARS_ESC` character keeps its backslash.
 #[test]
 fn local_parts_escape_as_provpy_writes_them() {

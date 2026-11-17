@@ -56,7 +56,7 @@ Five rules sit in `local_char`. A `-` is escaped only as the first
 character, and a `.` only as the first or the last, because `PN_LOCAL` [53]
 admits both bare anywhere else. The text then matches what
 [Python `prov`](https://github.com/trungdong/prov)
-3.3.0
+3.3.1
 writes. The other `PN_CHARS_ESC` characters, such as `:` and `=`, are always
 written escaped. A `%` stands unescaped only when two hex digits follow,
 because `PERCENT` is the only place `%` can stand. Everything else goes

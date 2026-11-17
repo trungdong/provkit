@@ -328,7 +328,7 @@ impl<'t> Parser<'t> {
     /// where a party is mandatory. An `identifierOrMarker` and `;` may come
     /// before the names, as for bare `mentionOf`. [`Profile::Default`] takes
     /// that form always, and [`Profile::Strict`] only when one of the names
-    /// is `-`, so that `formals` refuses the `-` as Python `prov` 3.3.0 does. Any
+    /// is `-`, so that `formals` refuses the `-` as Python `prov` 3.3.1 does. Any
     /// other shape is an extensibility expression under production [49].
     fn mention_shape_follows(&self) -> bool {
         let kind = |i: usize| self.tokens.get(self.pos + i).map(|t| &t.kind);

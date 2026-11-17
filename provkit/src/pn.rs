@@ -92,7 +92,7 @@ pub(crate) fn hex_pair_follows(local: &str, at: usize) -> bool {
 /// when no `PN_LOCAL` [53] holds it there. The writer escapes every
 /// `PN_CHARS_ESC` character except `-` after the first character and `.`
 /// between the first and the last, which `PN_LOCAL` admits bare and Python `prov`
-/// 3.3.0 writes bare.
+/// 3.3.1 writes bare.
 pub(crate) fn local_char(local: &str, at: usize, c: char) -> Option<LocalChar> {
     if c == '.' {
         let ends_the_part = at == 0 || at + 1 == local.len();

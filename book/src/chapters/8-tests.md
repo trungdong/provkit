@@ -310,16 +310,12 @@ the end-to-end tests read the corpus too.
 
 ### Why test on the documents Python `prov` tests on?
 
-provkit does not deviate from Python `prov` without a CONFORMANCE.md row
-giving the reason and the issue number where one is filed. Python `prov` 3.3.0's own tests read
+provkit does not deviate from `prov` without a CONFORMANCE.md row
+giving the reason and the issue number where one is filed. `prov`'s own tests read
 copies of the corpus's PROV-JSON documents, specification examples and
 ProvToolbox files, so the two libraries are tested on nearly the same
-documents
-([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"The tests read"). Both profiles must match `expected.tsv` for every
-probe
-([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"`expected.tsv` gives the result"). Each of the two libraries keeps
+documents. Both profiles must match `expected.tsv` for every
+probe. Each of the two libraries keeps
 its own exclusion lists.
 
 ### Why does `expected.tsv` carry a `rule` column?
