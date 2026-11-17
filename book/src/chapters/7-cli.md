@@ -237,8 +237,7 @@ cannot write"). A name that belongs to an
 [attribute](../reference/glossary.md#attribute-prov) is printed inside
 `[...]`, and a bundle heading reads `bundle <IRI>: // not valid
 PROV-N`. The exit code stays 1, because PROV-JSON can hold such an
-IRI, and a difference in such a record is still a difference and not
-a failure with exit code 2. `provn::statement` still returns the
+IRI. `provn::statement` still returns the
 error, so the library's contract from chapter 6 is unchanged and the
 heading is the binary's own rendering, which `statement_line` builds
 from the name inside `Error::Unwritable`. The test
@@ -246,8 +245,7 @@ from the name inside `Error::Unwritable`. The test
 
 ### Why is the listing not a PROV-N document?
 
-The listing is not a PROV-N document; its names resolve with the
-declarations of the file they came from. Every side renders with its
+Every side renders with its
 own document's namespaces, and every line of one file, and of one
 bundle, renders against one namespace table, so a minted `nsN` prefix
 means one IRI in its scope. A `prefix nsN <IRI>` line is printed for

@@ -267,10 +267,9 @@ name against a table the caller holds.
 {{#include ../../../provkit/src/provn/write/mod.rs:provn_to_string}}
 ```
 
-Three rules hold. A namespace with no declared
+A namespace with no declared
 prefix gets a minted `ns1`, `ns2` and so on, and the document is left
-unchanged, because the function works on a clone of the table. A
-record without an identifier is written without one. Bundles that
+unchanged, because the function works on a clone of the table. Bundles that
 share an identifier are written as one, through `merged_bundles` from
 chapter 4. The body is rendered before the declarations are printed,
 because every prefix minted while rendering a name lands in `names`,

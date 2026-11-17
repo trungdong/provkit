@@ -291,11 +291,7 @@ crate carries.
 {{#include ../../../provkit/Cargo.toml:exclude}}
 ```
 
-`exclude = ["tests/corpus_*.rs", "tests/data/"]` removes the corpus
-tests and their data from the published crate, because they read the
-corpus submodule, which the `.crate` archive lacks; `tests/common/`
-ships because `provn_round_trip` declares it and must compile from
-the tarball. `provkit-cli/Cargo.toml` excludes `tests/cli.rs`, since
+`provkit-cli/Cargo.toml` excludes `tests/cli.rs`, since
 the end-to-end tests read the corpus too.
 
 ## Why this shape
@@ -326,10 +322,7 @@ row.
 
 ### Why a reason on every exclusion?
 
-Every excluded file and known difference is listed in
-`provkit/tests/data/*.tsv` with a reason, one policy for the three
-lists, each a TSV with a name and a reason column read through the
-shared `tsv` helper. An excluded spec example must fail with the kind
+An excluded spec example must fail with the kind
 its reason names, and a phantom or duplicate row in
 `known_differences.tsv` fails, which is the `fails_as_listed` check
 and the two-way check described above. A row is therefore a claim the

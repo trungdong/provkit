@@ -32,11 +32,7 @@ type holds. Text that is not JSON is [`Error::Json`](../api/provkit/enum.Error.h
 column where parsing stopped. Valid JSON that is not a PROV document is
 `Error::JsonStructure`, and `shape_error`, below the span, tells the
 two apart by `serde_json`'s `classify`, which reports JSON of the wrong
-shape as a data error. A fault found while the JSON is read carries the
-position of the offending token. For a key the reader refuses, the
-position is where `serde_json` puts an error raised once the key's
-value has been read, past the whitespace after the value and past a
-closing brace that follows it. An error inside a record is wrapped in
+shape as a data error. An error inside a record is wrapped in
 `Error::InRecord` naming the section and the record's key, and inside a
 bundle a second `InRecord` names the bundle. `char_column` recounts
 the column `serde_json` reports in characters, because `serde_json`
@@ -297,12 +293,10 @@ text, for a value it could not decode or a key given twice in a
 record. It places each one where `serde_json` gives the same error when
 it reads the document in one pass. An error from either source
 therefore reads the same way. For a value that is the line and column of
-its token. For a refused key it is past the value, past the white
-space after it and past a closing brace that follows, because that is
+its token. For a refused key it is past the value, past the
+whitespace after it and past a closing brace that follows, because that is
 where `serde_json` stands when a map visitor returns an error after
-`next_value`. The column is counted again in characters by
-`char_column`, because `serde_json` counts bytes and the PROV-N reader
-counts characters. `strip_bom` runs before the parse, so a leading
+`next_value`. `strip_bom` runs before the parse, so a leading
 byte-order mark is counted in no column, because it is an encoding
 signature, not content, while U+FEFF is otherwise a name character
 ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),

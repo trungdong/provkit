@@ -271,10 +271,7 @@ to that bundle, and lets a bundle re-declare a prefix the surrounding
 document declared. Both readers follow that rule, and so do the
 writers, which print a bundle's names with its own table in front of
 the document's ([CONFORMANCE.md](https://github.com/trungdong/provkit/blob/main/CONFORMANCE.md),
-"A bundle identifier resolves in the bundle's own scope first"). A
-`Scope` reads through to a parent without merging the two; the
-bundle's bindings and default win, and anything the bundle leaves out
-falls back to the document. A `Scope` is `Copy` and holds two
+"A bundle identifier resolves in the bundle's own scope first"). A `Scope` is `Copy` and holds two
 references, so a reader builds one per bundle at no cost and neither
 table moves or changes. `WriteScope`, further down the file, is the
 same pair for the writers, with a mutable own table because minting a
