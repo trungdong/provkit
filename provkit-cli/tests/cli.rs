@@ -287,6 +287,69 @@ fn a_json_syntax_error_prints_its_position() {
     ));
 }
 
+const NS: &str = r#"{"prefix": {"ex": "http://example.org/"}"#;
+
+#[test]
+fn json_structure_errors_print_their_position() {
+    let cases = [
+        (
+            format!("{NS},\n \"entity\": {{\"ex:e\": 5}}}}"),
+            "2:21: invalid type: integer `5`, expected a record object or an array of record objects",
+        ),
+        (
+            format!("{NS},\n \"entity\": [1]}}"),
+            "2:11: invalid type: sequence, expected a map",
+        ),
+        (
+            "{\"prefix\": 3}".to_owned(),
+            "1:12: invalid type: integer `3`, expected a map",
+        ),
+        (
+            format!("{NS},\n \"entity\": {{\"ex:e\": {{}}}},\n \"entity\":[]}}"),
+            "3:13: duplicate field `entity`",
+        ),
+        (
+            format!("{NS}, \"entity\": {{\"ex:e\": \"a at line 1 column 2\"}}}}"),
+            "1:83: invalid type: string \"a at line 1 column 2\", expected a record object or an array of record objects",
+        ),
+        (
+            format!("{NS}, \"used\": {{\"_:u\": {{\"prov:entity\": null}}}}}}"),
+            "1:78: used `_:u`: null is not an attribute value",
+        ),
+        (
+            format!(
+                "{NS}, \"bundle\": {{\"ex:b\": {{\"entity\": {{\"ex:e\": {{\"ex:a\": [1,2], \"ex:a\": 3}}}}}}}}}}"
+            ),
+            "1:107: bundle `ex:b`: entity `ex:e`: duplicate field `ex:a`",
+        ),
+    ];
+    for (n, (input, expected)) in cases.iter().enumerate() {
+        let dir = scratch(&format!("json_structure_errors_print_their_position_{n}"));
+        let bad = write(&dir, "bad.json", input);
+        let seen = convert(&[], &bad)
+            .code(2)
+            .stderr(format!("provkit: {}:{expected}\n", bad.display()));
+        // The quoted value in one input holds the words itself.
+        if !input.contains(" at line ") {
+            seen.stderr(predicate::str::contains(" at line ").not());
+        }
+    }
+}
+
+#[test]
+fn a_json_structure_error_without_a_position_prints_as_before() {
+    let dir = scratch("a_json_structure_error_without_a_position_prints_as_before");
+    let bad = write(
+        &dir,
+        "bad.json",
+        &format!("{NS}, \"used\": {{\"_:u\": {{\"prov:entity\": 5}}}}}}"),
+    );
+    convert(&[], &bad).code(2).stderr(format!(
+        "provkit: {}: used `_:u`: PROV-JSON: `prov:entity` must be a name, not a number, boolean or array\n",
+        bad.display()
+    ));
+}
+
 #[test]
 fn stdin_errors_name_the_input_as_stdin() {
     convert_stdin(&["-f", "json"], "{")

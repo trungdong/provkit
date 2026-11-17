@@ -92,7 +92,11 @@ fn shown(path: &Path) -> String {
 }
 
 /// A library error from reading `source`, as `source:line:column: message`
-/// when the error has a position, so an editor can jump to it.
+/// when the error has a position, so an editor can jump to it. A PROV-JSON
+/// structure error carries its position at the end of its message, so it is
+/// moved to the front, with the `PROV-JSON: ` label dropped. The same holds
+/// when the structure error sits inside `Error::InRecord`, at any depth, and
+/// the text naming the record stays in front of the message.
 fn located(source: &str, error: provkit::Error) -> anyhow::Error {
     match error {
         provkit::Error::Syntax {
@@ -111,8 +115,45 @@ fn located(source: &str, error: provkit::Error) -> anyhow::Error {
             (Some(line), Some(column)) => anyhow!("{source}:{line}:{column}: {}", message_of(&e)),
             _ => anyhow!("{source}: {e}"),
         },
-        other => anyhow!("{source}: {other}"),
+        other => match structure_position(&other) {
+            Some((line, column, message)) => anyhow!("{source}:{line}:{column}: {message}"),
+            None => anyhow!("{source}: {other}"),
+        },
     }
+}
+
+/// The position and message of a PROV-JSON structure error that ends with
+/// one, whether it is `error` itself or the error inside any number of
+/// `Error::InRecord`. The message keeps the text that names each record and
+/// loses the `PROV-JSON: ` label and the position.
+fn structure_position(error: &provkit::Error) -> Option<(u64, u64, String)> {
+    let mut innermost = error;
+    while let provkit::Error::InRecord { error, .. } = innermost {
+        innermost = error;
+    }
+    let provkit::Error::JsonStructure { message, .. } = innermost else {
+        return None;
+    };
+    let (head, line, column) = split_position(message)?;
+    let shown = error.to_string();
+    let context = shown.strip_suffix(innermost.to_string().as_str())?;
+    Some((line, column, format!("{context}{head}")))
+}
+
+/// Splits a message that ends ` at line L column C` into the text before the
+/// ending, `L` and `C`. The split is at the last ` at line `, because a value
+/// quoted in the text can hold the same words. An ending that is not two
+/// plain numbers gives `None`.
+fn split_position(message: &str) -> Option<(&str, u64, u64)> {
+    let (head, ending) = message.rsplit_once(" at line ")?;
+    let (line, column) = ending.split_once(" column ")?;
+    let number = |text: &str| {
+        text.bytes()
+            .all(|b| b.is_ascii_digit())
+            .then(|| text.parse().ok())
+            .flatten()
+    };
+    Some((head, number(line)?, number(column)?))
 }
 
 /// A `JsonError`'s message without the ` at line L column C` it ends with,
@@ -228,4 +269,40 @@ fn convert(args: &ConvertArgs) -> Result<()> {
         Some(path) => fs::write(path, &buf).with_context(|| path.display().to_string())?,
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_position;
+
+    #[test]
+    fn a_position_splits_at_the_last_at_line() {
+        assert_eq!(
+            split_position(
+                "invalid type: string \"x at line 1 column 2\", expected a map at line 4 column 9"
+            ),
+            Some((
+                "invalid type: string \"x at line 1 column 2\", expected a map",
+                4,
+                9
+            ))
+        );
+    }
+
+    #[test]
+    fn an_ending_that_is_not_a_position_gives_none() {
+        for message in [
+            "no position",
+            "quoted \"x at line 1 column 2\" and nothing after",
+            "x at line 1 column",
+            "x at line 1",
+            "x at line a column 2",
+            "x at line 1 column +2",
+            "x at line 1 column 2 and more",
+            "x at line  column 2",
+            "x at line 99999999999999999999 column 2",
+        ] {
+            assert_eq!(split_position(message), None, "{message}");
+        }
+    }
 }

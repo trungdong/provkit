@@ -493,11 +493,11 @@ provkit convert /tmp/dup.json; echo $?
 ```
 
 ```text
-provkit: /tmp/dup.json: PROV-JSON: duplicate field `ex:e` at line 1 column 76
+provkit: /tmp/dup.json:1:76: duplicate field `ex:e`
 2
 ```
 
-The message names the key and the position. The second value is the
+The message gives the position first, then names the key. The second value is the
 `{}` after the repeated key, and the brace that follows it closes the
 `entity` object, so the error sits past that brace, at column 76, the
 count of characters on the line up to and including it.

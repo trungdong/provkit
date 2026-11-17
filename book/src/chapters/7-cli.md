@@ -72,9 +72,21 @@ placed at `source:line:column: message` when the error has a
 position. It destructures `Error::Syntax` and `Error::At` with `..`
 for the fields it does not use, asks a
 [`JsonError`](../api/provkit/struct.JsonError.html) for its line and
-column, and passes any other error through with the source name in
-front. `message_of` cuts the ` at line L column C` a `JsonError`
-message ends with, so the position is stated once.
+column, and gives every other error to `structure_position` before it
+falls back to the source name in front of the error. A PROV-JSON
+structure error carries its position at the end of its message, as
+` at line L column C`, so `structure_position` walks down through any
+number of `Error::InRecord` to the innermost error, and when that is an
+`Error::JsonStructure` it moves the position to the front. The text
+that names each record stays in front of the message and the
+`PROV-JSON: ` label goes, so a doubly nested error prints as
+`` bad.json:1:107: bundle `ex:b`: entity `ex:e`: duplicate field `ex:a` ``.
+`split_position` finds the position by splitting at the last
+` at line `, because a value quoted in the message can hold those words,
+and it accepts the ending only when both numbers are plain digits. An
+error without that ending, such as one inside a record that has no
+position, prints as it always did, label included. `message_of` cuts
+the same ending from a `JsonError` message.
 
 ```rust,ignore
 {{#include ../../../provkit-cli/src/main.rs:read_document}}
@@ -216,8 +228,8 @@ derived with `thiserror`, as chapter 4 showed, and its doc example
 matches a variant by name with `..` for the fields it does not need.
 `located` destructures `Syntax` and `At` the same way, because the
 binary wants their line and column, binds the `JsonError` inside
-`Json` whole and asks it for its position, and passes every other
-variant through. Past that one
+`Json` whole and asks it for its position, and hands every other
+variant to `structure_position`. Past that one
 function the binary never gives an error to a caller, because `main`
 prints it and exits, so the error only has to display well.
 `anyhow::Error` holds any error with a chain of contexts,
@@ -345,6 +357,13 @@ declarations and the `prefix` lines beneath them. The tests
   trial` commits it only on success, so a failed line leaves the table
   as it was.
   [Clone](https://doc.rust-lang.org/std/clone/trait.Clone.html)
+- **`while let` over a chain of boxed errors**. In `structure_position`
+  `while let Error::InRecord { error, .. } = innermost` repeats while
+  the pattern matches, and each pass rebinds `innermost` to the
+  `Box<Error>` inside, which a reference to `Error` accepts by
+  deref coercion, so the loop stops at the first error that is not an
+  `InRecord`.
+  [while let](https://doc.rust-lang.org/book/ch19-01-all-the-places-for-patterns.html#while-let-conditional-loops)
 
 ## Run this
 
@@ -461,3 +480,4 @@ provkit: /tmp/bad.provn:2:10: undeclared prefix `ex`
 - `HashSet::insert inside a filter`: https://doc.rust-lang.org/std/collections/struct.HashSet.html#method.insert
 - `a lifetime parameter on a function`: https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html#lifetime-annotations-in-function-signatures
 - `clone, try, assign back`: https://doc.rust-lang.org/std/clone/trait.Clone.html
+- `while let over a chain of boxed errors`: https://doc.rust-lang.org/book/ch19-01-all-the-places-for-patterns.html#while-let-conditional-loops
