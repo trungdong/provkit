@@ -2,20 +2,29 @@
 
 W3C PROV data model in Rust, with PROV-JSON and PROV-N read and write, and a
 `provkit` command-line tool to convert and compare documents.
+[PROV](https://www.w3.org/TR/prov-overview/) is the W3C family of documents
+for the interchange of provenance, which is information about the entities,
+activities and people involved in producing a piece of data or thing.
 
-Status: the first release. The minimum supported Rust version is 1.98.
-
-Contributors start with the book at <https://trungdong.github.io/provkit/>,
-which reads the source in order.
+Status: 0.1.0, the first release. The minimum supported Rust version is 1.98.
 
 ## Install
 
 ```sh
 cargo install --locked provkit-cli
+```
+
+This command builds the `provkit` binary from source. With
+[cargo-binstall](https://github.com/cargo-bins/cargo-binstall), the next
+command fetches a release binary and builds nothing.
+
+```sh
 cargo binstall provkit-cli
 ```
 
-The second command fetches a release binary. The binary is `provkit`.
+In a clone of the repository, `cargo install --locked --path provkit-cli`
+builds the same binary.
+
 Prebuilt binaries are on the
 [Releases](https://github.com/trungdong/provkit/releases) page. Each
 release carries one archive per target and its digest file, named after the
@@ -110,7 +119,9 @@ records, and `Default` (the profile `provn::read` uses) adds six
 extensions that ProvPy 3.3.0's `default` profile also reads, which that file
 lists.
 `provn::read_report` returns a `ReadReport` with the document and the
-expressions left out. API documentation: `cargo doc --open -p provkit`.
+expressions left out. The API reference is on
+[docs.rs](https://docs.rs/provkit), and `cargo doc --open -p provkit` builds
+it locally.
 
 ## Conformance
 
@@ -123,6 +134,9 @@ test.
 lists the releases.
 
 ## Tests and CI
+
+The book at <https://trungdong.github.io/provkit/> is the contributor guide.
+It reads the source one layer at a time.
 
 The tests read the [prov-corpus](https://github.com/trungdong/prov-corpus)
 submodule at `corpus/`. Clone with `--recurse-submodules`, or run
@@ -148,14 +162,19 @@ The published crates do not include the corpus.
 cargo test --workspace
 ```
 
-CI runs the tests on Linux and Windows, and the remaining checks on Linux.
-Releases follow
+CI runs the tests on Linux and Windows. On Linux it also runs
+`cargo fmt --check`, clippy, the tests of the packaged crate and of each
+feature alone, the rustdoc build, the `wasm32-unknown-unknown` build,
+`cargo deny` for supply-chain audits, `typos` for spell checking and the book
+build.
+[ci.yml](https://github.com/trungdong/provkit/blob/main/.github/workflows/ci.yml)
+holds the commands. Releases follow
 [RELEASING.md](https://github.com/trungdong/provkit/blob/main/RELEASING.md).
 
-Three checks run in CI only: the `wasm32-unknown-unknown` build, `cargo deny`
-for supply-chain audits, and `typos` for spell checking. To run them locally,
-install the tools with `cargo install cargo-deny typos-cli` and add the wasm32
-target with `rustup target add wasm32-unknown-unknown`.
+The last four need tools that Cargo does not ship. Install `cargo-deny` and
+`typos` with `cargo install cargo-deny typos-cli`, add the wasm32 target with
+`rustup target add wasm32-unknown-unknown`, and install mdBook 0.5.4 for
+`sh book/build.sh`.
 
 ## Licence
 

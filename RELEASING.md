@@ -12,7 +12,8 @@ attestations fail in a private repository on a free personal account.
 ## Steps
 
 1. Set the date of the entry in `CHANGELOG.md` to the release day. Set both
-   versions in `Cargo.toml` if they are not already the one to release.
+   versions in `Cargo.toml` and the Status line of the README if they are not
+   already the one to release.
 2. Run the main checks CI runs: `cargo fmt --check`, `cargo clippy --workspace
    --all-targets --all-features -- -D warnings`, `cargo test --workspace
    --all-features`, `cargo doc --workspace --no-deps` with
