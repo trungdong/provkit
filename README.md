@@ -142,20 +142,6 @@ The tests read the [prov-corpus](https://github.com/trungdong/prov-corpus)
 submodule at `corpus/`. Clone with `--recurse-submodules`, or run
 `git submodule update --init`.
 
-The corpus holds examples extracted and modified from the
-PROV-N and PROV-DM Recommendations, under the
-[W3C Document Licence](https://www.w3.org/copyright/document-license/).
-
-> Copyright © 2012-2013 W3C® (MIT, ERCIM, Keio, Beihang). This software or
-> document includes material copied from or derived from PROV-N: The
-> Provenance Notation, W3C Recommendation 30 April 2013,
-> <https://www.w3.org/TR/2013/REC-prov-n-20130430/>.
-
-> Copyright © 2011-2013 W3C® (MIT, ERCIM, Keio, Beihang). This software or
-> document includes material copied from or derived from PROV-DM: The PROV
-> Data Model, W3C Recommendation 30 April 2013,
-> <https://www.w3.org/TR/2013/REC-prov-dm-20130430/>.
-
 The published crates do not include the corpus.
 
 ```sh
