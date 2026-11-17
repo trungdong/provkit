@@ -310,9 +310,8 @@ pub(crate) fn is_qname_datatype(datatype: &QName) -> bool {
 }
 
 // ANCHOR: value_equality
-// Written out, not derived, because a derived `PartialEq` would also let
-// other crates match a `const Value` as a pattern. `Hash` is written out to
-// agree with it.
+// `PartialEq` and `Hash` are written out side by side. Derived impls would
+// compare and hash the same things.
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {

@@ -275,7 +275,8 @@ share an identifier are written as one, through `merged_bundles` from
 chapter 4. The body is rendered before the declarations are printed,
 because every prefix minted while rendering a name lands in `names`,
 and `declarations` then sees it. The block around the top-level
-loop ends the mutable borrow that `WriteScope::of` takes on `names`,
+loop keeps `top` to that loop. The mutable borrow that
+`WriteScope::of` takes on `names` ends with the last use of `top`,
 so the bundle loop and `declarations` can borrow it again.
 `write_bundle`, below the span, does the same for a bundle against its
 own table over the document's, renders the bundle's identifier inside
@@ -471,9 +472,10 @@ text with `is_pn_prefix`.
   kinds.
   [Result::as_deref](https://doc.rust-lang.org/std/result/enum.Result.html#method.as_deref),
   [Slice patterns](https://doc.rust-lang.org/reference/patterns.html#slice-patterns)
-- **A scoped block to end a borrow**. In `to_string`, `WriteScope::of`
-  holds `&mut names` until the block closes, after which `&names` can be lent to
-  `write_bundle` and `declarations`.
+- **A scoped block around a borrow**. In `to_string`, the block keeps
+  `top`, which holds `&mut names`, to the top-level loop. The borrow
+  ends at the last use of `top`, with or without the block, after which
+  `&names` can be lent to `write_bundle` and `declarations`.
   [References and borrowing](https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html)
 
 ## Run this
@@ -583,4 +585,4 @@ lists this probe among its tests.
 - `let chains`: https://doc.rust-lang.org/reference/expressions/if-expr.html#chains-of-conditions
 - `let _ = writeln!(..)`: https://doc.rust-lang.org/std/macro.writeln.html
 - `Result::as_deref with a slice pattern`: https://doc.rust-lang.org/std/result/enum.Result.html#method.as_deref
-- `a scoped block to end a borrow`: https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html
+- `a scoped block around a borrow`: https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html

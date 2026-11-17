@@ -92,11 +92,12 @@ look at the joined IRI rather than at the two fields.
 `iri_bytes` chains the bytes of the namespace with the bytes of the
 local part without building a `String`, and `is` compares that stream
 with another split pair after a cheap length check. `eq` and `cmp`
-walk two such streams byte by byte. `Hash` cannot simply feed the
-stream one byte at a time, because the `Hasher` contract does not
-promise that two `write` calls equal one call with the joined bytes,
-so it copies the bytes through a fixed buffer and ends with a
-terminator as `str` does. Two names with the same IRI then feed any
+walk two such streams byte by byte. `Hash` cannot write the namespace
+and the local part as two calls, because the `Hasher` contract does not
+promise that two `write` calls equal one call with the joined bytes.
+It copies the bytes through a fixed buffer instead, which makes fewer
+calls than one `write_u8` per byte, and ends with a terminator as
+`str` does. Two names with the same IRI then feed any
 hasher the same calls, however their splits differ. The doctest below
 is the rule in one program, and the book compiles it.
 

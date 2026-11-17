@@ -53,8 +53,9 @@ Equality and hashing come after the constructors.
 `PartialEq` for `Value` asks for the same variant and then equal
 payloads, and two different variants are never equal. `Hash` feeds the
 variant's discriminant and then the payload, so the two agree. Chapter 2
-wrote `QName`'s impls by hand to compare the IRI; here the reason is
-a different one, which the first card below takes up. The rule for typed literals sits in `TypedLiteral`'s
+wrote `QName`'s impls by hand to compare the IRI; here derived impls
+would compare and hash the same things, and the two are written out
+side by side. The rule for typed literals sits in `TypedLiteral`'s
 impls, above the enum, and in `Key`. Two typed literals are equal when
 their datatypes are equal and their texts are equal or their keys are.
 `Key::of` trims the XSD white space and reads the text under its
@@ -226,10 +227,8 @@ edges follow. Text outside the datatype's lexical space compares as
 text, which is why `Key::integer` checks the bounds and `"300"` as
 `xsd:byte` has no integer key, and values of different datatypes are
 never equal, so `"5"` as `xsd:int` and `"5"` as `xsd:long` are two
-values. The impl is written out although a derived one would compare
-the same things, because a derived `PartialEq` also implements
-`StructuralPartialEq`, which lets another crate match a `const Value`
-as a pattern, and that is a promise the public surface does not make.
+values. The impl is written out beside `Hash`, and a derived one would
+compare the same things.
 
 ### Why are integers typed by range?
 
@@ -309,10 +308,12 @@ copy.
   a `&str` or a `QName` to `Attributes::insert`.
   [Traits as parameters](https://doc.rust-lang.org/book/ch10-02-traits.html#traits-as-parameters)
 - **`compile_fail` doctests**. A doctest marked `compile_fail` passes
-  only when it fails to compile, and the error code after the comma pins
-  which error; the two on `TypedLiteral` show that its fields cannot be
+  only when it fails to compile. The error code after the comma names
+  the expected error, and rustdoc checks it only on a nightly
+  toolchain; the two on `TypedLiteral` show that its fields cannot be
   set from outside the crate.
-  [Documentation tests, attributes](https://doc.rust-lang.org/rustdoc/write-documentation/documentation-tests.html#attributes)
+  [Documentation tests, attributes](https://doc.rust-lang.org/rustdoc/write-documentation/documentation-tests.html#attributes),
+  [Error numbers for `compile-fail` doctests](https://doc.rust-lang.org/rustdoc/unstable-features.html#error-numbers-for-compile-fail-doctests)
 - **Enums with data in variants**. Each variant of `Value` carries its
   own payload type, and a `match` on the enum binds the payload, as
   `eq` and `datatype` do.
@@ -341,7 +342,7 @@ copy.
   binding its name, which is all `write!` into a `String` needs in
   `text`.
   [Underscore imports](https://doc.rust-lang.org/reference/items/use-declarations.html#underscore-imports)
-- **`#[allow(clippy::too_many_arguments)]` with a reason**. The
+- **`#[allow(clippy::too_many_arguments)]` with a comment**. The
   attribute silences one lint on one item, `DateTime::new`, whose
   arguments are one per XSD component.
   [too_many_arguments](https://clippy.rust-lang.org/master/index.html#too_many_arguments),
@@ -485,7 +486,7 @@ only in /tmp/d.provn:
 - `macro_rules! generating trait impls over a $t:ty list`: https://doc.rust-lang.org/reference/macros-by-example.html
 - `From and Into`: https://doc.rust-lang.org/std/convert/trait.From.html
 - `use std::fmt::Write as _`: https://doc.rust-lang.org/reference/items/use-declarations.html#underscore-imports
-- `#[allow(clippy::too_many_arguments)] with a reason`: https://clippy.rust-lang.org/master/index.html#too_many_arguments
+- `#[allow(clippy::too_many_arguments)] with a comment`: https://clippy.rust-lang.org/master/index.html#too_many_arguments
 - `and_then, map_err and ok_or_else chains`: https://doc.rust-lang.org/std/result/enum.Result.html
 - `i128::from widening`: https://doc.rust-lang.org/std/primitive.i128.html
 - `bool::then`: https://doc.rust-lang.org/std/primitive.bool.html#method.then

@@ -106,9 +106,9 @@ single object gets. This half is not derived, because an untagged enum
 tries each variant in turn and reports that none matched, while
 dispatching on the shape keeps the inner error.
 `Body::visit_map`, below the span, reads every attribute value as
-`&RawValue`, which borrows the value's text from the input without
-parsing it, and `from_raw` turns that text into the enum the reader
-sees.
+`&RawValue`, which checks the value's syntax and borrows its text from
+the input without building a value from it, and `from_raw` turns that
+text into the enum the reader sees.
 
 ```rust,ignore
 {{#include ../../../provkit/src/json/wire.rs:json_value}}
@@ -376,8 +376,9 @@ key as no identifier, and `sections` writes a fresh one.
   the parser moves past it.
   [IgnoredAny](https://docs.rs/serde/latest/serde/de/struct.IgnoredAny.html)
 - **`serde_json::value::RawValue`**. `next_value::<&RawValue>()` in
-  `Body::visit_map` borrows one value's text from the input without
-  parsing it, and `get` returns it as `&str`; it needs the `raw_value` feature of `serde_json`.
+  `Body::visit_map` checks one value's syntax and borrows its text from
+  the input without building a value from it, and `get` returns it as
+  `&str`; it needs the `raw_value` feature of `serde_json`.
   [RawValue](https://docs.rs/serde_json/latest/serde_json/value/struct.RawValue.html)
 - **`#[serde(untagged)]`**. The derived `Serialize` writes a variant's
   payload with nothing naming the variant, so `One` is the object and

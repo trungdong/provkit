@@ -30,7 +30,8 @@ crate boundaries, `codegen-units = 1` hands each crate to the optimiser
 as one unit instead of splitting it for parallel compilation, and
 `strip = true` drops the symbols from the binary. The three trade
 build time for a smaller, faster binary. The `dev` profile that
-`cargo build` and `cargo test` use is not changed. The lint table sits
+`cargo build` uses is not changed, and neither is the `test` profile
+that `cargo test` uses, which inherits from `dev`. The lint table sits
 above the profile in the same file, and
 [chapter 1](1-orientation.md#cargotoml) reads it. Each crate manifest
 carries `[lints]` with `workspace = true`, so both crates build under
@@ -291,8 +292,9 @@ crates.io, so the version number can stay.
 
 - **Cargo profiles**. A profile is a named set of compiler settings;
   `lto`, `codegen-units` and `strip` are the settings
-  `[profile.release]` changes from the defaults, and `dev` is the profile `cargo build` and `cargo
-  test` use.
+  `[profile.release]` changes from the defaults. `dev` is the profile
+  `cargo build` uses, and `cargo test` uses `test`, which inherits from
+  `dev`.
   [Profiles](https://doc.rust-lang.org/cargo/reference/profiles.html),
   [lto](https://doc.rust-lang.org/cargo/reference/profiles.html#lto),
   [codegen-units](https://doc.rust-lang.org/cargo/reference/profiles.html#codegen-units),

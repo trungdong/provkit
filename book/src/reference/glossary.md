@@ -178,7 +178,7 @@ A namespace is an IRI, and a prefix is the short name that a document binds to i
 
 ### ownership and move (Rust)
 
-Each value has one owner, and assigning or passing it to another owner moves it, so the old name stops being usable ([the Rust book chapter on ownership](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html)).
+Each value has one owner, and assigning or passing it to another owner moves it, so the old name stops being usable, unless the type is `Copy`, in which case the value is copied and both names stay usable ([the Rust book chapter on ownership](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html)).
 
 ### profile (PROV)
 

@@ -47,7 +47,7 @@ PROV use differently.
 | `macro_rules! generating trait impls over a $t:ty list` | [Chapter 3](../chapters/3-values.md) | [Rust reference](https://doc.rust-lang.org/reference/macros-by-example.html) |
 | `From and Into` | [Chapter 3](../chapters/3-values.md) | [std](https://doc.rust-lang.org/std/convert/trait.From.html) |
 | `use std::fmt::Write as _` | [Chapter 3](../chapters/3-values.md) | [Rust reference](https://doc.rust-lang.org/reference/items/use-declarations.html#underscore-imports) |
-| `#[allow(clippy::too_many_arguments)] with a reason` | [Chapter 3](../chapters/3-values.md) | [Clippy](https://clippy.rust-lang.org/master/index.html#too_many_arguments) |
+| `#[allow(clippy::too_many_arguments)] with a comment` | [Chapter 3](../chapters/3-values.md) | [Clippy](https://clippy.rust-lang.org/master/index.html#too_many_arguments) |
 | `and_then, map_err and ok_or_else chains` | [Chapter 3](../chapters/3-values.md) | [std](https://doc.rust-lang.org/std/result/enum.Result.html) |
 | `i128::from widening` | [Chapter 3](../chapters/3-values.md) | [std](https://doc.rust-lang.org/std/primitive.i128.html) |
 | `bool::then` | [Chapter 3](../chapters/3-values.md) | [std](https://doc.rust-lang.org/std/primitive.bool.html#method.then) |
@@ -96,7 +96,7 @@ PROV use differently.
 | `let chains` | [Chapter 6](../chapters/6-provn.md) | [Rust reference](https://doc.rust-lang.org/reference/expressions/if-expr.html#chains-of-conditions) |
 | `let _ = writeln!(..)` | [Chapter 6](../chapters/6-provn.md) | [std](https://doc.rust-lang.org/std/macro.writeln.html) |
 | `Result::as_deref with a slice pattern` | [Chapter 6](../chapters/6-provn.md) | [std](https://doc.rust-lang.org/std/result/enum.Result.html#method.as_deref) |
-| `a scoped block to end a borrow` | [Chapter 6](../chapters/6-provn.md) | [Rust book](https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html) |
+| `a scoped block around a borrow` | [Chapter 6](../chapters/6-provn.md) | [Rust book](https://doc.rust-lang.org/book/ch04-02-references-and-borrowing.html) |
 | `clap's derive API` | [Chapter 7](../chapters/7-cli.md) | [docs.rs](https://docs.rs/clap/latest/clap/_derive/index.html) |
 | `anyhow::Result, with_context, anyhow! and bail!` | [Chapter 7](../chapters/7-cli.md) | [docs.rs](https://docs.rs/anyhow/latest/anyhow/) |
 | `{:#} on an anyhow::Error` | [Chapter 7](../chapters/7-cli.md) | [docs.rs](https://docs.rs/anyhow/latest/anyhow/struct.Error.html#display-representations) |
