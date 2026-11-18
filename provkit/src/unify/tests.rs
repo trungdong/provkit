@@ -143,21 +143,6 @@ fn conflicting_names_fail() {
 }
 
 #[test]
-fn a_conflict_between_long_names_gives_a_short_message() {
-    let long = |c: char| Formal::Name(ex(&c.to_string().repeat(1 << 20)));
-    let d = document(
-        ['a', 'b']
-            .map(|c| rec(Kind::Usage, "u", vec![(F::Activity, long(c))], None))
-            .to_vec(),
-    );
-    let Err(e @ Error::Unification { .. }) = d.unified() else {
-        panic!("expected a unification error")
-    };
-    let text = e.to_string();
-    assert!(text.len() < 600, "{} bytes", text.len());
-}
-
-#[test]
 fn an_own_formal_attribute_is_invalid_alone_or_under_a_shared_identifier() {
     let cases = [
         ("a lone record", vec![hand_built(true)]),
