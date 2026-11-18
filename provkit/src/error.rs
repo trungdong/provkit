@@ -25,6 +25,10 @@ pub(crate) fn clip(text: &str) -> Cow<'_, str> {
 
 /// Every failure the crate can report.
 ///
+/// The variant and its fields say what failed. The text that `Display`
+/// prints is for a person to read and can change between releases, so
+/// match on the variant and not on the text.
+///
 /// A variant is feature-gated only when its payload type comes from an
 /// optional dependency: [`Error::Json`] holds a [`JsonError`]. Every
 /// other variant, including the ones only one reader or writer produces,
@@ -418,6 +422,17 @@ mod tests {
                     cause: UnificationCause::Kinds {
                         first: Kind::Usage,
                         second: Kind::Generation,
+                    },
+                },
+                &name_count,
+            ),
+            (
+                Error::Unification {
+                    id: QName::new("http://example.org/", "g").unwrap(),
+                    cause: UnificationCause::Formal {
+                        attr: FormalAttr::Activity,
+                        first: Some(Formal::Name(huge_name.clone())),
+                        second: None,
                     },
                 },
                 &name_count,
