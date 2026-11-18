@@ -10,6 +10,9 @@ fn parses_and_keeps_source() {
         "-0001-01-01T00:00:00",
         "2011-11-16T24:00:00",
         "12345-01-01T00:00:00.123456789Z",
+        "2012-02-29T00:00:00",
+        "2011-04-30T00:00:00",
+        "2011-11-16T16:05:33+05:59",
     ] {
         let d = DateTime::parse(text).unwrap();
         assert_eq!(d.to_string(), text);
@@ -34,6 +37,7 @@ fn rejects_invalid() {
     for text in [
         "2011-13-01T00:00:00",
         "2011-02-29T00:00:00",
+        "1900-02-29T00:00:00",
         "2011-11-16T24:00:01",
         "2011-11-16 16:05:33",
         "+2012-01-01T00:00:00",
@@ -168,6 +172,20 @@ fn canonical_form_when_built() {
     assert_eq!(d.to_string(), "2011-11-16T16:05:33.265Z");
     let d = DateTime::new(2011, 11, 16, 24, 0, 0, 0, None).unwrap();
     assert_eq!(d.to_string(), "2011-11-17T00:00:00");
+    let d = DateTime::new(0, 1, 1, 0, 0, 0, 0, None).unwrap();
+    assert_eq!(d.to_string(), "0000-01-01T00:00:00");
+    // Hour 24 at the end of a month, a year, a century and a 400-year cycle.
+    for ((year, month, day), next) in [
+        ((2011, 1, 31), "2011-02-01T00:00:00"),
+        ((2023, 2, 28), "2023-03-01T00:00:00"),
+        ((2024, 2, 28), "2024-02-29T00:00:00"),
+        ((1900, 2, 28), "1900-03-01T00:00:00"),
+        ((1999, 12, 31), "2000-01-01T00:00:00"),
+        ((2000, 2, 28), "2000-02-29T00:00:00"),
+    ] {
+        let d = DateTime::new(year, month, day, 24, 0, 0, 0, None).unwrap();
+        assert_eq!(d.to_string(), next);
+    }
 }
 
 #[test]
@@ -325,6 +343,19 @@ fn accessors_return_components_as_written() {
     );
     assert_eq!(d.nanosecond(), 0);
     assert_eq!(d.offset_minutes(), Some(-330));
+    let d = DateTime::parse("2011-11-16T16:05:33.265+01:00").unwrap();
+    assert_eq!(
+        (
+            d.year(),
+            d.month(),
+            d.day(),
+            d.hour(),
+            d.minute(),
+            d.second()
+        ),
+        (2011, 11, 16, 16, 5, 33)
+    );
+    assert_eq!(d.nanosecond(), 265_000_000);
     assert_eq!(
         DateTime::parse("2011-11-16T16:05:33")
             .unwrap()

@@ -538,6 +538,14 @@ fn arity_and_structure_errors() {
         (_, Error::UndeclaredPrefix(p)) if p == "zz"
     ));
     assert_eq!(syntax(provn::read("entity(ex:e)").unwrap_err()).0, (1, 1));
+    // A keyword that names no statement.
+    assert_eq!(
+        syntax(err("entty(ex:e)", Profile::Default)),
+        (
+            (4, 1),
+            "expected a PROV statement, found unknown keyword 'entty'".to_owned()
+        )
+    );
     // A time where a name belongs, and a name where a time belongs.
     syntax(err(
         "wasGeneratedBy(ex:e, 2011-11-16T16:05:33Z, -)",

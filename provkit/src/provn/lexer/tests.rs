@@ -150,6 +150,8 @@ fn local_part_rules() {
     assert!(matches!(&kinds("ex:a.b")[0], TokenKind::Name { local, .. } if local == "a.b"));
     // "ex:a." is the name "ex:a" followed by an unexpected '.'.
     syntax(tokenize("ex:a.").unwrap_err());
+    // "ex:.a" is the name "ex:" followed by an unexpected '.'.
+    assert_eq!(syntax_at("ex:.a"), (1, 4));
     assert!(
         matches!(&kinds("bbc:")[0], TokenKind::Name { prefix, local } if prefix == "bbc" && local.is_empty())
     );

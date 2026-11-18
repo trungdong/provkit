@@ -10,6 +10,10 @@ fn a_json_syntax_error_carries_its_position_and_its_source() {
     };
     assert_eq!((e.line(), e.column()), (Some(1), Some(1)));
     assert!(e.to_string().ends_with(" at line 1 column 1"), "{e}");
+    let Err(Error::Json(later)) = json::read("{\n]") else {
+        panic!("expected Error::Json")
+    };
+    assert_eq!((later.line(), later.column()), (Some(2), Some(1)));
     let source = std::error::Error::source(&e).expect("source");
     assert!(source.is::<serde_json::Error>());
     // The outer error prints the inner one and forwards its source.
@@ -926,6 +930,14 @@ fn json_errors_name_the_problem() {
                 r#""prov:entity": {"$": "ex:e", "lang": "en"}"#,
             ),
             "`prov:entity` must be a name, not a language-tagged string",
+        ),
+        (
+            record(
+                "wasGeneratedBy",
+                "_:g",
+                r#""prov:entity": ["ex:a", "ex:b"]"#,
+            ),
+            "`prov:entity` must be a name, not a number, boolean or array",
         ),
         (
             "[]".to_owned(),
