@@ -289,9 +289,10 @@ fn whatever_new_accepts_prints_and_parses_back() {
         i64::MAX - 1,
         i64::MAX,
     ] {
-        for (month, day, hour) in [(1, 1, 0), (12, 31, 23), (12, 31, 24)] {
+        // Hour 24 takes no fraction.
+        for (month, day, hour, nanos) in [(1, 1, 0, 7), (12, 31, 23, 7), (12, 31, 24, 0)] {
             for offset in [None, Some(0), Some(-840), Some(330)] {
-                if let Ok(value) = DateTime::new(year, month, day, hour, 0, 0, 7, offset) {
+                if let Ok(value) = DateTime::new(year, month, day, hour, 0, 0, nanos, offset) {
                     let back: DateTime = value.to_string().parse().unwrap();
                     assert_eq!(back, value, "{value}");
                 }
