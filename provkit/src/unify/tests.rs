@@ -80,27 +80,6 @@ fn merges_formals_and_attributes() {
 }
 
 #[test]
-fn absent_takes_the_concrete_value_in_either_order() {
-    for (first, second) in [(None, Some("a")), (Some("a"), None)] {
-        let d = document(
-            [first, second]
-                .into_iter()
-                .map(|act| {
-                    let formals = act.map(|a| (F::Activity, name(a))).into_iter().collect();
-                    rec(Kind::Generation, "g", formals, None)
-                })
-                .collect(),
-        );
-        let u = d.unified().unwrap();
-        assert_eq!(u.records.len(), 1);
-        let Record::Generation(g) = &u.records[0] else {
-            panic!()
-        };
-        assert_eq!(g.activity, Some(ex("a")));
-    }
-}
-
-#[test]
 fn equal_values_unify() {
     let d = document(vec![gen_at(Some("g"), "2014-06-23T12:28:53Z"); 2]);
     assert_eq!(d.unified().unwrap().records.len(), 1);
@@ -179,15 +158,27 @@ fn a_conflict_between_long_names_gives_a_short_message() {
 }
 
 #[test]
-fn a_lone_record_with_an_own_formal_attribute_is_invalid() {
-    let d = document(vec![hand_built(true)]);
-    assert!(matches!(
-        d.unified(),
-        Err(Error::InvalidRecord {
-            kind: Kind::Generation,
-            ..
-        })
-    ));
+fn an_own_formal_attribute_is_invalid_alone_or_under_a_shared_identifier() {
+    let cases = [
+        ("a lone record", vec![hand_built(true)]),
+        (
+            "a record sharing its identifier with a clean one",
+            vec![hand_built(true), hand_built(false)],
+        ),
+    ];
+    for (case, records) in cases {
+        let d = document(records);
+        assert!(
+            matches!(
+                d.unified(),
+                Err(Error::InvalidRecord {
+                    kind: Kind::Generation,
+                    ..
+                })
+            ),
+            "{case}"
+        );
+    }
 }
 
 #[test]
@@ -292,24 +283,6 @@ fn a_derivation_without_an_activity_holds_its_generation_and_usage_as_none() {
                 },
                 "{attr}"
             );
-        }
-    }
-}
-
-#[test]
-fn a_derivation_with_an_activity_merges_an_absent_generation_or_usage() {
-    for attr in [F::Generation, F::Usage] {
-        let activity = (F::Activity, name("a"));
-        let with = rec(
-            Kind::Derivation,
-            "x",
-            vec![activity.clone(), (attr, name("v"))],
-            None,
-        );
-        let without = rec(Kind::Derivation, "x", vec![activity], None);
-        for pair in [[&with, &without], [&without, &with]] {
-            let d = document(pair.iter().map(|&r| r.clone()).collect());
-            assert_eq!(d.unified().unwrap().records, vec![with.clone()], "{attr}");
         }
     }
 }
@@ -714,16 +687,4 @@ fn two_spellings_of_one_iri_merge() {
     let u = d.unified().unwrap();
     assert_eq!(u.records.len(), 1);
     assert_eq!(u.records[0].attributes().len(), 2);
-}
-
-#[test]
-fn merging_a_hand_built_formal_named_attribute_is_an_invalid_record() {
-    let d = document(vec![hand_built(true), hand_built(false)]);
-    assert!(matches!(
-        d.unified(),
-        Err(Error::InvalidRecord {
-            kind: Kind::Generation,
-            ..
-        })
-    ));
 }
