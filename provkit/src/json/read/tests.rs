@@ -1445,6 +1445,33 @@ fn a_member_fan_out_gives_every_record_the_identifier_and_the_attributes() {
 }
 
 #[test]
+fn a_member_fan_out_is_written_once_per_member() {
+    // The records share one attribute set in memory, but each written
+    // record carries every attribute, so the output grows with the members
+    // times the attributes.
+    let d = doc(&record(
+        "hadMember",
+        "ex:m",
+        r#""prov:collection": "ex:c", "prov:entity": ["ex:a", "ex:b"], "ex:tag": ["t", "u"]"#,
+    ));
+    let (_, v) = written(&d);
+    let group = v["hadMember"]["ex:m"].as_array().unwrap();
+    assert_eq!(group.len(), 2);
+    for written_record in group {
+        assert_eq!(written_record["ex:tag"], serde_json::json!(["t", "u"]));
+    }
+    #[cfg(feature = "provn")]
+    {
+        let text = crate::provn::to_string(&d).unwrap();
+        assert_eq!(
+            text.matches(r#"ex:tag="t", ex:tag="u""#).count(),
+            2,
+            "{text}"
+        );
+    }
+}
+
+#[test]
 fn a_value_error_is_placed_at_its_token_and_names_its_record() {
     let text = "{\n  \"prefix\": {\"ex\": \"http://example.org/\"},\n  \"entity\": {\n    \"ex:e\": {\n      \"ex:a\": [\n        1,\n        {\"$\": 5},\n        2,\n        3\n      ]\n    }\n  }\n}\n";
     let (section, key, message) = record_structure(text);
