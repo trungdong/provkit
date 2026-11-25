@@ -154,3 +154,4 @@ profiles and the build and release tools.
 | `cargo package and the exclude field` | [Chapter 9](../chapters/9-build.md) | [Cargo book](https://doc.rust-lang.org/cargo/commands/cargo-package.html) |
 | `cross-compilation targets` | [Chapter 9](../chapters/9-build.md) | [rustc book](https://doc.rust-lang.org/rustc/platform-support.html) |
 | `cargo binstall and release archives` | [Chapter 9](../chapters/9-build.md) | [project page](https://github.com/cargo-bins/cargo-binstall) |
+| `trusted publishing to crates.io` | [Chapter 9](../chapters/9-build.md) | [crates.io docs](https://crates.io/docs/trusted-publishing) |

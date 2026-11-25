@@ -208,6 +208,14 @@ a digest file beside the archive, and `locked: true` so the build
 uses `Cargo.lock` as committed. The last step runs
 `attest-build-provenance` on the archive the upload step reports in
 its `tar` or `zip` output; the `.sha256` files are not attested.
+`publish` needs `binaries`, so it runs only when every archive was
+built. It runs in the GitHub environment `release`, which admits only
+`v*` tags and waits for the owner's approval, and it asks for the
+`id-token` permission. `crates-io-auth-action` sends the job's
+identity to crates.io and receives a token that lasts 30 minutes, and
+the action revokes it when the job ends. `cargo publish --workspace`
+then publishes `provkit`, waits until crates.io serves it, and
+publishes `provkit-cli`, which depends on it.
 
 [RELEASING.md](https://github.com/trungdong/provkit/blob/main/RELEASING.md)
 is the human side of the same steps. A release is a tag `v<version>`
@@ -217,10 +225,12 @@ release steps set the changelog date, run the checks CI runs and a
 clean `cargo package --workspace`, commit, set the Pages source of
 the repository to "GitHub Actions" once, after the repository is
 public and before the next push to `main`, tag with `git tag -a`,
-wait for the workflow, publish `provkit` and then `provkit-cli` to
-crates.io, and install from both sources to check. Two recovery paths
-follow, for a workflow that fails after the tag and for `provkit`
-published without `provkit-cli`, and the places the toolchain pin and
+wait for the workflow, approve its `publish` job, and install from
+both sources to check. Three recovery paths follow, for a workflow
+that fails before `publish`, for `provkit` published without
+`provkit-cli`, and for a `publish` job that fails before anything is
+published. A one-time step then makes crates.io refuse API tokens for
+both crates, and the places the toolchain pin and
 the minimum Rust version appear are listed last, because each set
 moves together.
 
@@ -366,6 +376,11 @@ crates.io, so the version number can stay.
   lives and where the binary sits inside it, with names that match the
   ones the release workflow uploads.
   [cargo-binstall](https://github.com/cargo-bins/cargo-binstall)
+- **Trusted publishing to crates.io**. crates.io gives a short-lived
+  publish token to a CI job whose repository, workflow file and
+  environment match an entry in the crate's settings, so no long-lived
+  API token sits on a machine or in a secret.
+  [Trusted Publishing](https://crates.io/docs/trusted-publishing)
 
 ## Run this
 
@@ -439,3 +454,4 @@ line from it, and the first output returns.
 - `cargo package and the exclude field`: https://doc.rust-lang.org/cargo/commands/cargo-package.html
 - `cross-compilation targets`: https://doc.rust-lang.org/rustc/platform-support.html
 - `cargo binstall and release archives`: https://github.com/cargo-bins/cargo-binstall
+- `trusted publishing to crates.io`: https://crates.io/docs/trusted-publishing
