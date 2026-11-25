@@ -72,6 +72,10 @@ names. `[advisories]` compares every crate in the lock file with the
 RustSec advisory database. With `version = 2` an advisory for a
 vulnerability is an error, and a crate whose version has been yanked
 from crates.io is a warning, because the file does not set `yanked`.
+`unmaintained = "all"` fails the check when an advisory marks any
+crate in the lock file unmaintained. cargo-deny's default since 0.22,
+`workspace`, reports only the direct dependencies of the workspace's
+crates, and the release binaries ship every crate in the tree.
 `[licenses]` fails the check for any crate whose licence is not in
 `allow`. The entries are the licences the dependencies use, and
 nothing else. `[bans]` with
