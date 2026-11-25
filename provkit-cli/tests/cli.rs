@@ -784,6 +784,34 @@ fn compare_keeps_its_exit_code_when_the_output_pipe_closes() {
 }
 
 #[test]
+fn a_closed_error_pipe_leaves_the_exit_code() {
+    use std::process::Stdio;
+
+    // The read end of standard error closes before the tool writes, so its
+    // warning and its error each meet a closed pipe.
+    let run = |args: &[&OsStr]| {
+        let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_provkit"))
+            .args(args)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        drop(child.stderr.take());
+        child.wait().unwrap().code()
+    };
+    let dir = scratch("a_closed_error_pipe_leaves_the_exit_code");
+    let ext = write(
+        &dir,
+        "ext.provn",
+        "document\n  prefix ex <http://example.org/>\n  ex:f(ex:a)\nendDocument\n",
+    );
+    let missing = dir.join("missing.json");
+    let compare = [OsStr::new("compare"), ext.as_os_str(), ext.as_os_str()];
+    assert_eq!(run(&compare), Some(0));
+    assert_eq!(run(&[OsStr::new("convert"), missing.as_os_str()]), Some(2));
+}
+
+#[test]
 fn an_output_file_with_an_unknown_extension_needs_a_format() {
     let dir = scratch("an_output_file_with_an_unknown_extension_needs_a_format");
     let out = dir.join("out.txt");

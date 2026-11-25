@@ -125,7 +125,7 @@ profiles and the build and release tools.
 | `anyhow::Result, with_context, anyhow! and bail!` | [Chapter 7](../chapters/7-cli.md) | [docs.rs](https://docs.rs/anyhow/latest/anyhow/) |
 | `{:#} on an anyhow::Error` | [Chapter 7](../chapters/7-cli.md) | [docs.rs](https://docs.rs/anyhow/latest/anyhow/struct.Error.html#display-representations) |
 | `ExitCode from main` | [Chapter 7](../chapters/7-cli.md) | [std](https://doc.rust-lang.org/std/process/struct.ExitCode.html) |
-| `eprintln!` | [Chapter 7](../chapters/7-cli.md) | [std](https://doc.rust-lang.org/std/macro.eprintln.html) |
+| `io::stderr()` | [Chapter 7](../chapters/7-cli.md) | [std](https://doc.rust-lang.org/std/io/fn.stderr.html) |
 | `io::read_to_string` | [Chapter 7](../chapters/7-cli.md) | [std](https://doc.rust-lang.org/std/io/fn.read_to_string.html) |
 | `io::ErrorKind` | [Chapter 7](../chapters/7-cli.md) | [std](https://doc.rust-lang.org/std/io/enum.ErrorKind.html) |
 | `Result::is_ok_and` | [Chapter 7](../chapters/7-cli.md) | [std](https://doc.rust-lang.org/std/result/enum.Result.html#method.is_ok_and) |

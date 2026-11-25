@@ -296,10 +296,13 @@ declarations and the `prefix` lines beneath them. The tests
   the status without calling `process::exit`, so destructors run;
   `SUCCESS` and `from(2)` are the values `main` uses.
   [ExitCode](https://doc.rust-lang.org/std/process/struct.ExitCode.html)
-- **`eprintln!`**. It writes to standard error, where `main` prints an
-  error, so a message never mixes with the PROV-N or PROV-JSON on
-  standard output.
-  [eprintln!](https://doc.rust-lang.org/std/macro.eprintln.html)
+- **`io::stderr()`**. `main` prints an error and `warn_ignored` a
+  warning on standard error, so a message never mixes with the PROV-N
+  or PROV-JSON on standard output. Each writes with chapter 6's
+  `let _ = writeln!(..)`, because `eprintln!` panics when standard error
+  is a pipe whose reader has gone, and a message nobody reads should
+  leave the exit code as it is.
+  [io::stderr](https://doc.rust-lang.org/std/io/fn.stderr.html)
 - **`io::read_to_string`**. A free function that reads any `Read` to the
   end into a `String`, so standard input and `fs::read_to_string` give
   the same type to one `map_err` in `read_document`.
@@ -469,7 +472,7 @@ provkit: /tmp/bad.provn:2:10: undeclared prefix `ex`
 - `anyhow::Result, with_context, anyhow! and bail!`: https://docs.rs/anyhow/latest/anyhow/
 - `{:#} on an anyhow::Error`: https://docs.rs/anyhow/latest/anyhow/struct.Error.html#display-representations
 - `ExitCode from main`: https://doc.rust-lang.org/std/process/struct.ExitCode.html
-- `eprintln!`: https://doc.rust-lang.org/std/macro.eprintln.html
+- `io::stderr()`: https://doc.rust-lang.org/std/io/fn.stderr.html
 - `io::read_to_string`: https://doc.rust-lang.org/std/io/fn.read_to_string.html
 - `io::ErrorKind`: https://doc.rust-lang.org/std/io/enum.ErrorKind.html
 - `Result::is_ok_and`: https://doc.rust-lang.org/std/result/enum.Result.html#method.is_ok_and

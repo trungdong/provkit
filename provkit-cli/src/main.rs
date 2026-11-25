@@ -75,7 +75,8 @@ fn main() -> ExitCode {
     match result {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("provkit: {e:#}");
+            // A closed standard error leaves the exit code as it is.
+            let _ = writeln!(io::stderr(), "provkit: {e:#}");
             ExitCode::from(2)
         }
     }
@@ -224,7 +225,9 @@ fn starts_with_utf16_mark(path: &Path) -> bool {
 /// the PROV-N reader left out of `source`, if any.
 fn warn_ignored(source: &str, ignored: &[provn::Ignored]) {
     if let Some(first) = ignored.first() {
-        eprintln!(
+        // A closed standard error is no reason to stop.
+        let _ = writeln!(
+            io::stderr(),
             "provkit: warning: {source}: ignored {} extensibility expression(s), first {} at line {}, column {}",
             ignored.len(),
             first.name,
