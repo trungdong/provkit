@@ -1296,6 +1296,140 @@ fn a_value_object_with_an_unknown_key_or_a_non_string_dollar_is_an_error() {
 }
 
 #[test]
+fn a_number_in_dollar_reads_only_as_prov_2_wrote_it() {
+    // `prov` 2.x and earlier wrote an int as `xsd:int` or `xsd:long` and a
+    // float as `xsd:double`, with the number itself in `$`.
+    for (number, string) in [
+        (
+            r#"{"$": 5, "type": "xsd:int"}"#,
+            r#"{"$": "5", "type": "xsd:int"}"#,
+        ),
+        (
+            r#"{"type": "xsd:int", "$": 5}"#,
+            r#"{"$": "5", "type": "xsd:int"}"#,
+        ),
+        (
+            r#"{"$": -0, "type": "xsd:long"}"#,
+            r#"{"$": "-0", "type": "xsd:long"}"#,
+        ),
+        (
+            r#"{"$": 1.5, "type": "xsd:double"}"#,
+            r#"{"$": "1.5", "type": "xsd:double"}"#,
+        ),
+        (
+            r#"{"$": 1E2, "type": "xsd:double"}"#,
+            r#"{"$": "1E2", "type": "xsd:double"}"#,
+        ),
+        (
+            r#"{"$": 99999999999999999999, "type": "xsd:int"}"#,
+            r#"{"$": "99999999999999999999", "type": "xsd:int"}"#,
+        ),
+        (
+            r#"[{"$": 5, "type": "xsd:int"}, {"$": 1.5, "type": "xsd:double"}]"#,
+            r#"[{"$": "5", "type": "xsd:int"}, {"$": "1.5", "type": "xsd:double"}]"#,
+        ),
+    ] {
+        let read = |value: &str| json::read(&entity(&format!(r#""ex:a": {value}"#)));
+        assert_eq!(read(number).unwrap(), read(string).unwrap(), "{number}");
+    }
+    assert_eq!(
+        doc(&entity(r#""ex:a": {"$": 5, "type": "xsd:int"}"#)),
+        doc(&entity(r#""ex:a": 5"#))
+    );
+    // Equality ignores the spelling, so the kept text is checked as written.
+    let (_, v) = written(&doc(&entity(
+        r#""ex:a": [{"$": -0, "type": "xsd:long"}, {"$": 1E2, "type": "xsd:double"}]"#,
+    )));
+    assert_eq!(
+        v["entity"]["ex:e"]["ex:a"],
+        serde_json::json!([
+            {"$": "-0", "type": "xsd:long"},
+            {"$": "1E2", "type": "xsd:double"}
+        ])
+    );
+    // The type resolves, so another prefix for the XSD namespace serves,
+    // in a bundle's own table too.
+    let xsd = "http://www.w3.org/2001/XMLSchema#";
+    let d = doc(&format!(
+        r#"{{"prefix": {{"ex": "http://example.org/", "x": "{xsd}"}},
+            "entity": {{"ex:e": {{"ex:a": {{"$": 5, "type": "x:int"}}}}}},
+            "bundle": {{"ex:b": {{"prefix": {{"y": "{xsd}"}},
+                "entity": {{"ex:f": {{"ex:a": {{"$": 6, "type": "y:long"}}}}}}}}}}}}"#
+    ));
+    assert_eq!(values(&d, "a"), [Value::integer("5")]);
+    assert_eq!(
+        values_of(&d.bundles[0].records[0], "a"),
+        [Value::typed("6", XSD_LONG.clone()).unwrap()]
+    );
+    // Any other number keeps the refusal, at the number.
+    for value in [
+        r#"{"$": 5}"#,
+        r#"{"$": 5, "type": "xsd:double"}"#,
+        r#"{"$": 5, "type": "xsd:integer"}"#,
+        r#"{"$": 5, "type": "xsd:string"}"#,
+        r#"{"$": 5, "type": "prov:QUALIFIED_NAME"}"#,
+        r#"{"$": 5.0, "type": "xsd:int"}"#,
+        r#"{"$": 1e2, "type": "xsd:int"}"#,
+        r#"{"$": 1.5, "type": "xsd:float"}"#,
+        r#"{"$": 5, "type": "xsd:int", "lang": "en"}"#,
+        r#"{"lang": "en", "$": 5, "type": "xsd:int"}"#,
+    ] {
+        let text = one_record("entity", "ex:e", &format!(r#""ex:a": {value}"#));
+        let (_, _, message) = record_structure(&text);
+        assert!(
+            message.starts_with("expected a string as the `$` of a value object at line 1"),
+            "{value}: {message}"
+        );
+    }
+    let text = one_record(
+        "entity",
+        "ex:e",
+        r#""ex:a": {"$": 5, "type": "xsd:string"}"#,
+    );
+    let (_, _, message) = record_structure(&text);
+    assert!(message.ends_with(" at line 1 column 77"), "{message}");
+    // The type resolves before it is checked.
+    let error = json::read(&entity(r#""ex:a": {"$": 5, "type": "zz:int"}"#)).unwrap_err();
+    assert!(
+        error.to_string().contains("undeclared prefix `zz`"),
+        "{error}"
+    );
+    // An unknown key after a number that fits is the error, as in `prov`.
+    let text = one_record(
+        "entity",
+        "ex:e",
+        r#""ex:a": {"$": 5, "type": "xsd:int", "zz": 1}"#,
+    );
+    let (_, _, message) = record_structure(&text);
+    assert!(message.starts_with("unknown key `zz`"), "{message}");
+}
+
+#[test]
+fn a_number_in_dollar_is_never_a_formal() {
+    // Not a time, a name or a member, whatever its type.
+    for (kind, body) in [
+        (
+            "activity",
+            r#""prov:startTime": {"$": 5, "type": "xsd:int"}"#,
+        ),
+        (
+            "wasGeneratedBy",
+            r#""prov:entity": {"$": 5, "type": "xsd:int"}"#,
+        ),
+        (
+            "hadMember",
+            r#""prov:collection": "ex:c", "prov:entity": [{"$": 5, "type": "xsd:int"}]"#,
+        ),
+    ] {
+        let (_, _, message) = record_structure(&one_record(kind, "ex:r", body));
+        assert!(
+            message.starts_with("expected a string as the `$` of a value object at line 1"),
+            "{kind}: {message}"
+        );
+    }
+}
+
+#[test]
 fn a_member_fan_out_gives_every_record_the_identifier_and_the_attributes() {
     let d = doc(&record(
         "hadMember",

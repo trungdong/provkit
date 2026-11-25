@@ -112,7 +112,12 @@ text into the enum the reader sees.
 
 A number is kept as its token text. A string is its content, a boolean
 its value, and a `{"$": ...}` object is `Typed`, with its `type` and
-`lang` members as strings not yet resolved. `Many` is an array, and an
+`lang` members as strings not yet resolved.
+A `$` object whose `$` is a number, beside a string `type` and no
+`lang`, is `TypedNumber`, the form `prov` 2.x wrote. It carries the
+refusal a number as `$` gets, because only the reader can tell, once the
+`type` resolves, whether the type fits the number.
+`Many` is an array, and an
 element is never itself an array, because `ValueVisitor::visit_seq`
 refuses a nested one before parsing it. `Invalid` is a value the wire
 layer could not read, holding the message and a `Place`, which is
@@ -169,7 +174,10 @@ of the kind's formals. A formal's value goes through `formal_value`,
 which reads a time from a string or an `xsd:dateTime` object and a name
 from a string or an `xsd:QName` or `prov:QUALIFIED_NAME` object, and
 any other value goes through `decode_value` into chapter 3's `Value`, one
-attribute per element of an array. A second prefix bound to the PROV
+attribute per element of an array.
+Both take the input text, so a `TypedNumber` whose type does not fit
+raises its refusal at the number's line and column.
+A second prefix bound to the PROV
 namespace can give one formal two keys. The `find` over `formals` keeps
 the first value when a later key gives an equal one, and two different
 values are the error that `two_values`, the closure at the top, builds

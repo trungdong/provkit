@@ -365,6 +365,15 @@ pub(super) enum JsonValue {
         datatype: Option<String>,
         lang: Option<String>,
     },
+    /// A value object with a JSON number as its `$`, a string `type` and
+    /// no `lang`, as `prov` 2.x wrote an int or a float. The reader takes
+    /// the number's text when the type fits it, and raises `refusal`
+    /// otherwise.
+    TypedNumber {
+        text: String,
+        datatype: String,
+        refusal: InvalidValue,
+    },
     /// An array of values. An element is never itself an array.
     Many(Vec<JsonValue>),
     /// A value the wire layer could not read. The reader reports it, with
@@ -429,6 +438,28 @@ impl InvalidValue {
             at: Place::After(fragment.as_ptr().addr() + fragment.len()),
         }
     }
+
+    /// The address the error is placed by.
+    fn address(&self) -> usize {
+        match self.at {
+            Place::Inside { start, .. } => start,
+            Place::After(end) => end,
+        }
+    }
+}
+
+/// Of two invalid members of one value object, the first in the text.
+fn first_in_text(a: Option<InvalidValue>, b: Option<InvalidValue>) -> Option<InvalidValue> {
+    match (a, b) {
+        (Some(a), Some(b)) if b.address() < a.address() => Some(b),
+        (a, b) => a.or(b),
+    }
+}
+
+/// The refusal of a number given as `$`, unless it is `typed`: a string
+/// `type` and no `lang` have been read beside it.
+fn refused_number(number: Option<InvalidValue>, typed: bool) -> Option<InvalidValue> {
+    if typed { None } else { number }
 }
 
 impl JsonValue {
@@ -447,7 +478,7 @@ impl JsonValue {
 /// decode here. It is an invalid value like any other.
 fn from_raw(text: &str) -> JsonValue {
     let text = text.trim_start_matches(JSON_SPACE);
-    if text.starts_with(['-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9']) {
+    if is_number(text) {
         return JsonValue::Number(text.to_owned());
     }
     if let Some(content) = unescaped(text) {
@@ -505,6 +536,9 @@ impl<'de> Visitor<'de> for ValueVisitor {
         // reported ahead of any later fault.
         let (mut value, mut datatype, mut lang) = (None, None, None);
         let mut invalid = None;
+        // A number as `$` is read only beside a string `type` and no
+        // `lang`, which may come after it, so its refusal waits here.
+        let mut number = None;
         while let Some(key) = map.next_key::<String>()? {
             if !matches!(key.as_str(), "$" | "type" | "lang") {
                 // An unknown key is refused at the key, before its value is
@@ -512,7 +546,9 @@ impl<'de> Visitor<'de> for ValueVisitor {
                 // text, so that one is reported instead; the rest of the
                 // object is read first, because the parser refuses an
                 // object left half read.
-                return match invalid {
+                let refused =
+                    refused_number(number, matches!(datatype, Some(Some(_))) && lang.is_none());
+                return match first_in_text(invalid, refused) {
                     Some(invalid) => {
                         map.next_value::<IgnoredAny>()?;
                         while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
@@ -534,6 +570,10 @@ impl<'de> Visitor<'de> for ValueVisitor {
             if member.is_none() {
                 *member = Some(match member_string(&key, text) {
                     Ok(content) => Some(content),
+                    Err(found) if key == "$" && is_number(text.trim_start_matches(JSON_SPACE)) => {
+                        number = Some(found);
+                        Some(text.trim_start_matches(JSON_SPACE).to_owned())
+                    }
                     Err(found) => {
                         invalid = invalid.or(Some(found));
                         None
@@ -543,7 +583,9 @@ impl<'de> Visitor<'de> for ValueVisitor {
             }
             // The member is given twice. The same rule: an invalid member
             // read before it is reported first.
-            return match invalid {
+            let refused =
+                refused_number(number, matches!(datatype, Some(Some(_))) && lang.is_none());
+            return match first_in_text(invalid, refused) {
                 Some(invalid) => {
                     while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
                     Ok(JsonValue::Invalid(invalid))
@@ -551,17 +593,36 @@ impl<'de> Visitor<'de> for ValueVisitor {
                 None => Err(de::Error::custom(duplicate(&key))),
             };
         }
-        if let Some(invalid) = invalid {
+        let (number, refused) = if matches!(datatype, Some(Some(_))) && lang.is_none() {
+            (number, None)
+        } else {
+            (None, number)
+        };
+        if let Some(invalid) = first_in_text(invalid, refused) {
             return Ok(JsonValue::Invalid(invalid));
         }
-        Ok(JsonValue::Typed {
-            value: value
-                .flatten()
-                .ok_or_else(|| de::Error::custom("a value object needs a `$` key"))?,
-            datatype: datatype.flatten(),
-            lang: lang.flatten(),
+        let value = value
+            .flatten()
+            .ok_or_else(|| de::Error::custom("a value object needs a `$` key"))?;
+        Ok(match (number, datatype.flatten()) {
+            (Some(refusal), Some(datatype)) => JsonValue::TypedNumber {
+                text: value,
+                datatype,
+                refusal,
+            },
+            (Some(refusal), None) => JsonValue::Invalid(refusal),
+            (None, datatype) => JsonValue::Typed {
+                value,
+                datatype,
+                lang: lang.flatten(),
+            },
         })
     }
+}
+
+/// Whether a JSON token is a number, by its first byte.
+fn is_number(token: &str) -> bool {
+    token.starts_with(['-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
 }
 
 /// The string under `key` of a value object, from its JSON text. Text that
@@ -610,6 +671,12 @@ impl Serialize for JsonValue {
                 if let Some(l) = lang {
                     m.serialize_entry("lang", l)?;
                 }
+                m.end()
+            }
+            JsonValue::TypedNumber { text, datatype, .. } => {
+                let mut m = s.serialize_map(None)?;
+                m.serialize_entry("$", &JsonValue::Number(text.clone()))?;
+                m.serialize_entry("type", datatype)?;
                 m.end()
             }
             JsonValue::Invalid(invalid) => Err(serde::ser::Error::custom(&invalid.message)),

@@ -12,7 +12,7 @@ use crate::builder::DocumentBuilder;
 use crate::error::clip;
 use crate::namespaces::Scope;
 use crate::value::{is_int_literal, is_qname_datatype, trim_xsd_space};
-use crate::well_known::{XSD_DATETIME, XSD_DOUBLE};
+use crate::well_known::{XSD_DATETIME, XSD_DOUBLE, XSD_INT, XSD_LONG};
 use crate::{
     Attributes, DateTime, Error, Formal, FormalAttr, Kind, LangStr, Namespaces, QName, Record,
     Result, Value,
@@ -139,7 +139,7 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
     refuse_invalid(&wire.sections, input)?;
     let doc_ns = namespaces(&wire.prefix)?;
     builder.start_document(doc_ns.clone());
-    emit_sections(&wire.sections, Scope::of(&doc_ns), builder)?;
+    emit_sections(&wire.sections, Scope::of(&doc_ns), input, builder)?;
 
     // Every bundle's key, resolved in its own scope (PROV-N 3.7.4), and
     // checked for a repeat before any bundle body is read. Two spellings of
@@ -180,7 +180,7 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
         builder
             .start_bundle(id, bundle_ns.clone())
             .map_err(located)?;
-        emit_sections(&bundle.sections, scope, builder).map_err(located)?;
+        emit_sections(&bundle.sections, scope, input, builder).map_err(located)?;
         builder.end_bundle();
     }
     builder.end_document();
@@ -191,6 +191,7 @@ pub(super) fn emit(wire: &JsonDocument, input: &str, builder: &mut DocumentBuild
 fn emit_sections(
     sections: &IndexMap<Kind, JsonSection>,
     scope: Scope<'_>,
+    input: &str,
     builder: &mut DocumentBuilder,
 ) -> Result<()> {
     for (&kind, records) in sections {
@@ -198,7 +199,9 @@ fn emit_sections(
             let located = |e| in_record(kind.name(), key, e);
             let id = record_id(kind, key, scope).map_err(located)?;
             for body in group.as_slice() {
-                for record in records_from(kind, id.as_ref(), body, scope).map_err(located)? {
+                for record in
+                    records_from(kind, id.as_ref(), body, scope, input).map_err(located)?
+                {
                     builder.record(record);
                 }
             }
@@ -235,6 +238,7 @@ fn records_from(
     id: Option<&QName>,
     body: &JsonRecord,
     scope: Scope<'_>,
+    input: &str,
 ) -> Result<Vec<Record>> {
     let two_values = |attr: FormalAttr| Error::InvalidRecord {
         kind,
@@ -251,7 +255,7 @@ fn records_from(
             Some(FormalAttr::Entity) if kind == Kind::Membership => {
                 let mut given = Vec::new();
                 for v in value.items() {
-                    given.push(formal_value(v, key, false, scope)?);
+                    given.push(formal_value(v, key, false, scope, input)?);
                 }
                 if given.is_empty() {
                     return Err(Error::InvalidRecord {
@@ -265,7 +269,7 @@ fn records_from(
                 }
             }
             Some(f) => {
-                let value = formal_value(value, key, f.is_time(), scope)?;
+                let value = formal_value(value, key, f.is_time(), scope, input)?;
                 match formals.iter().find(|(attr, _)| *attr == f) {
                     None => formals.push((f, value)),
                     Some((_, first)) if *first == value => {}
@@ -274,7 +278,7 @@ fn records_from(
             }
             None => {
                 for v in value.items() {
-                    attributes.insert(name.clone(), decode_value(v, scope)?);
+                    attributes.insert(name.clone(), decode_value(v, scope, input)?);
                 }
             }
         }
@@ -307,8 +311,15 @@ fn records_from(
 /// tab, CR and LF around it are trimmed, and a name resolves in `scope`. A
 /// value object with no `lang` is read the same way when its `type`
 /// resolves to `xsd:dateTime` for a time, or to `xsd:QName` or
-/// `prov:QUALIFIED_NAME` for a name. Anything else is not a formal value.
-fn formal_value(value: &JsonValue, key: &str, time: bool, scope: Scope<'_>) -> Result<Formal> {
+/// `prov:QUALIFIED_NAME` for a name. A number as `$` gets the refusal the
+/// wire layer placed in `input`. Anything else is not a formal value.
+fn formal_value(
+    value: &JsonValue,
+    key: &str,
+    time: bool,
+    scope: Scope<'_>,
+    input: &str,
+) -> Result<Formal> {
     let expected = if time { "a dateTime" } else { "a name" };
     let wrong = |found: &str| structure(format!("`{}` must be {expected}, not {found}", clip(key)));
     let (text, datatype) = match value {
@@ -320,6 +331,7 @@ fn formal_value(value: &JsonValue, key: &str, time: bool, scope: Scope<'_>) -> R
             datatype: Some(datatype),
             ..
         } => (value, Some(scope.resolve(datatype)?)),
+        JsonValue::TypedNumber { refusal, .. } => return Err(invalid_value(refusal, input)),
         // `emit` refuses invalid values first, so this is not reached.
         JsonValue::Invalid(invalid) => return Err(structure(invalid.message.as_str())),
         JsonValue::Number(_) | JsonValue::Bool(_) | JsonValue::Many(_) => {
@@ -349,8 +361,11 @@ fn formal_value(value: &JsonValue, key: &str, time: bool, scope: Scope<'_>) -> R
 /// Reads a JSON attribute value as a [`Value`]. A string is a plain string,
 /// an integer takes the narrowest of `xsd:int`, `xsd:long` and `xsd:integer`
 /// and any other number is `xsd:double`, each keeping its text, a boolean is
-/// `xsd:boolean`, and a value object is read by its `lang` or `type`.
-fn decode_value(v: &JsonValue, scope: Scope<'_>) -> Result<Value> {
+/// `xsd:boolean`, and a value object is read by its `lang` or `type`. A
+/// number as `$` is read as its text when its `type` resolves to `xsd:int`
+/// or `xsd:long` for an integer, or to `xsd:double` for any other number,
+/// and gets the refusal the wire layer placed in `input` otherwise.
+fn decode_value(v: &JsonValue, scope: Scope<'_>, input: &str) -> Result<Value> {
     Ok(match v {
         JsonValue::Str(s) => Value::Str(s.clone()),
         JsonValue::Number(text) => number(text)?,
@@ -375,6 +390,22 @@ fn decode_value(v: &JsonValue, scope: Scope<'_>) -> Result<Value> {
                 None => Value::Str(value.clone()),
                 Some(dt) => Value::typed_in(scope, value, scope.resolve(dt)?)?,
             }
+        }
+        JsonValue::TypedNumber {
+            text,
+            datatype,
+            refusal,
+        } => {
+            let datatype = scope.resolve(datatype)?;
+            let fits = if is_int_literal(text) {
+                datatype == *XSD_INT || datatype == *XSD_LONG
+            } else {
+                datatype == *XSD_DOUBLE
+            };
+            if !fits {
+                return Err(invalid_value(refusal, input));
+            }
+            Value::typed_in(scope, text, datatype)?
         }
     })
 }
